@@ -1,11 +1,14 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertMeetingSchema, updateMeetingSchema } from "@shared/schema";
+import { insertMeetingSchema, updateMeetingSchema, loginUserSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import passport from "./auth";
 import { semanticSearch } from "./services/search";
 import { generateMeetingInsights, batchSummarize } from "./services/summarize";
+import { sendPasswordResetEmail, sendVerificationEmail } from "./services/email";
+import crypto from "crypto";
+import bcrypt from "bcrypt";
 
 // Extend Express Request type to include user
 declare global {
@@ -55,6 +58,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: "Not authenticated" });
     }
     res.json(req.user);
+  });
+
+  // Password reset and email verification routes
+  app.post("/api/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Return success even if user doesn't exist to prevent email enumeration
+        return res.json({ message: "If an account exists with this email, you will receive password reset instructions." });
+      }
+
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const resetExpires = new Date(Date.now() + 3600000); // 1 hour
+
+      await storage.updateUser(user.id, {
+        passwordResetToken: resetToken,
+        passwordResetExpires: resetExpires,
+      });
+
+      await sendPasswordResetEmail(email, resetToken);
+      res.json({ message: "Password reset email sent" });
+    } catch (error) {
+      console.error("Password reset error:", error);
+      res.status(500).json({ message: "Failed to process password reset request" });
+    }
+  });
+
+  app.post("/api/reset-password", async (req, res) => {
+    try {
+      const { token, password } = req.body;
+      if (!token || !password) {
+        return res.status(400).json({ message: "Token and password are required" });
+      }
+
+      const user = await storage.getUserByResetToken(token);
+      if (!user || !user.passwordResetExpires || user.passwordResetExpires < new Date()) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await storage.updateUser(user.id, {
+        password: hashedPassword,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      });
+
+      res.json({ message: "Password reset successful" });
+    } catch (error) {
+      console.error("Password reset error:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
+  app.post("/api/verify-email", async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (!token) {
+        return res.status(400).json({ message: "Verification token is required" });
+      }
+
+      const user = await storage.getUserByVerificationToken(token);
+      if (!user || !user.verificationExpires || user.verificationExpires < new Date()) {
+        return res.status(400).json({ message: "Invalid or expired verification token" });
+      }
+
+      await storage.updateUser(user.id, {
+        isVerified: true,
+        verificationToken: null,
+        verificationExpires: null,
+      });
+
+      res.json({ message: "Email verified successfully" });
+    } catch (error) {
+      console.error("Email verification error:", error);
+      res.status(500).json({ message: "Failed to verify email" });
+    }
   });
 
   // Protected meeting routes
@@ -114,24 +198,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ message: "Meeting not found" });
     }
 
-    const success = await storage.deleteMeeting(Number(req.params.id));
+    await storage.deleteMeeting(Number(req.params.id));
     res.status(204).send();
   });
 
+  // Search and summarization routes
   app.post("/api/meetings/search", isAuthenticated, async (req, res) => {
     try {
       const { query } = req.body;
-
       if (!query || typeof query !== "string") {
         return res.status(400).json({ message: "Search query is required" });
       }
-
-      // Get user's meetings first
       const meetings = await storage.getUserMeetings(req.user!.id);
-
-      // Perform semantic search on the meetings
       const searchResults = await semanticSearch(query, meetings);
-
       res.json(searchResults);
     } catch (error) {
       console.error("Search error:", error);
@@ -139,7 +218,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Generate summary for a specific meeting
   app.post("/api/meetings/:id/summarize", isAuthenticated, async (req, res) => {
     try {
       const meeting = await storage.getMeeting(Number(req.params.id));
@@ -148,10 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const summary = await generateMeetingInsights(meeting);
-
-      // Update the meeting with the new summary
       const updatedMeeting = await storage.updateMeeting(meeting.id, { summary });
-
       res.json({ summary });
     } catch (error) {
       console.error("Summarization error:", error);
@@ -159,17 +234,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Batch summarize multiple meetings
   app.post("/api/meetings/summarize-batch", isAuthenticated, async (req, res) => {
     try {
       const meetings = await storage.getUserMeetings(req.user!.id);
       const summaries = await batchSummarize(meetings);
-
-      // Update meetings with their summaries
       for (const [meetingId, summary] of Object.entries(summaries)) {
         await storage.updateMeeting(Number(meetingId), { summary });
       }
-
       res.json({ summaries });
     } catch (error) {
       console.error("Batch summarization error:", error);

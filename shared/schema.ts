@@ -15,10 +15,13 @@ export const users = pgTable("users", {
   isVerified: boolean("is_verified").notNull().default(false),
   verificationToken: text("verification_token"),
   verificationExpires: timestamp("verification_expires"),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpires: timestamp("password_reset_expires"),
 }, (table) => ({
   emailIdx: index("email_idx").on(table.email),
   googleIdIdx: index("google_id_idx").on(table.googleId),
   verificationTokenIdx: index("verification_token_idx").on(table.verificationToken),
+  passwordResetTokenIdx: index("password_reset_token_idx").on(table.passwordResetToken),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({

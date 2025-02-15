@@ -6,22 +6,21 @@ import { z } from "zod";
 // Users table with improved indexing
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  googleId: text("google_id").notNull().unique(),
   email: text("email").notNull().unique(),
+  password: text("password"), // Optional for Google OAuth users
   displayName: text("display_name").notNull(),
   profilePicture: text("profile_picture"),
+  googleId: text("google_id").unique(), // Optional for email/password users
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
   emailIdx: index("email_idx").on(table.email),
   googleIdIdx: index("google_id_idx").on(table.googleId),
 }));
 
-// Define users relations
 export const usersRelations = relations(users, ({ many }) => ({
   meetings: many(meetings),
 }));
 
-// Meetings table with improved indexing and relations
 export const meetings = pgTable("meetings", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -38,7 +37,6 @@ export const meetings = pgTable("meetings", {
   userIdIdx: index("user_id_idx").on(table.userId),
 }));
 
-// Define meetings relations
 export const meetingsRelations = relations(meetings, ({ one }) => ({
   user: one(users, {
     fields: [meetings.userId],
@@ -46,7 +44,6 @@ export const meetingsRelations = relations(meetings, ({ one }) => ({
   }),
 }));
 
-// Tasks table with improved indexing and relations
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -58,7 +55,6 @@ export const tasks = pgTable("tasks", {
   completedIdx: index("completed_idx").on(table.completed),
 }));
 
-// Define tasks relations
 export const tasksRelations = relations(tasks, ({ one }) => ({
   user: one(users, {
     fields: [tasks.userId],
@@ -66,18 +62,28 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
   }),
 }));
 
-// Schema validation
+export const insertUserSchema = createInsertSchema(users)
+  .extend({
+    password: z.string().min(8).optional(),
+  })
+  .omit({ id: true, createdAt: true });
+
+export const loginUserSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+export const updateUserSchema = createInsertSchema(users).partial();
+
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true });
 export const updateTaskSchema = createInsertSchema(tasks).partial();
-export const insertUserSchema = createInsertSchema(users).omit({ id: true });
-export const updateUserSchema = createInsertSchema(users).partial();
 export const insertMeetingSchema = createInsertSchema(meetings).omit({ id: true });
 export const updateMeetingSchema = createInsertSchema(meetings).partial();
 
-// Types
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type LoginUser = z.infer<typeof loginUserSchema>;
+export type User = typeof users.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
 export type InsertMeeting = z.infer<typeof insertMeetingSchema>;
 export type Meeting = typeof meetings.$inferSelect;

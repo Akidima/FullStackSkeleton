@@ -15,6 +15,21 @@ export const updateTaskSchema = createInsertSchema(tasks).partial();
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
 
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  googleId: text("google_id").notNull().unique(),
+  email: text("email").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  profilePicture: text("profile_picture"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({ id: true });
+export const updateUserSchema = createInsertSchema(users).partial();
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
+
 export const meetings = pgTable("meetings", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -25,6 +40,7 @@ export const meetings = pgTable("meetings", {
   notes: text("notes"),
   isCompleted: boolean("is_completed").notNull().default(false),
   summary: text("summary"),
+  userId: serial("user_id").references(() => users.id),
 });
 
 export const insertMeetingSchema = createInsertSchema(meetings).omit({ id: true });

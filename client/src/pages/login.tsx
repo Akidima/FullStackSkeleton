@@ -32,7 +32,7 @@ export default function Login() {
       email: "",
       password: "",
     },
-    mode: "onChange",
+    mode: "onChange", // Enable real-time validation
   });
 
   const onSubmit = async (data: FormData) => {

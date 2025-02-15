@@ -4,16 +4,51 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import type { User } from "@shared/schema";
+import type { users } from "@shared/schema";
 import express from "express";
 import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
 
 const scryptAsync = promisify(scrypt);
+
+// Email configuration
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || "587"),
+  secure: process.env.SMTP_SECURE === "true",
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+// Generate verification token
+function generateVerificationToken(): string {
+  return randomBytes(32).toString('hex');
+}
+
+// Send verification email
+async function sendVerificationEmail(email: string, token: string) {
+  const appUrl = `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+  const verificationUrl = `${appUrl}/verify-email?token=${token}`;
+
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM,
+    to: email,
+    subject: "Verify your email address",
+    html: `
+      <h1>Welcome to Meeting Assistant!</h1>
+      <p>Please click the link below to verify your email address:</p>
+      <a href="${verificationUrl}">Verify Email</a>
+      <p>This link will expire in 24 hours.</p>
+    `,
+  });
+}
 
 // Extend Express Request type with proper User type
 declare global {
   namespace Express {
-    interface User extends User {}
+    interface User extends typeof users.$inferSelect {}
   }
 }
 
@@ -34,7 +69,7 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-function generateToken(user: User) {
+function generateToken(user: users) {
   return jwt.sign(
     { id: user.id, email: user.email },
     process.env.JWT_SECRET!,
@@ -51,7 +86,7 @@ export function authenticateJWT(req: express.Request, res: express.Response, nex
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as User;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as users;
     req.user = decoded;
     next();
   } catch (err) {
@@ -149,25 +184,89 @@ export function registerAuthEndpoints(app: express.Application) {
         return res.status(400).json({ message: "Email already registered" });
       }
 
+      const verificationToken = generateVerificationToken();
+      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
       const hashedPassword = await hashPassword(req.body.password);
       const user = await storage.createUser({
         ...req.body,
         password: hashedPassword,
         googleId: null,
+        verificationToken,
+        verificationExpires,
+        isVerified: false,
       });
 
-      req.login(user, (err) => {
-        if (err) return next(err);
-        const token = generateToken(user);
-        res.status(201).json({ user, token });
+      // Send verification email
+      await sendVerificationEmail(user.email, verificationToken);
+
+      const token = generateToken(user);
+      res.status(201).json({ 
+        user,
+        token,
+        message: "Please check your email to verify your account" 
       });
     } catch (error) {
       next(error);
     }
   });
 
+  app.post("/api/verify-email", async (req, res) => {
+    const { token } = req.body;
+
+    try {
+      const user = await storage.getUserByVerificationToken(token);
+
+      if (!user) {
+        return res.status(400).json({ message: "Invalid verification token" });
+      }
+
+      if (user.verificationExpires && new Date() > new Date(user.verificationExpires)) {
+        return res.status(400).json({ message: "Verification token has expired" });
+      }
+
+      await storage.updateUser(user.id, {
+        isVerified: true,
+        verificationToken: null,
+        verificationExpires: null,
+      });
+
+      res.json({ message: "Email verified successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Error verifying email" });
+    }
+  });
+
+  app.post("/api/resend-verification", authenticateJWT, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.user!.id);
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (user.isVerified) {
+        return res.status(400).json({ message: "Email already verified" });
+      }
+
+      const verificationToken = generateVerificationToken();
+      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await storage.updateUser(user.id, {
+        verificationToken,
+        verificationExpires,
+      });
+
+      await sendVerificationEmail(user.email, verificationToken);
+
+      res.json({ message: "Verification email sent" });
+    } catch (error) {
+      res.status(500).json({ message: "Error sending verification email" });
+    }
+  });
+
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err: Error | null, user: User | false, info: { message: string } | undefined) => {
+    passport.authenticate("local", (err: Error | null, user: users | false, info: { message: string } | undefined) => {
       if (err) return next(err);
       if (!user) {
         return res.status(401).json({ message: info?.message || "Authentication failed" });

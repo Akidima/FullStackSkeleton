@@ -2,7 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar } from "lucide-react";
+import { Calendar, Eye, EyeOff } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { useLocation, Link } from "wouter";
 import { insertUserSchema } from "@shared/schema";
@@ -14,8 +14,10 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useState } from "react";
 import type { z } from "zod";
 
 type FormData = z.infer<typeof insertUserSchema>;
@@ -23,6 +25,7 @@ type FormData = z.infer<typeof insertUserSchema>;
 export default function SignUp() {
   const [, setLocation] = useLocation();
   const { registerMutation, user } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<FormData>({
     resolver: zodResolver(insertUserSchema),
@@ -33,7 +36,7 @@ export default function SignUp() {
       googleId: null,
       profilePicture: null,
     },
-    mode: "onChange",
+    mode: "onChange", // Enable real-time validation
   });
 
   const onSubmit = async (data: FormData) => {
@@ -83,6 +86,9 @@ export default function SignUp() {
                         autoComplete="name"
                       />
                     </FormControl>
+                    <FormDescription>
+                      Must be between 2 and 50 characters
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -116,17 +122,42 @@ export default function SignUp() {
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="Create a password"
-                        {...field}
-                        onChange={(e) => {
-                          field.onChange(e);
-                          form.trigger("password");
-                        }}
-                        autoComplete="new-password"
-                      />
+                      <div className="relative">
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Create a password"
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            form.trigger("password");
+                          }}
+                          autoComplete="new-password"
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <Eye className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                      </div>
                     </FormControl>
+                    <FormDescription>
+                      Password must contain:
+                      <ul className="list-disc list-inside space-y-1 text-sm pl-2">
+                        <li>At least 8 characters</li>
+                        <li>One uppercase letter</li>
+                        <li>One lowercase letter</li>
+                        <li>One number</li>
+                      </ul>
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

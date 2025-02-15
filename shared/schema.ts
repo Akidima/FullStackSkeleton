@@ -3,18 +3,22 @@ import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Users table with improved indexing
+// Users table with improved indexing and verification fields
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
   password: text("password"), // Optional for Google OAuth users
   displayName: text("display_name").notNull(),
   profilePicture: text("profile_picture"),
-  googleId: text("google_id").unique(), // Optional for email/password users
+  googleId: text("google_id"), // Make it nullable for email/password users
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  isVerified: boolean("is_verified").notNull().default(false),
+  verificationToken: text("verification_token"),
+  verificationExpires: timestamp("verification_expires"),
 }, (table) => ({
   emailIdx: index("email_idx").on(table.email),
   googleIdIdx: index("google_id_idx").on(table.googleId),
+  verificationTokenIdx: index("verification_token_idx").on(table.verificationToken),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -76,6 +80,9 @@ export const insertUserSchema = createInsertSchema(users)
     displayName: z.string()
       .min(2, "Display name must be at least 2 characters long")
       .max(50, "Display name cannot exceed 50 characters"),
+    isVerified: z.boolean().optional(),
+    verificationToken: z.string().nullable().optional(),
+    verificationExpires: z.date().nullable().optional(),
   })
   .omit({ id: true, createdAt: true });
 

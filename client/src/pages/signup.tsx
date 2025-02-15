@@ -34,7 +34,7 @@ export default function SignUp() {
       googleId: null,
       profilePicture: null,
     },
-    mode: "onChange", // Enable real-time validation
+    mode: "onChange",
   });
 
   const onSubmit = async (data: FormData) => {
@@ -43,6 +43,19 @@ export default function SignUp() {
       setLocation("/");
     } catch (error) {
       // Error handling is managed by the mutation
+    }
+  };
+
+  // Handle field change and clear errors if valid
+  const handleFieldChange = (name: keyof FormData, value: string) => {
+    form.setValue(name, value);
+
+    // Validate the field and clear error if valid
+    const fieldSchema = insertUserSchema.shape[name];
+    const validationResult = fieldSchema?.safeParse(value);
+
+    if (validationResult?.success) {
+      form.clearErrors(name);
     }
   };
 
@@ -77,6 +90,7 @@ export default function SignUp() {
                       <Input
                         placeholder="Enter your name"
                         {...field}
+                        onChange={(e) => handleFieldChange("displayName", e.target.value)}
                         autoComplete="name"
                       />
                     </FormControl>
@@ -95,6 +109,7 @@ export default function SignUp() {
                         type="email"
                         placeholder="Enter your email"
                         {...field}
+                        onChange={(e) => handleFieldChange("email", e.target.value)}
                         autoComplete="email"
                       />
                     </FormControl>
@@ -113,6 +128,7 @@ export default function SignUp() {
                         type="password"
                         placeholder="Create a password"
                         {...field}
+                        onChange={(e) => handleFieldChange("password", e.target.value)}
                         autoComplete="new-password"
                       />
                     </FormControl>

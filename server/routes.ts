@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertMeetingSchema, updateMeetingSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import passport from "./auth";
+import { semanticSearch } from "./services/search";
 
 // Extend Express Request type to include user
 declare global {
@@ -114,6 +115,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const success = await storage.deleteMeeting(Number(req.params.id));
     res.status(204).send();
+  });
+
+  app.post("/api/meetings/search", isAuthenticated, async (req, res) => {
+    try {
+      const { query } = req.body;
+
+      if (!query || typeof query !== "string") {
+        return res.status(400).json({ message: "Search query is required" });
+      }
+
+      // Get user's meetings first
+      const meetings = await storage.getUserMeetings(req.user!.id);
+
+      // Perform semantic search on the meetings
+      const searchResults = await semanticSearch(query, meetings);
+
+      res.json(searchResults);
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ message: "Failed to perform search" });
+    }
   });
 
   return createServer(app);

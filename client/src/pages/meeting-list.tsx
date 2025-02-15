@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -5,11 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar, Plus, Loader2, Users, CheckCircle2 } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
+import { SearchBar } from "@/components/SearchBar";
 
 export default function MeetingList() {
+  const [searchResults, setSearchResults] = useState<Meeting[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+
   const { data: meetings, isLoading } = useQuery<Meeting[]>({ 
     queryKey: ["/api/meetings"]
   });
+
+  const displayedMeetings = searchResults || meetings;
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -26,13 +33,18 @@ export default function MeetingList() {
           </Link>
         </div>
 
-        {isLoading ? (
+        <SearchBar 
+          onSearchResults={setSearchResults}
+          onSearching={setIsSearching}
+        />
+
+        {(isLoading || isSearching) ? (
           <div className="flex justify-center">
             <Loader2 className="h-8 w-8 animate-spin" />
           </div>
         ) : (
           <div className="grid gap-4">
-            {meetings?.map((meeting) => (
+            {displayedMeetings?.map((meeting) => (
               <Card key={meeting.id}>
                 <CardHeader className="pb-2">
                   <CardTitle className="flex justify-between items-center">
@@ -70,6 +82,11 @@ export default function MeetingList() {
                 </CardContent>
               </Card>
             ))}
+            {displayedMeetings?.length === 0 && (
+              <p className="text-center text-muted-foreground">
+                {searchResults ? "No matching meetings found" : "No meetings yet"}
+              </p>
+            )}
           </div>
         )}
       </div>

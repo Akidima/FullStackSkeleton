@@ -13,6 +13,7 @@ import AdminDashboard from "@/pages/admin-dashboard";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { AdminRoute } from "@/lib/admin-route";
+import { OnboardingProvider } from "@/components/ui/onboarding";
 
 function Router() {
   return (
@@ -34,8 +35,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Router />
-        <Toaster />
+        <OnboardingProvider>
+          <Router />
+          <Toaster />
+        </OnboardingProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

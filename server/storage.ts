@@ -12,13 +12,13 @@ export interface IStorage {
 
   // User operations
   getUserById(id: number): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   getUserByGoogleId(googleId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUserMeetings(userId: number): Promise<Meeting[]>;
 }
 
 export class DatabaseStorage implements IStorage {
-  // Existing meeting methods
   async getMeetings(): Promise<Meeting[]> {
     return await db.select().from(meetings);
   }
@@ -50,9 +50,13 @@ export class DatabaseStorage implements IStorage {
     return !!deletedMeeting;
   }
 
-  // New user methods
   async getUserById(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
     return user;
   }
 

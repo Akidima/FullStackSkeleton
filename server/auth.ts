@@ -10,6 +10,16 @@ import jwt from "jsonwebtoken";
 
 const scryptAsync = promisify(scrypt);
 
+// Extend Express Request type with proper User type
+declare global {
+  namespace Express {
+    interface User {
+      id: number;
+      email: string;
+    }
+  }
+}
+
 if (!process.env.JWT_SECRET) {
   throw new Error("Missing JWT_SECRET environment variable");
 }
@@ -27,11 +37,11 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-function generateToken(user: User) {
+function generateToken(user: Express.User) {
   return jwt.sign(
     { id: user.id, email: user.email },
     process.env.JWT_SECRET!,
-    { expiresIn: '1h' }  // Changed from 24h to 1h
+    { expiresIn: '1h' }
   );
 }
 
@@ -44,7 +54,7 @@ export function authenticateJWT(req: express.Request, res: express.Response, nex
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: number, email: string };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as Express.User;
     req.user = decoded;
     next();
   } catch (err) {
@@ -59,7 +69,7 @@ export function authenticateJWT(req: express.Request, res: express.Response, nex
 passport.use(
   new LocalStrategy(
     { usernameField: "email" },
-    async (email, password, done) => {
+    async (email: string, password: string, done) => {
       try {
         const user = await storage.getUserByEmail(email);
         if (!user || !user.password) {
@@ -71,7 +81,7 @@ passport.use(
           return done(null, false, { message: "Invalid email or password" });
         }
 
-        return done(null, user);
+        return done(null, { id: user.id, email: user.email });
       } catch (err) {
         return done(err);
       }
@@ -87,7 +97,7 @@ passport.use(
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       callbackURL: "/auth/google/callback",
     },
-    async (accessToken, refreshToken, profile, done) => {
+    async (accessToken: string, refreshToken: string, profile: any, done) => {
       try {
         let user = await storage.getUserByGoogleId(profile.id);
 
@@ -97,9 +107,7 @@ passport.use(
             profile.emails?.[0]?.value ?? ""
           );
           if (existingUser) {
-            return done(
-              new Error("Email already registered with different method")
-            );
+            return done(null, false, { message: "Email already registered with different method" });
           }
 
           user = await storage.createUser({
@@ -107,10 +115,11 @@ passport.use(
             email: profile.emails?.[0]?.value ?? "",
             displayName: profile.displayName,
             profilePicture: profile.photos?.[0]?.value,
+            password: null,
           });
         }
 
-        return done(null, user);
+        return done(null, { id: user.id, email: user.email });
       } catch (err) {
         return done(err as Error);
       }
@@ -118,7 +127,6 @@ passport.use(
   )
 );
 
-// Auth endpoints
 export function registerAuthEndpoints(app: express.Application) {
   app.post("/api/signup", async (req, res, next) => {
     try {
@@ -131,9 +139,10 @@ export function registerAuthEndpoints(app: express.Application) {
       const user = await storage.createUser({
         ...req.body,
         password: hashedPassword,
+        googleId: null,
       });
 
-      const token = generateToken(user);
+      const token = generateToken({ id: user.id, email: user.email });
       res.status(201).json({ user, token });
     } catch (error) {
       next(error);
@@ -141,7 +150,7 @@ export function registerAuthEndpoints(app: express.Application) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
+    passport.authenticate("local", (err: Error | null, user: Express.User | false, info: { message: string } | undefined) => {
       if (err) return next(err);
       if (!user) {
         return res.status(401).json({ message: info?.message || "Authentication failed" });
@@ -152,26 +161,9 @@ export function registerAuthEndpoints(app: express.Application) {
     })(req, res, next);
   });
 
-  app.get(
-    "/auth/google",
-    passport.authenticate("google", { scope: ["profile", "email"] })
-  );
-
-  app.get(
-    "/auth/google/callback",
-    passport.authenticate("google", { session: false }),
-    (req, res) => {
-      if (!req.user) {
-        return res.redirect('/login?error=authentication_failed');
-      }
-      const token = generateToken(req.user);
-      res.redirect(`/?token=${token}`);
-    }
-  );
-
   app.get("/api/me", authenticateJWT, async (req, res) => {
     try {
-      const user = await storage.getUserById(req.user.id);
+      const user = await storage.getUserById(req.user!.id);
       if (!user) {
         return res.status(401).json({ message: "User not found" });
       }

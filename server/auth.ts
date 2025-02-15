@@ -31,8 +31,28 @@ function generateToken(user: User) {
   return jwt.sign(
     { id: user.id, email: user.email },
     process.env.JWT_SECRET!,
-    { expiresIn: '24h' }
+    { expiresIn: '1h' }  // Changed from 24h to 1h
   );
+}
+
+// JWT verification middleware
+export function authenticateJWT(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ message: "No token provided" });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: number, email: string };
+    req.user = decoded;
+    next();
+  } catch (err) {
+    if (err instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ message: "Token expired" });
+    }
+    return res.status(401).json({ message: "Invalid token" });
+  }
 }
 
 // Local Strategy for email/password auth
@@ -149,23 +169,21 @@ export function registerAuthEndpoints(app: express.Application) {
     }
   );
 
-  app.get("/api/me", (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ message: "No token provided" });
-    }
-
-    const token = authHeader.split(' ')[1];
+  app.get("/api/me", authenticateJWT, async (req, res) => {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: number };
-      const user = storage.getUserById(decoded.id);
+      const user = await storage.getUserById(req.user.id);
       if (!user) {
-        return res.status(401).json({ message: "Invalid token" });
+        return res.status(401).json({ message: "User not found" });
       }
       res.json(user);
     } catch (err) {
-      res.status(401).json({ message: "Invalid token" });
+      res.status(500).json({ message: "Internal server error" });
     }
+  });
+
+  // Example of another protected route
+  app.get("/api/protected", authenticateJWT, (req, res) => {
+    res.json({ message: "This is a protected route", user: req.user });
   });
 }
 

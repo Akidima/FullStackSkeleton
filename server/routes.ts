@@ -1,28 +1,28 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertTaskSchema, updateTaskSchema } from "@shared/schema";
+import { insertMeetingSchema, updateMeetingSchema } from "@shared/schema";
 import { ZodError } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  app.get("/api/tasks", async (_req, res) => {
-    const tasks = await storage.getTasks();
-    res.json(tasks);
+  app.get("/api/meetings", async (_req, res) => {
+    const meetings = await storage.getMeetings();
+    res.json(meetings);
   });
 
-  app.get("/api/tasks/:id", async (req, res) => {
-    const task = await storage.getTask(Number(req.params.id));
-    if (!task) {
-      return res.status(404).json({ message: "Task not found" });
+  app.get("/api/meetings/:id", async (req, res) => {
+    const meeting = await storage.getMeeting(Number(req.params.id));
+    if (!meeting) {
+      return res.status(404).json({ message: "Meeting not found" });
     }
-    res.json(task);
+    res.json(meeting);
   });
 
-  app.post("/api/tasks", async (req, res) => {
+  app.post("/api/meetings", async (req, res) => {
     try {
-      const taskData = insertTaskSchema.parse(req.body);
-      const task = await storage.createTask(taskData);
-      res.status(201).json(task);
+      const meetingData = insertMeetingSchema.parse(req.body);
+      const meeting = await storage.createMeeting(meetingData);
+      res.status(201).json(meeting);
     } catch (error) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: error.errors });
@@ -31,14 +31,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/tasks/:id", async (req, res) => {
+  app.patch("/api/meetings/:id", async (req, res) => {
     try {
-      const taskData = updateTaskSchema.parse(req.body);
-      const task = await storage.updateTask(Number(req.params.id), taskData);
-      if (!task) {
-        return res.status(404).json({ message: "Task not found" });
+      const meetingData = updateMeetingSchema.parse(req.body);
+      const meeting = await storage.updateMeeting(Number(req.params.id), meetingData);
+      if (!meeting) {
+        return res.status(404).json({ message: "Meeting not found" });
       }
-      res.json(task);
+      res.json(meeting);
     } catch (error) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: error.errors });
@@ -47,10 +47,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/tasks/:id", async (req, res) => {
-    const success = await storage.deleteTask(Number(req.params.id));
+  app.delete("/api/meetings/:id", async (req, res) => {
+    const success = await storage.deleteMeeting(Number(req.params.id));
     if (!success) {
-      return res.status(404).json({ message: "Task not found" });
+      return res.status(404).json({ message: "Meeting not found" });
     }
     res.status(204).send();
   });

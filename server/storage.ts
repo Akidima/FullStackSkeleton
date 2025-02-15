@@ -1,45 +1,45 @@
-import { tasks, type Task, type InsertTask } from "@shared/schema";
+import { meetings, type Meeting, type InsertMeeting } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
 export interface IStorage {
-  getTasks(): Promise<Task[]>;
-  getTask(id: number): Promise<Task | undefined>;
-  createTask(task: InsertTask): Promise<Task>;
-  updateTask(id: number, task: Partial<InsertTask>): Promise<Task | undefined>;
-  deleteTask(id: number): Promise<boolean>;
+  getMeetings(): Promise<Meeting[]>;
+  getMeeting(id: number): Promise<Meeting | undefined>;
+  createMeeting(meeting: InsertMeeting): Promise<Meeting>;
+  updateMeeting(id: number, meeting: Partial<InsertMeeting>): Promise<Meeting | undefined>;
+  deleteMeeting(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async getTasks(): Promise<Task[]> {
-    return await db.select().from(tasks);
+  async getMeetings(): Promise<Meeting[]> {
+    return await db.select().from(meetings);
   }
 
-  async getTask(id: number): Promise<Task | undefined> {
-    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
-    return task;
+  async getMeeting(id: number): Promise<Meeting | undefined> {
+    const [meeting] = await db.select().from(meetings).where(eq(meetings.id, id));
+    return meeting;
   }
 
-  async createTask(task: InsertTask): Promise<Task> {
-    const [createdTask] = await db.insert(tasks).values(task).returning();
-    return createdTask;
+  async createMeeting(meeting: InsertMeeting): Promise<Meeting> {
+    const [createdMeeting] = await db.insert(meetings).values(meeting).returning();
+    return createdMeeting;
   }
 
-  async updateTask(id: number, update: Partial<InsertTask>): Promise<Task | undefined> {
-    const [updatedTask] = await db
-      .update(tasks)
+  async updateMeeting(id: number, update: Partial<InsertMeeting>): Promise<Meeting | undefined> {
+    const [updatedMeeting] = await db
+      .update(meetings)
       .set(update)
-      .where(eq(tasks.id, id))
+      .where(eq(meetings.id, id))
       .returning();
-    return updatedTask;
+    return updatedMeeting;
   }
 
-  async deleteTask(id: number): Promise<boolean> {
-    const [deletedTask] = await db
-      .delete(tasks)
-      .where(eq(tasks.id, id))
+  async deleteMeeting(id: number): Promise<boolean> {
+    const [deletedMeeting] = await db
+      .delete(meetings)
+      .where(eq(meetings.id, id))
       .returning();
-    return !!deletedTask;
+    return !!deletedMeeting;
   }
 }
 

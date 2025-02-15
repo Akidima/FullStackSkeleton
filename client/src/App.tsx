@@ -3,15 +3,15 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
-import Home from "@/pages/home";
-import TaskForm from "@/pages/task-form";
+import MeetingList from "@/pages/meeting-list";
+import MeetingForm from "@/pages/meeting-form";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/new" component={TaskForm} />
-      <Route path="/edit/:id" component={TaskForm} />
+      <Route path="/" component={MeetingList} />
+      <Route path="/meetings/new" component={MeetingForm} />
+      <Route path="/meetings/:id/edit" component={MeetingForm} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -16,22 +16,30 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import type { z } from "zod";
+
+type FormData = z.infer<typeof loginUserSchema>;
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const { loginMutation, user } = useAuth();
 
-  const form = useForm({
+  const form = useForm<FormData>({
     resolver: zodResolver(loginUserSchema),
     defaultValues: {
       email: "",
       password: "",
     },
+    mode: "onChange",
   });
 
-  const onSubmit = async (data: { email: string; password: string }) => {
-    await loginMutation.mutateAsync(data);
-    setLocation("/");
+  const onSubmit = async (data: FormData) => {
+    try {
+      await loginMutation.mutateAsync(data);
+      setLocation("/");
+    } catch (error) {
+      // Error handling is managed by the mutation
+    }
   };
 
   // Redirect if already logged in
@@ -66,6 +74,11 @@ export default function Login() {
                         type="email"
                         placeholder="Enter your email"
                         {...field}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          form.trigger("email");
+                        }}
+                        autoComplete="email"
                       />
                     </FormControl>
                     <FormMessage />
@@ -83,6 +96,11 @@ export default function Login() {
                         type="password"
                         placeholder="Enter your password"
                         {...field}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          form.trigger("password");
+                        }}
+                        autoComplete="current-password"
                       />
                     </FormControl>
                     <FormMessage />
@@ -92,7 +110,7 @@ export default function Login() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={loginMutation.isPending}
+                disabled={loginMutation.isPending || !form.formState.isValid}
               >
                 {loginMutation.isPending ? "Signing in..." : "Sign in"}
               </Button>

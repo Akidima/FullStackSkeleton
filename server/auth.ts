@@ -13,10 +13,7 @@ const scryptAsync = promisify(scrypt);
 // Extend Express Request type with proper User type
 declare global {
   namespace Express {
-    interface User {
-      id: number;
-      email: string;
-    }
+    interface User extends User {}
   }
 }
 
@@ -37,7 +34,7 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-function generateToken(user: Express.User) {
+function generateToken(user: User) {
   return jwt.sign(
     { id: user.id, email: user.email },
     process.env.JWT_SECRET!,
@@ -54,7 +51,7 @@ export function authenticateJWT(req: express.Request, res: express.Response, nex
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as Express.User;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as User;
     req.user = decoded;
     next();
   } catch (err) {
@@ -64,6 +61,23 @@ export function authenticateJWT(req: express.Request, res: express.Response, nex
     return res.status(401).json({ message: "Invalid token" });
   }
 }
+
+// Set up passport serialization
+passport.serializeUser((user: Express.User, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id: number, done) => {
+  try {
+    const user = await storage.getUserById(id);
+    if (!user) {
+      return done(new Error('User not found'));
+    }
+    done(null, user);
+  } catch (err) {
+    done(err);
+  }
+});
 
 // Local Strategy for email/password auth
 passport.use(
@@ -81,7 +95,7 @@ passport.use(
           return done(null, false, { message: "Invalid email or password" });
         }
 
-        return done(null, { id: user.id, email: user.email });
+        return done(null, user);
       } catch (err) {
         return done(err);
       }
@@ -119,7 +133,7 @@ passport.use(
           });
         }
 
-        return done(null, { id: user.id, email: user.email });
+        return done(null, user);
       } catch (err) {
         return done(err as Error);
       }
@@ -142,22 +156,28 @@ export function registerAuthEndpoints(app: express.Application) {
         googleId: null,
       });
 
-      const token = generateToken({ id: user.id, email: user.email });
-      res.status(201).json({ user, token });
+      req.login(user, (err) => {
+        if (err) return next(err);
+        const token = generateToken(user);
+        res.status(201).json({ user, token });
+      });
     } catch (error) {
       next(error);
     }
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err: Error | null, user: Express.User | false, info: { message: string } | undefined) => {
+    passport.authenticate("local", (err: Error | null, user: User | false, info: { message: string } | undefined) => {
       if (err) return next(err);
       if (!user) {
         return res.status(401).json({ message: info?.message || "Authentication failed" });
       }
 
-      const token = generateToken(user);
-      res.json({ user, token });
+      req.login(user, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        const token = generateToken(user);
+        res.json({ user, token });
+      });
     })(req, res, next);
   });
 

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, index, integer } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -17,11 +17,27 @@ export const users = pgTable("users", {
   verificationExpires: timestamp("verification_expires"),
   passwordResetToken: text("password_reset_token"),
   passwordResetExpires: timestamp("password_reset_expires"),
+  isAdmin: boolean("is_admin").notNull().default(false),
 }, (table) => ({
   emailIdx: index("email_idx").on(table.email),
   googleIdIdx: index("google_id_idx").on(table.googleId),
   verificationTokenIdx: index("verification_token_idx").on(table.verificationToken),
   passwordResetTokenIdx: index("password_reset_token_idx").on(table.passwordResetToken),
+}));
+
+// Registration attempts tracking
+export const registrationAttempts = pgTable("registration_attempts", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  ipAddress: text("ip_address").notNull(),
+  userAgent: text("user_agent"),
+  status: text("status").notNull(), // 'success', 'failed', 'blocked'
+  reason: text("reason"), // Reason for failure/blocking if applicable
+  attemptTime: timestamp("attempt_time").notNull().defaultNow(),
+}, (table) => ({
+  emailIdx: index("reg_attempts_email_idx").on(table.email),
+  ipAddressIdx: index("reg_attempts_ip_idx").on(table.ipAddress),
+  attemptTimeIdx: index("reg_attempts_time_idx").on(table.attemptTime),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -97,6 +113,7 @@ export const insertUserSchema = createInsertSchema(users)
     isVerified: z.boolean().optional(),
     verificationToken: z.string().nullable().optional(),
     verificationExpires: z.date().nullable().optional(),
+    isAdmin: z.boolean().optional(),
   })
   .omit({ id: true, createdAt: true });
 
@@ -112,6 +129,12 @@ export const updateTaskSchema = createInsertSchema(tasks).partial();
 export const insertMeetingSchema = createInsertSchema(meetings).omit({ id: true });
 export const updateMeetingSchema = createInsertSchema(meetings).partial();
 
+// Add new schema for registration attempts
+export const insertRegistrationAttemptSchema = createInsertSchema(registrationAttempts).omit({
+  id: true,
+  attemptTime: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -119,3 +142,5 @@ export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
 export type InsertMeeting = z.infer<typeof insertMeetingSchema>;
 export type Meeting = typeof meetings.$inferSelect;
+export type InsertRegistrationAttempt = z.infer<typeof insertRegistrationAttemptSchema>;
+export type RegistrationAttempt = typeof registrationAttempts.$inferSelect;

@@ -1,6 +1,6 @@
-import { meetings, users, type Meeting, type InsertMeeting, type User, type InsertUser } from "@shared/schema";
+import { meetings, users, registrationAttempts, type Meeting, type InsertMeeting, type User, type InsertUser, type RegistrationAttempt, type InsertRegistrationAttempt } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
   // Meeting operations
@@ -19,6 +19,12 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<InsertUser>): Promise<User>;
   getUserMeetings(userId: number): Promise<Meeting[]>;
+
+  // Registration attempts operations
+  createRegistrationAttempt(attempt: InsertRegistrationAttempt): Promise<RegistrationAttempt>;
+  getRegistrationAttempts(limit?: number): Promise<RegistrationAttempt[]>;
+  getRegistrationAttemptsByIP(ipAddress: string): Promise<RegistrationAttempt[]>;
+  getRegistrationAttemptsByEmail(email: string): Promise<RegistrationAttempt[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -99,6 +105,36 @@ export class DatabaseStorage implements IStorage {
 
   async getUserMeetings(userId: number): Promise<Meeting[]> {
     return await db.select().from(meetings).where(eq(meetings.userId, userId));
+  }
+
+  // Registration attempts methods
+  async createRegistrationAttempt(attempt: InsertRegistrationAttempt): Promise<RegistrationAttempt> {
+    const [createdAttempt] = await db.insert(registrationAttempts).values(attempt).returning();
+    return createdAttempt;
+  }
+
+  async getRegistrationAttempts(limit: number = 100): Promise<RegistrationAttempt[]> {
+    return await db
+      .select()
+      .from(registrationAttempts)
+      .orderBy(desc(registrationAttempts.attemptTime))
+      .limit(limit);
+  }
+
+  async getRegistrationAttemptsByIP(ipAddress: string): Promise<RegistrationAttempt[]> {
+    return await db
+      .select()
+      .from(registrationAttempts)
+      .where(eq(registrationAttempts.ipAddress, ipAddress))
+      .orderBy(desc(registrationAttempts.attemptTime));
+  }
+
+  async getRegistrationAttemptsByEmail(email: string): Promise<RegistrationAttempt[]> {
+    return await db
+      .select()
+      .from(registrationAttempts)
+      .where(eq(registrationAttempts.email, email))
+      .orderBy(desc(registrationAttempts.attemptTime));
   }
 }
 

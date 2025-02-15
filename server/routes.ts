@@ -18,6 +18,7 @@ declare global {
       googleId: string;
       email: string;
       displayName: string;
+      isAdmin?: boolean; // Added isAdmin property
     }
   }
 }
@@ -28,6 +29,14 @@ const isAuthenticated = (req: Request, res: Response, next: NextFunction) => {
     return next();
   }
   res.status(401).json({ message: "Unauthorized" });
+};
+
+// Add this function after the isAuthenticated middleware
+const isAdmin = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.user?.isAdmin) {
+    return res.status(403).json({ message: "Access denied. Admin privileges required." });
+  }
+  next();
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -138,6 +147,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Email verification error:", error);
       res.status(500).json({ message: "Failed to verify email" });
+    }
+  });
+
+  // Admin-only routes
+  app.get("/api/admin/registration-attempts", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const attempts = await storage.getRegistrationAttempts(100);
+      res.json(attempts);
+    } catch (error) {
+      console.error("Error fetching registration attempts:", error);
+      res.status(500).json({ message: "Failed to fetch registration attempts" });
+    }
+  });
+
+  app.get("/api/admin/registration-attempts/ip/:ip", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const attempts = await storage.getRegistrationAttemptsByIP(req.params.ip);
+      res.json(attempts);
+    } catch (error) {
+      console.error("Error fetching registration attempts by IP:", error);
+      res.status(500).json({ message: "Failed to fetch registration attempts" });
+    }
+  });
+
+  app.get("/api/admin/registration-attempts/email/:email", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const attempts = await storage.getRegistrationAttemptsByEmail(req.params.email);
+      res.json(attempts);
+    } catch (error) {
+      console.error("Error fetching registration attempts by email:", error);
+      res.status(500).json({ message: "Failed to fetch registration attempts" });
     }
   });
 

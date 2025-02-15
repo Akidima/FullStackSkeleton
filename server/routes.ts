@@ -5,6 +5,7 @@ import { insertMeetingSchema, updateMeetingSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import passport from "./auth";
 import { semanticSearch } from "./services/search";
+import { generateMeetingInsights, batchSummarize } from "./services/summarize";
 
 // Extend Express Request type to include user
 declare global {
@@ -135,6 +136,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Search error:", error);
       res.status(500).json({ message: "Failed to perform search" });
+    }
+  });
+
+  // Generate summary for a specific meeting
+  app.post("/api/meetings/:id/summarize", isAuthenticated, async (req, res) => {
+    try {
+      const meeting = await storage.getMeeting(Number(req.params.id));
+      if (!meeting || meeting.userId !== req.user!.id) {
+        return res.status(404).json({ message: "Meeting not found" });
+      }
+
+      const summary = await generateMeetingInsights(meeting);
+
+      // Update the meeting with the new summary
+      const updatedMeeting = await storage.updateMeeting(meeting.id, { summary });
+
+      res.json({ summary });
+    } catch (error) {
+      console.error("Summarization error:", error);
+      res.status(500).json({ message: "Failed to generate meeting summary" });
+    }
+  });
+
+  // Batch summarize multiple meetings
+  app.post("/api/meetings/summarize-batch", isAuthenticated, async (req, res) => {
+    try {
+      const meetings = await storage.getUserMeetings(req.user!.id);
+      const summaries = await batchSummarize(meetings);
+
+      // Update meetings with their summaries
+      for (const [meetingId, summary] of Object.entries(summaries)) {
+        await storage.updateMeeting(Number(meetingId), { summary });
+      }
+
+      res.json({ summaries });
+    } catch (error) {
+      console.error("Batch summarization error:", error);
+      res.status(500).json({ message: "Failed to generate meeting summaries" });
     }
   });
 

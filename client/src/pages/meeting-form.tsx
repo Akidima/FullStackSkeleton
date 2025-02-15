@@ -16,12 +16,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import { useState } from 'react';
 
 export default function MeetingForm() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const params = useParams();
+  const [isSummarizing, setIsSummarizing] = useState(false);
 
   const form = useForm({
     resolver: zodResolver(insertMeetingSchema),
@@ -60,6 +62,28 @@ export default function MeetingForm() {
         description: "Failed to save meeting",
         variant: "destructive",
       });
+    }
+  };
+
+  const generateSummary = async () => {
+    if (!params.id) return;
+
+    try {
+      setIsSummarizing(true);
+      await apiRequest("POST", `/api/meetings/${params.id}/summarize`);
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
+      toast({
+        title: "Success",
+        description: "Meeting summary generated successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to generate meeting summary",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSummarizing(false);
     }
   };
 
@@ -138,8 +162,14 @@ export default function MeetingForm() {
                         <Input
                           placeholder="Enter participants (comma separated)"
                           {...field}
-                          onChange={(e) => field.onChange(e.target.value.split(',').map(p => p.trim()))}
-                          value={field.value?.join(', ') || ''}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value
+                                .split(",")
+                                .map((p) => p.trim())
+                            )
+                          }
+                          value={field.value?.join(", ") || ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -163,7 +193,27 @@ export default function MeetingForm() {
                     </FormItem>
                   )}
                 />
-
+                {params.id && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={generateSummary}
+                    disabled={isSummarizing}
+                  >
+                    {isSummarizing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Generating Summary...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Generate Summary
+                      </>
+                    )}
+                  </Button>
+                )}
                 <Button type="submit" className="w-full">
                   {params.id ? "Update Meeting" : "Schedule Meeting"}
                 </Button>

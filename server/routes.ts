@@ -9,6 +9,7 @@ import { generateMeetingInsights, batchSummarize } from "./services/summarize";
 import { sendPasswordResetEmail, sendVerificationEmail } from "./services/email";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
+import { requireRecaptcha } from "./middleware/recaptcha";
 
 // Extend Express Request type to include user
 declare global {
@@ -70,7 +71,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Password reset and email verification routes
-  app.post("/api/forgot-password", async (req, res) => {
+  app.post("/api/forgot-password", requireRecaptcha, async (req, res) => {
     try {
       const { email } = req.body;
       if (!email) {
@@ -113,7 +114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/reset-password", async (req, res) => {
+  app.post("/api/reset-password", requireRecaptcha, async (req, res) => {
     try {
       const { token, password } = req.body;
       if (!token || !password) {

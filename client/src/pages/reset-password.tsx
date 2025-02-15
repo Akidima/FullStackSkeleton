@@ -21,6 +21,7 @@ import { useState } from "react";
 import { AuthSkeleton } from "@/components/ui/auth-skeleton";
 import { TooltipError } from "@/components/ui/tooltip-error";
 import { PasswordStrengthIndicator } from "@/components/ui/password-strength";
+import { ReCAPTCHA } from "@/components/ui/recaptcha";
 
 const resetPasswordSchema = z.object({
   password: z.string()
@@ -42,6 +43,7 @@ export default function ResetPassword() {
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
 
   const form = useForm<ResetPasswordData>({
     resolver: zodResolver(resetPasswordSchema),
@@ -60,6 +62,7 @@ export default function ResetPassword() {
       const res = await apiRequest("POST", "/api/reset-password", {
         ...data,
         token,
+        recaptchaToken: data.recaptchaToken //Added this line
       });
       return res.json();
     },
@@ -80,7 +83,19 @@ export default function ResetPassword() {
   });
 
   const onSubmit = async (data: ResetPasswordData) => {
-    await resetMutation.mutateAsync(data);
+    if (!recaptchaToken) {
+      toast({
+        title: "Error",
+        description: "Please complete the reCAPTCHA verification",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await resetMutation.mutateAsync({
+      ...data,
+      recaptchaToken,
+    });
   };
 
   if (resetMutation.isPending) {
@@ -135,7 +150,7 @@ export default function ResetPassword() {
                       message={form.formState.errors.password?.message}
                       show={!!form.formState.errors.password}
                     />
-                    <PasswordStrengthIndicator 
+                    <PasswordStrengthIndicator
                       password={field.value}
                       className="mt-2"
                     />
@@ -181,10 +196,21 @@ export default function ResetPassword() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={resetMutation.isPending}
+                disabled={resetMutation.isPending || !recaptchaToken}
               >
                 {resetMutation.isPending ? "Resetting..." : "Reset Password"}
               </Button>
+              <ReCAPTCHA onVerify={setRecaptchaToken} />
+
+              <div className="text-center text-sm">
+                <Button
+                  variant="link"
+                  className="text-primary hover:underline"
+                  onClick={() => setLocation("/login")}
+                >
+                  Back to Login
+                </Button>
+              </div>
             </form>
           </Form>
         </CardContent>

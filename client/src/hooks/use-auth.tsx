@@ -1,6 +1,6 @@
 import { createContext, ReactNode, useContext } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { User, LoginUser } from "@shared/schema";
+import { User, LoginUser, insertUserSchema } from "@shared/schema";
 import { getQueryFn, apiRequest, queryClient, setAuthToken, clearAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -10,13 +10,14 @@ type AuthContextType = {
   error: Error | null;
   loginMutation: ReturnType<typeof useLoginMutation>;
   logoutMutation: ReturnType<typeof useLogoutMutation>;
+  registerMutation: ReturnType<typeof useRegisterMutation>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 function useLoginMutation() {
   const { toast } = useToast();
-  
+
   return useMutation({
     mutationFn: async (credentials: LoginUser) => {
       const res = await apiRequest("POST", "/api/login", credentials);
@@ -43,7 +44,7 @@ function useLoginMutation() {
 
 function useLogoutMutation() {
   const { toast } = useToast();
-  
+
   return useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/logout");
@@ -59,9 +60,36 @@ function useLogoutMutation() {
   });
 }
 
+function useRegisterMutation() {
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (userData: any) => {
+      const res = await apiRequest("POST", "/api/signup", userData);
+      const data = await res.json();
+      setAuthToken(data.token);
+      return data.user;
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData(["/api/me"], user);
+      toast({
+        title: "Success",
+        description: "Account created successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Registration failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
-  
+
   const {
     data: user,
     error,
@@ -73,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginMutation = useLoginMutation();
   const logoutMutation = useLogoutMutation();
+  const registerMutation = useRegisterMutation();
 
   return (
     <AuthContext.Provider
@@ -82,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error: error ?? null,
         loginMutation,
         logoutMutation,
+        registerMutation,
       }}
     >
       {children}

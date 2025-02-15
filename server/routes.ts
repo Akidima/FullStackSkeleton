@@ -83,6 +83,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ message: "If an account exists with this email, you will receive password reset instructions." });
       }
 
+      // Generate reset token
       const resetToken = crypto.randomBytes(32).toString("hex");
       const resetExpires = new Date(Date.now() + 3600000); // 1 hour
 
@@ -92,7 +93,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       await sendPasswordResetEmail(email, resetToken);
-      res.json({ message: "Password reset email sent" });
+
+      res.json({ message: "If an account exists with this email, you will receive password reset instructions." });
     } catch (error) {
       console.error("Password reset error:", error);
       res.status(500).json({ message: "Failed to process password reset request" });

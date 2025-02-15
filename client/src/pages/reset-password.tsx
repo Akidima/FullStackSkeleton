@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
+import { AuthSkeleton } from "@/components/ui/auth-skeleton";
 
 const resetPasswordSchema = z.object({
   password: z.string()
@@ -39,7 +40,7 @@ export default function ResetPassword() {
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
+
   const form = useForm<ResetPasswordData>({
     resolver: zodResolver(resetPasswordSchema),
     defaultValues: {
@@ -79,6 +80,10 @@ export default function ResetPassword() {
   const onSubmit = async (data: ResetPasswordData) => {
     await resetMutation.mutateAsync(data);
   };
+
+  if (resetMutation.isPending) {
+    return <AuthSkeleton />;
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/50 p-4">

@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
-import { useLocation, Link } from "wouter";
-import { loginUserSchema } from "@shared/schema";
+import { useLocation } from "wouter";
+import { insertUserSchema } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Form,
@@ -16,21 +16,25 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Link } from "wouter";
 
-export default function Login() {
+export default function SignUp() {
   const [, setLocation] = useLocation();
-  const { loginMutation, user } = useAuth();
+  const { registerMutation, user } = useAuth();
 
   const form = useForm({
-    resolver: zodResolver(loginUserSchema),
+    resolver: zodResolver(insertUserSchema),
     defaultValues: {
       email: "",
       password: "",
+      displayName: "",
+      googleId: null,
+      profilePicture: null,
     },
   });
 
-  const onSubmit = async (data: { email: string; password: string }) => {
-    await loginMutation.mutateAsync(data);
+  const onSubmit = async (data: any) => {
+    await registerMutation.mutateAsync(data);
     setLocation("/");
   };
 
@@ -47,14 +51,30 @@ export default function Login() {
           <div className="flex justify-center mb-4">
             <Calendar className="h-12 w-12 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-bold">Meeting Assistant</CardTitle>
+          <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
           <p className="text-muted-foreground">
-            Sign in to manage your meetings and get AI assistance
+            Sign up to start managing your meetings
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="displayName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter your name"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="email"
@@ -81,7 +101,7 @@ export default function Login() {
                     <FormControl>
                       <Input
                         type="password"
-                        placeholder="Enter your password"
+                        placeholder="Create a password"
                         {...field}
                       />
                     </FormControl>
@@ -92,9 +112,9 @@ export default function Login() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={loginMutation.isPending}
+                disabled={registerMutation.isPending}
               >
-                {loginMutation.isPending ? "Signing in..." : "Sign in"}
+                {registerMutation.isPending ? "Creating account..." : "Sign up"}
               </Button>
             </form>
           </Form>
@@ -115,13 +135,13 @@ export default function Login() {
               variant="outline"
             >
               <SiGoogle className="h-5 w-5" />
-              Sign in with Google
+              Sign up with Google
             </Button>
           </a>
           <div className="text-center text-sm">
-            Don't have an account?{" "}
-            <Link href="/signup" className="text-primary hover:underline">
-              Sign up
+            Already have an account?{" "}
+            <Link href="/login" className="text-primary hover:underline">
+              Sign in
             </Link>
           </div>
         </CardContent>

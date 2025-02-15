@@ -19,6 +19,8 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
 import { AuthSkeleton } from "@/components/ui/auth-skeleton";
+import { TooltipError } from "@/components/ui/tooltip-error";
+import { PasswordStrengthIndicator } from "@/components/ui/password-strength";
 
 const resetPasswordSchema = z.object({
   password: z.string()
@@ -104,7 +106,7 @@ export default function ResetPassword() {
                 control={form.control}
                 name="password"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="relative">
                     <FormLabel>New Password</FormLabel>
                     <FormControl>
                       <div className="relative">
@@ -129,7 +131,14 @@ export default function ResetPassword() {
                         </Button>
                       </div>
                     </FormControl>
-                    <FormMessage />
+                    <TooltipError
+                      message={form.formState.errors.password?.message}
+                      show={!!form.formState.errors.password}
+                    />
+                    <PasswordStrengthIndicator 
+                      password={field.value}
+                      className="mt-2"
+                    />
                   </FormItem>
                 )}
               />
@@ -137,7 +146,7 @@ export default function ResetPassword() {
                 control={form.control}
                 name="confirmPassword"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="relative">
                     <FormLabel>Confirm Password</FormLabel>
                     <FormControl>
                       <div className="relative">
@@ -162,7 +171,10 @@ export default function ResetPassword() {
                         </Button>
                       </div>
                     </FormControl>
-                    <FormMessage />
+                    <TooltipError
+                      message={form.formState.errors.confirmPassword?.message}
+                      show={!!form.formState.errors.confirmPassword}
+                    />
                   </FormItem>
                 )}
               />

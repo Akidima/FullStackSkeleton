@@ -1,4 +1,6 @@
 import { tasks, type Task, type InsertTask } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   getTasks(): Promise<Task[]>;
@@ -8,42 +10,37 @@ export interface IStorage {
   deleteTask(id: number): Promise<boolean>;
 }
 
-export class MemStorage implements IStorage {
-  private tasks: Map<number, Task>;
-  private currentId: number;
-
-  constructor() {
-    this.tasks = new Map();
-    this.currentId = 1;
-  }
-
+export class DatabaseStorage implements IStorage {
   async getTasks(): Promise<Task[]> {
-    return Array.from(this.tasks.values());
+    return await db.select().from(tasks);
   }
 
   async getTask(id: number): Promise<Task | undefined> {
-    return this.tasks.get(id);
-  }
-
-  async createTask(insertTask: InsertTask): Promise<Task> {
-    const id = this.currentId++;
-    const task: Task = { ...insertTask, id };
-    this.tasks.set(id, task);
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
     return task;
   }
 
+  async createTask(task: InsertTask): Promise<Task> {
+    const [createdTask] = await db.insert(tasks).values(task).returning();
+    return createdTask;
+  }
+
   async updateTask(id: number, update: Partial<InsertTask>): Promise<Task | undefined> {
-    const existing = this.tasks.get(id);
-    if (!existing) return undefined;
-    
-    const updated = { ...existing, ...update };
-    this.tasks.set(id, updated);
-    return updated;
+    const [updatedTask] = await db
+      .update(tasks)
+      .set(update)
+      .where(eq(tasks.id, id))
+      .returning();
+    return updatedTask;
   }
 
   async deleteTask(id: number): Promise<boolean> {
-    return this.tasks.delete(id);
+    const [deletedTask] = await db
+      .delete(tasks)
+      .where(eq(tasks.id, id))
+      .returning();
+    return !!deletedTask;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

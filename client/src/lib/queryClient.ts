@@ -11,6 +11,14 @@ function getAuthToken() {
   return localStorage.getItem('authToken');
 }
 
+export function setAuthToken(token: string) {
+  localStorage.setItem('authToken', token);
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem('authToken');
+}
+
 export async function apiRequest(
   method: string,
   url: string,
@@ -75,12 +83,3 @@ export const queryClient = new QueryClient({
     },
   },
 });
-
-// Token management functions
-export function setAuthToken(token: string) {
-  localStorage.setItem('authToken', token);
-}
-
-export function clearAuthToken() {
-  localStorage.removeItem('authToken');
-}

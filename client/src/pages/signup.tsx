@@ -17,8 +17,9 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { z } from "zod";
+import { Check, X } from "lucide-react";
 
 type FormData = z.infer<typeof insertUserSchema>;
 
@@ -26,6 +27,7 @@ export default function SignUp() {
   const [, setLocation] = useLocation();
   const { registerMutation, user } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState<number>(0);
 
   const form = useForm<FormData>({
     resolver: zodResolver(insertUserSchema),
@@ -38,6 +40,22 @@ export default function SignUp() {
     },
     mode: "onChange", // Enable real-time validation
   });
+
+  const calculatePasswordStrength = (password: string) => {
+    let strength = 0;
+    if (password.length >= 8) strength++;
+    if (/[A-Z]/.test(password)) strength++;
+    if (/[a-z]/.test(password)) strength++;
+    if (/[0-9]/.test(password)) strength++;
+    if (/[^A-Za-z0-9]/.test(password)) strength++;
+    return strength;
+  };
+
+  const getPasswordStrengthColor = (strength: number) => {
+    if (strength <= 2) return "bg-destructive";
+    if (strength <= 3) return "bg-yellow-500";
+    return "bg-green-500";
+  };
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -53,6 +71,21 @@ export default function SignUp() {
     setLocation("/");
     return null;
   }
+
+  const watchPassword = form.watch("password");
+  useEffect(() => {
+    if (watchPassword) {
+      setPasswordStrength(calculatePasswordStrength(watchPassword));
+    }
+  }, [watchPassword]);
+
+  const passwordRequirements = [
+    { regex: /.{8,}/, label: "At least 8 characters" },
+    { regex: /[A-Z]/, label: "One uppercase letter" },
+    { regex: /[a-z]/, label: "One lowercase letter" },
+    { regex: /[0-9]/, label: "One number" },
+    { regex: /[^A-Za-z0-9]/, label: "One special character" },
+  ];
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/50 p-4">
@@ -149,15 +182,49 @@ export default function SignUp() {
                         </Button>
                       </div>
                     </FormControl>
-                    <FormDescription>
-                      Password must contain:
-                      <ul className="list-disc list-inside space-y-1 text-sm pl-2">
-                        <li>At least 8 characters</li>
-                        <li>One uppercase letter</li>
-                        <li>One lowercase letter</li>
-                        <li>One number</li>
-                      </ul>
-                    </FormDescription>
+                    <div className="mt-2 space-y-2">
+                      <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${getPasswordStrengthColor(
+                            passwordStrength
+                          )}`}
+                          style={{
+                            width: `${(passwordStrength / 5) * 100}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Password strength:{" "}
+                        {passwordStrength <= 2
+                          ? "Weak"
+                          : passwordStrength <= 3
+                          ? "Medium"
+                          : "Strong"}
+                      </p>
+                      <div className="space-y-2">
+                        {passwordRequirements.map((requirement, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center text-sm space-x-2"
+                          >
+                            {requirement.regex.test(watchPassword || "") ? (
+                              <Check className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <X className="h-4 w-4 text-destructive" />
+                            )}
+                            <span
+                              className={
+                                requirement.regex.test(watchPassword || "")
+                                  ? "text-muted-foreground line-through"
+                                  : "text-foreground"
+                              }
+                            >
+                              {requirement.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

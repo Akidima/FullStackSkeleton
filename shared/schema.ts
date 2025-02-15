@@ -76,6 +76,17 @@ export const insertUserSchema = createInsertSchema(users)
       .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
       .regex(/[a-z]/, "Password must contain at least one lowercase letter")
       .regex(/[0-9]/, "Password must contain at least one number")
+      .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character")
+      .refine((password) => {
+        // Check for common patterns
+        const commonPatterns = [
+          /^password/i,
+          /^12345/,
+          /^qwerty/i,
+          /^admin/i
+        ];
+        return !commonPatterns.some(pattern => pattern.test(password));
+      }, "Password cannot contain common patterns")
       .optional(),
     displayName: z.string()
       .min(2, "Display name must be at least 2 characters long")

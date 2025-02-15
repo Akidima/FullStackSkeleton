@@ -17,12 +17,15 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
+import type { z } from "zod";
+
+type FormData = z.infer<typeof insertUserSchema>;
 
 export default function SignUp() {
   const [, setLocation] = useLocation();
   const { registerMutation, user } = useAuth();
 
-  const form = useForm({
+  const form = useForm<FormData>({
     resolver: zodResolver(insertUserSchema),
     defaultValues: {
       email: "",
@@ -31,11 +34,16 @@ export default function SignUp() {
       googleId: null,
       profilePicture: null,
     },
+    mode: "onChange", // Enable real-time validation
   });
 
-  const onSubmit = async (data: any) => {
-    await registerMutation.mutateAsync(data);
-    setLocation("/");
+  const onSubmit = async (data: FormData) => {
+    try {
+      await registerMutation.mutateAsync(data);
+      setLocation("/");
+    } catch (error) {
+      // Error handling is managed by the mutation
+    }
   };
 
   // Redirect if already logged in
@@ -69,6 +77,7 @@ export default function SignUp() {
                       <Input
                         placeholder="Enter your name"
                         {...field}
+                        autoComplete="name"
                       />
                     </FormControl>
                     <FormMessage />
@@ -86,6 +95,7 @@ export default function SignUp() {
                         type="email"
                         placeholder="Enter your email"
                         {...field}
+                        autoComplete="email"
                       />
                     </FormControl>
                     <FormMessage />
@@ -103,6 +113,7 @@ export default function SignUp() {
                         type="password"
                         placeholder="Create a password"
                         {...field}
+                        autoComplete="new-password"
                       />
                     </FormControl>
                     <FormMessage />
@@ -112,12 +123,13 @@ export default function SignUp() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={registerMutation.isPending}
+                disabled={registerMutation.isPending || !form.formState.isValid}
               >
                 {registerMutation.isPending ? "Creating account..." : "Sign up"}
               </Button>
             </form>
           </Form>
+
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />

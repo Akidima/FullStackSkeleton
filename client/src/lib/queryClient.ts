@@ -7,16 +7,30 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+function getAuthToken() {
+  return localStorage.getItem('authToken');
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const headers: Record<string, string> = {};
+
+  if (data) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
   });
 
   await throwIfResNotOk(res);
@@ -29,8 +43,14 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    const headers: Record<string, string> = {};
+    const token = getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const res = await fetch(queryKey[0] as string, {
-      credentials: "include",
+      headers
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
@@ -55,3 +75,12 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+// Token management functions
+export function setAuthToken(token: string) {
+  localStorage.setItem('authToken', token);
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem('authToken');
+}

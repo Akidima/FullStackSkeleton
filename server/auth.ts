@@ -6,8 +6,13 @@ import { promisify } from "util";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
 import express from "express";
+import jwt from "jsonwebtoken";
 
 const scryptAsync = promisify(scrypt);
+
+if (!process.env.JWT_SECRET) {
+  throw new Error("Missing JWT_SECRET environment variable");
+}
 
 async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
@@ -22,25 +27,13 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-  throw new Error("Missing Google OAuth credentials");
+function generateToken(user: User) {
+  return jwt.sign(
+    { id: user.id, email: user.email },
+    process.env.JWT_SECRET!,
+    { expiresIn: '24h' }
+  );
 }
-
-passport.serializeUser((user: Express.User, done) => {
-  done(null, user.id);
-});
-
-passport.deserializeUser(async (id: number, done) => {
-  try {
-    const user = await storage.getUserById(id);
-    if (!user) {
-      return done(new Error("User not found"));
-    }
-    done(null, user);
-  } catch (err) {
-    done(err);
-  }
-});
 
 // Local Strategy for email/password auth
 passport.use(
@@ -70,8 +63,8 @@ passport.use(
 passport.use(
   new GoogleStrategy(
     {
-      clientID: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientID: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       callbackURL: "/auth/google/callback",
     },
     async (accessToken, refreshToken, profile, done) => {
@@ -120,17 +113,23 @@ export function registerAuthEndpoints(app: express.Application) {
         password: hashedPassword,
       });
 
-      req.login(user, (err) => {
-        if (err) return next(err);
-        res.status(201).json(user);
-      });
+      const token = generateToken(user);
+      res.status(201).json({ user, token });
     } catch (error) {
       next(error);
     }
   });
 
-  app.post("/api/login", passport.authenticate("local"), (req, res) => {
-    res.json(req.user);
+  app.post("/api/login", (req, res, next) => {
+    passport.authenticate("local", (err, user, info) => {
+      if (err) return next(err);
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Authentication failed" });
+      }
+
+      const token = generateToken(user);
+      res.json({ user, token });
+    })(req, res, next);
   });
 
   app.get(
@@ -140,24 +139,33 @@ export function registerAuthEndpoints(app: express.Application) {
 
   app.get(
     "/auth/google/callback",
-    passport.authenticate("google", {
-      successRedirect: "/",
-      failureRedirect: "/login",
-    })
+    passport.authenticate("google", { session: false }),
+    (req, res) => {
+      if (!req.user) {
+        return res.redirect('/login?error=authentication_failed');
+      }
+      const token = generateToken(req.user);
+      res.redirect(`/?token=${token}`);
+    }
   );
 
-  app.post("/api/logout", (req, res, next) => {
-    req.logout((err) => {
-      if (err) return next(err);
-      res.sendStatus(200);
-    });
-  });
-
   app.get("/api/me", (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Not authenticated" });
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ message: "No token provided" });
     }
-    res.json(req.user);
+
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: number };
+      const user = storage.getUserById(decoded.id);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid token" });
+      }
+      res.json(user);
+    } catch (err) {
+      res.status(401).json({ message: "Invalid token" });
+    }
   });
 }
 

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { insertUserSchema } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -16,7 +16,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Link } from "wouter";
 import type { z } from "zod";
 
 type FormData = z.infer<typeof insertUserSchema>;
@@ -43,19 +42,6 @@ export default function SignUp() {
       setLocation("/");
     } catch (error) {
       // Error handling is managed by the mutation
-    }
-  };
-
-  // Handle field change and clear errors if valid
-  const handleFieldChange = (name: keyof FormData, value: string) => {
-    form.setValue(name, value);
-
-    // Validate the field and clear error if valid
-    const fieldSchema = insertUserSchema.shape[name];
-    const validationResult = fieldSchema?.safeParse(value);
-
-    if (validationResult?.success) {
-      form.clearErrors(name);
     }
   };
 
@@ -90,7 +76,10 @@ export default function SignUp() {
                       <Input
                         placeholder="Enter your name"
                         {...field}
-                        onChange={(e) => handleFieldChange("displayName", e.target.value)}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          form.trigger("displayName");
+                        }}
                         autoComplete="name"
                       />
                     </FormControl>
@@ -109,7 +98,10 @@ export default function SignUp() {
                         type="email"
                         placeholder="Enter your email"
                         {...field}
-                        onChange={(e) => handleFieldChange("email", e.target.value)}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          form.trigger("email");
+                        }}
                         autoComplete="email"
                       />
                     </FormControl>
@@ -128,7 +120,10 @@ export default function SignUp() {
                         type="password"
                         placeholder="Create a password"
                         {...field}
-                        onChange={(e) => handleFieldChange("password", e.target.value)}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          form.trigger("password");
+                        }}
                         autoComplete="new-password"
                       />
                     </FormControl>

@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { AuthSkeleton } from "@/components/ui/auth-skeleton";
+import { TooltipError } from "@/components/ui/tooltip-error";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -84,7 +85,7 @@ export default function ForgotPassword() {
                 control={form.control}
                 name="email"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="relative">
                     <FormLabel>Email</FormLabel>
                     <FormControl>
                       <Input
@@ -94,7 +95,10 @@ export default function ForgotPassword() {
                         autoComplete="email"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <TooltipError
+                      message={form.formState.errors.email?.message}
+                      show={!!form.formState.errors.email}
+                    />
                   </FormItem>
                 )}
               />

@@ -19,6 +19,9 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { AuthSkeleton } from "@/components/ui/auth-skeleton";
 import { TooltipError } from "@/components/ui/tooltip-error";
+import { ReCAPTCHA } from "@/components/ui/recaptcha";
+import { AuthError } from "@/components/ui/auth-error";
+import { useState } from "react";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -29,6 +32,9 @@ type ForgotPasswordData = z.infer<typeof forgotPasswordSchema>;
 export default function ForgotPassword() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  const [error, setError] = useState<{ title: string; message: string } | null>(null);
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const form = useForm<ForgotPasswordData>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -38,28 +44,37 @@ export default function ForgotPassword() {
   });
 
   const resetMutation = useMutation({
-    mutationFn: async (data: ForgotPasswordData) => {
+    mutationFn: async (data: ForgotPasswordData & { recaptchaToken: string }) => {
       const res = await apiRequest("POST", "/api/forgot-password", data);
       return res.json();
     },
     onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "If an account exists with this email, you will receive password reset instructions.",
-      });
-      setLocation("/login");
+      setIsSuccess(true);
+      setError(null);
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
+      setError({
+        title: "Reset Request Failed",
+        message: error.message || "Please try again later",
       });
     },
   });
 
   const onSubmit = async (data: ForgotPasswordData) => {
-    await resetMutation.mutateAsync(data);
+    setError(null);
+
+    if (!recaptchaToken) {
+      setError({
+        title: "Verification Required",
+        message: "Please complete the security verification before proceeding",
+      });
+      return;
+    }
+
+    await resetMutation.mutateAsync({
+      ...data,
+      recaptchaToken,
+    });
   };
 
   if (resetMutation.isPending) {
@@ -79,6 +94,21 @@ export default function ForgotPassword() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {error && (
+            <AuthError
+              title={error.title}
+              message={error.message}
+              className="mb-4"
+            />
+          )}
+          {isSuccess && (
+            <AuthError
+              type="success"
+              title="Check Your Email"
+              message="If an account exists with this email, you will receive password reset instructions."
+              className="mb-4"
+            />
+          )}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
@@ -102,21 +132,24 @@ export default function ForgotPassword() {
                   </FormItem>
                 )}
               />
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={resetMutation.isPending}
-              >
-                {resetMutation.isPending ? "Sending..." : "Send Reset Instructions"}
-              </Button>
-              <div className="text-center text-sm">
+              <div className="space-y-4">
                 <Button
-                  variant="link"
-                  className="text-primary hover:underline"
-                  onClick={() => setLocation("/login")}
+                  type="submit"
+                  className="w-full"
+                  disabled={resetMutation.isPending || !recaptchaToken}
                 >
-                  Back to Login
+                  {resetMutation.isPending ? "Sending..." : "Send Reset Instructions"}
                 </Button>
+                <ReCAPTCHA onVerify={setRecaptchaToken} />
+                <div className="text-center text-sm">
+                  <Button
+                    variant="link"
+                    className="text-primary hover:underline"
+                    onClick={() => setLocation("/login")}
+                  >
+                    Back to Login
+                  </Button>
+                </div>
               </div>
             </form>
           </Form>

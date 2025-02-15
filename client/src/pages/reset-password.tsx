@@ -22,6 +22,7 @@ import { AuthSkeleton } from "@/components/ui/auth-skeleton";
 import { TooltipError } from "@/components/ui/tooltip-error";
 import { PasswordStrengthIndicator } from "@/components/ui/password-strength";
 import { ReCAPTCHA } from "@/components/ui/recaptcha";
+import { AuthError } from "@/components/ui/auth-error";
 
 const resetPasswordSchema = z.object({
   password: z.string()
@@ -44,6 +45,7 @@ export default function ResetPassword() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  const [error, setError] = useState<{ title: string; message: string } | null>(null);
 
   const form = useForm<ResetPasswordData>({
     resolver: zodResolver(resetPasswordSchema),
@@ -54,15 +56,15 @@ export default function ResetPassword() {
   });
 
   const resetMutation = useMutation({
-    mutationFn: async (data: ResetPasswordData) => {
+    mutationFn: async (data: ResetPasswordData & { recaptchaToken: string }) => {
       const token = new URLSearchParams(window.location.search).get("token");
       if (!token) {
-        throw new Error("Invalid reset token");
+        throw new Error("Reset token is missing or invalid");
       }
       const res = await apiRequest("POST", "/api/reset-password", {
-        ...data,
+        password: data.password,
         token,
-        recaptchaToken: data.recaptchaToken //Added this line
+        recaptchaToken: data.recaptchaToken,
       });
       return res.json();
     },
@@ -74,20 +76,20 @@ export default function ResetPassword() {
       setLocation("/login");
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
+      setError({
+        title: "Password Reset Failed",
+        message: error.message || "Please try again or request a new reset link",
       });
     },
   });
 
   const onSubmit = async (data: ResetPasswordData) => {
+    setError(null);
+
     if (!recaptchaToken) {
-      toast({
-        title: "Error",
-        description: "Please complete the reCAPTCHA verification",
-        variant: "destructive",
+      setError({
+        title: "Verification Required",
+        message: "Please complete the security verification before proceeding",
       });
       return;
     }
@@ -115,6 +117,13 @@ export default function ResetPassword() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {error && (
+            <AuthError
+              title={error.title}
+              message={error.message}
+              className="mb-4"
+            />
+          )}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
@@ -193,23 +202,24 @@ export default function ResetPassword() {
                   </FormItem>
                 )}
               />
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={resetMutation.isPending || !recaptchaToken}
-              >
-                {resetMutation.isPending ? "Resetting..." : "Reset Password"}
-              </Button>
-              <ReCAPTCHA onVerify={setRecaptchaToken} />
-
-              <div className="text-center text-sm">
+              <div className="space-y-4">
                 <Button
-                  variant="link"
-                  className="text-primary hover:underline"
-                  onClick={() => setLocation("/login")}
+                  type="submit"
+                  className="w-full"
+                  disabled={resetMutation.isPending || !recaptchaToken}
                 >
-                  Back to Login
+                  {resetMutation.isPending ? "Resetting..." : "Reset Password"}
                 </Button>
+                <ReCAPTCHA onVerify={setRecaptchaToken} />
+                <div className="text-center text-sm">
+                  <Button
+                    variant="link"
+                    className="text-primary hover:underline"
+                    onClick={() => setLocation("/login")}
+                  >
+                    Back to Login
+                  </Button>
+                </div>
               </div>
             </form>
           </Form>

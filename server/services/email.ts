@@ -12,11 +12,14 @@ const createTransporter = () => {
   }
 
   return nodemailer.createTransport({
-    service: 'Gmail', // Use Gmail service
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true, // Use SSL
     auth: {
       user: smtpUser,
-      pass: smtpPass, // Use app-specific password
+      pass: smtpPass,
     },
+    debug: true, // Enable debug logging
   });
 };
 
@@ -25,8 +28,11 @@ export async function sendPasswordResetEmail(email: string, resetToken: string) 
     const transporter = createTransporter();
     const resetLink = `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co/reset-password?token=${resetToken}`;
 
+    // Verify transporter configuration
+    await transporter.verify();
+
     const info = await transporter.sendMail({
-      from: process.env.SMTP_USER,
+      from: `"Meeting Manager" <${process.env.SMTP_USER}>`,
       to: email,
       subject: "Reset Your Password",
       html: `
@@ -41,7 +47,11 @@ export async function sendPasswordResetEmail(email: string, resetToken: string) 
     log(`Password reset email sent to ${email}: ${info.messageId}`);
   } catch (error) {
     log(`Error sending password reset email to ${email}: ${error}`);
-    throw new Error("Email service is not properly configured. Please contact support.");
+    if (error.code === 'EAUTH') {
+      throw new Error("Email authentication failed. Please check SMTP credentials.");
+    } else {
+      throw new Error("Failed to send password reset email. Please try again later.");
+    }
   }
 }
 
@@ -50,8 +60,11 @@ export async function sendVerificationEmail(email: string, verificationToken: st
     const transporter = createTransporter();
     const verificationLink = `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co/verify-email?token=${verificationToken}`;
 
+    // Verify transporter configuration
+    await transporter.verify();
+
     const info = await transporter.sendMail({
-      from: process.env.SMTP_USER,
+      from: `"Meeting Manager" <${process.env.SMTP_USER}>`,
       to: email,
       subject: "Verify Your Email",
       html: `
@@ -65,6 +78,10 @@ export async function sendVerificationEmail(email: string, verificationToken: st
     log(`Verification email sent to ${email}: ${info.messageId}`);
   } catch (error) {
     log(`Error sending verification email to ${email}: ${error}`);
-    throw new Error("Email service is not properly configured. Please contact support.");
+    if (error.code === 'EAUTH') {
+      throw new Error("Email authentication failed. Please check SMTP credentials.");
+    } else {
+      throw new Error("Failed to send verification email. Please try again later.");
+    }
   }
 }

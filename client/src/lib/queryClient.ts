@@ -16,7 +16,9 @@ async function throwIfResNotOk(res: Response) {
       errorMessage = res.statusText;
     }
 
-    throw new Error(`${res.status}: ${errorMessage}`);
+    const error = new Error(errorMessage);
+    (error as any).status = res.status;
+    throw error;
   }
 }
 
@@ -62,7 +64,7 @@ export async function apiRequest(
     method,
     headers,
     body: data ? JSON.stringify(data) : undefined,
-    credentials: 'same-origin'
+    credentials: 'include'
   });
 
   if (res.status === 401) {
@@ -72,13 +74,26 @@ export async function apiRequest(
 
   await throwIfResNotOk(res);
 
-  // Ensure response is JSON before trying to parse it
-  const contentType = res.headers.get("content-type");
-  if (!contentType || !contentType.includes("application/json")) {
-    throw new Error("Expected JSON response but received " + contentType);
+  // Check if response is empty
+  const text = await res.text();
+  if (!text) {
+    return new Response('{}', {
+      status: res.status,
+      headers: { 'content-type': 'application/json' }
+    });
   }
 
-  return res;
+  // Parse JSON response
+  try {
+    JSON.parse(text);
+    return new Response(text, {
+      status: res.status,
+      headers: { 'content-type': 'application/json' }
+    });
+  } catch (e) {
+    console.error("Invalid JSON response:", text);
+    throw new Error("Invalid JSON response from server");
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -102,7 +117,7 @@ export const getQueryFn: <T>(options: {
     console.log(`Making query request to ${queryKey[0]}`);
     const res = await fetch(queryKey[0] as string, {
       headers,
-      credentials: 'same-origin'
+      credentials: 'include'
     });
 
     if (res.status === 401) {
@@ -115,13 +130,19 @@ export const getQueryFn: <T>(options: {
 
     await throwIfResNotOk(res);
 
-    // Ensure response is JSON before trying to parse it
-    const contentType = res.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      throw new Error("Expected JSON response but received " + contentType);
+    // Check if response is empty
+    const text = await res.text();
+    if (!text) {
+      return null;
     }
 
-    return await res.json();
+    // Parse JSON response
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error("Invalid JSON response:", text);
+      throw new Error("Invalid JSON response from server");
+    }
   };
 
 export const queryClient = new QueryClient({

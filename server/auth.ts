@@ -180,17 +180,71 @@ passport.use(
   )
 );
 
+// Adjust rate limiting to be more lenient
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // Increased from 5 to 20 attempts
+  message: 'Too many requests, please try again in 15 minutes',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export function registerAuthEndpoints(app: express.Application) {
-  // Adjust rate limiting to be more lenient
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20, // Increased from 5 to 20 attempts
-    message: 'Too many requests, please try again in 15 minutes',
-    standardHeaders: true,
-    legacyHeaders: false,
+  app.post("/api/login", authLimiter, (req, res, next) => {
+    passport.authenticate("local", (err: Error | null, user: User | false, info: { message: string } | undefined) => {
+      if (err) return next(err);
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Authentication failed" });
+      }
+
+      req.login(user, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        const token = generateToken(user);
+        res.json({ user, token });
+      });
+    })(req, res, next);
   });
 
-  // Google OAuth routes with improved error handling
+  app.post("/api/signup", authLimiter, async (req, res, next) => {
+    try {
+      const existingUser = await storage.getUserByEmail(req.body.email);
+      if (existingUser) {
+        return res.status(400).json({ message: "Email already registered" });
+      }
+
+      const verificationToken = generateVerificationToken();
+      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      const hashedPassword = await hashPassword(req.body.password);
+      const user = await storage.createUser({
+        ...req.body,
+        password: hashedPassword,
+        googleId: null,
+        verificationToken,
+        verificationExpires,
+        isVerified: false,
+      });
+
+      // Send verification email
+      await sendVerificationEmail(user.email, verificationToken);
+
+      const token = generateToken(user);
+      res.status(201).json({ 
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          isAdmin: user.isAdmin
+        },
+        token,
+        message: "Please check your email to verify your account" 
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+
   app.get(
     "/auth/google",
     (req, res, next) => {
@@ -244,46 +298,6 @@ export function registerAuthEndpoints(app: express.Application) {
     }
   );
 
-  app.post("/api/signup", authLimiter, async (req, res, next) => {
-    try {
-      const existingUser = await storage.getUserByEmail(req.body.email);
-      if (existingUser) {
-        return res.status(400).json({ message: "Email already registered" });
-      }
-
-      const verificationToken = generateVerificationToken();
-      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-      const hashedPassword = await hashPassword(req.body.password);
-      const user = await storage.createUser({
-        ...req.body,
-        password: hashedPassword,
-        googleId: null,
-        verificationToken,
-        verificationExpires,
-        isVerified: false,
-      });
-
-      // Send verification email
-      await sendVerificationEmail(user.email, verificationToken);
-
-      const token = generateToken(user);
-      res.status(201).json({ 
-        user: {
-          id: user.id,
-          email: user.email,
-          displayName: user.displayName,
-          isAdmin: user.isAdmin
-        },
-        token,
-        message: "Please check your email to verify your account" 
-      });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-
   app.post("/api/verify-email", async (req, res) => {
     const { token } = req.body;
 
@@ -336,21 +350,6 @@ export function registerAuthEndpoints(app: express.Application) {
     } catch (error) {
       res.status(500).json({ message: "Error sending verification email" });
     }
-  });
-
-  app.post("/api/login", authLimiter, (req, res, next) => {
-    passport.authenticate("local", (err: Error | null, user: User | false, info: { message: string } | undefined) => {
-      if (err) return next(err);
-      if (!user) {
-        return res.status(401).json({ message: info?.message || "Authentication failed" });
-      }
-
-      req.login(user, (loginErr) => {
-        if (loginErr) return next(loginErr);
-        const token = generateToken(user);
-        res.json({ user, token });
-      });
-    })(req, res, next);
   });
 
   app.get("/api/me", authenticateJWT, async (req, res) => {

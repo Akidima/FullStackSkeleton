@@ -16,7 +16,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { z } from "zod";
 
 type FormData = z.infer<typeof loginUserSchema>;
@@ -25,6 +25,7 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const { loginMutation, user } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(loginUserSchema),
@@ -32,15 +33,43 @@ export default function Login() {
       email: "",
       password: "",
     },
-    mode: "onChange", // Enable real-time validation
+    mode: "onChange",
   });
 
+  // Handle URL error parameters
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const errorType = params.get('error');
+    if (errorType) {
+      let errorMessage = "An error occurred during authentication";
+      switch (errorType) {
+        case 'google-auth-failed':
+          errorMessage = "Google authentication failed. Please try again.";
+          break;
+        case 'no-user-found':
+          errorMessage = "No user account found. Please sign up first.";
+          break;
+        case 'auth-failed':
+          errorMessage = "Authentication failed. Please try again.";
+          break;
+      }
+      setError(errorMessage);
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   const onSubmit = async (data: FormData) => {
+    setError(null);
     try {
       await loginMutation.mutateAsync(data);
       setLocation("/");
-    } catch (error) {
-      // Error handling is managed by the mutation
+    } catch (error: any) {
+      if (error.status === 429) {
+        setError("Too many login attempts. Please try again in 15 minutes.");
+      } else {
+        setError(error.message || "Failed to login. Please try again.");
+      }
     }
   };
 
@@ -63,6 +92,11 @@ export default function Login() {
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
+          {error && (
+            <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-lg">
+              {error}
+            </div>
+          )}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField

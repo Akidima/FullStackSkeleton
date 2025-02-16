@@ -4,7 +4,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import type { users } from "@shared/schema";
+import type { User } from "@shared/schema";
 import express from "express";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
@@ -48,7 +48,7 @@ async function sendVerificationEmail(email: string, token: string) {
 // Extend Express Request type with proper User type
 declare global {
   namespace Express {
-    interface User extends typeof users.$inferSelect {}
+    interface User extends User {}
   }
 }
 
@@ -69,7 +69,7 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-function generateToken(user: users) {
+function generateToken(user: User) {
   return jwt.sign(
     { id: user.id, email: user.email },
     process.env.JWT_SECRET!,
@@ -86,7 +86,7 @@ export function authenticateJWT(req: express.Request, res: express.Response, nex
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as users;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as User;
     req.user = decoded;
     next();
   } catch (err) {
@@ -163,7 +163,7 @@ passport.use(
             googleId: profile.id,
             email: profile.emails?.[0]?.value ?? "",
             displayName: profile.displayName,
-            profilePicture: profile.photos?.[0]?.value,
+            profilePicture: profile.photos?.[0]?.value ?? null,
             password: null,
           });
         }
@@ -266,7 +266,7 @@ export function registerAuthEndpoints(app: express.Application) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err: Error | null, user: users | false, info: { message: string } | undefined) => {
+    passport.authenticate("local", (err: Error | null, user: User | false, info: { message: string } | undefined) => {
       if (err) return next(err);
       if (!user) {
         return res.status(401).json({ message: info?.message || "Authentication failed" });

@@ -1,4 +1,4 @@
-import { meetings, users, registrationAttempts, type Meeting, type InsertMeeting, type User, type InsertUser, type RegistrationAttempt, type InsertRegistrationAttempt } from "@shared/schema";
+import { meetings, users, registrationAttempts, securityRecommendations, type Meeting, type InsertMeeting, type User, type InsertUser, type RegistrationAttempt, type InsertRegistrationAttempt, type SecurityRecommendation, type InsertSecurityRecommendation } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 
@@ -25,6 +25,13 @@ export interface IStorage {
   getRegistrationAttempts(limit?: number): Promise<RegistrationAttempt[]>;
   getRegistrationAttemptsByIP(ipAddress: string): Promise<RegistrationAttempt[]>;
   getRegistrationAttemptsByEmail(email: string): Promise<RegistrationAttempt[]>;
+
+  // Security recommendations operations
+  createSecurityRecommendation(recommendation: InsertSecurityRecommendation): Promise<SecurityRecommendation>;
+  getUserSecurityRecommendations(userId: number): Promise<SecurityRecommendation[]>;
+  updateSecurityRecommendation(id: number, update: Partial<InsertSecurityRecommendation>): Promise<SecurityRecommendation>;
+  dismissSecurityRecommendation(id: number): Promise<SecurityRecommendation>;
+  implementSecurityRecommendation(id: number): Promise<SecurityRecommendation>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -107,7 +114,6 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(meetings).where(eq(meetings.userId, userId));
   }
 
-  // Registration attempts methods
   async createRegistrationAttempt(attempt: InsertRegistrationAttempt): Promise<RegistrationAttempt> {
     const [createdAttempt] = await db.insert(registrationAttempts).values(attempt).returning();
     return createdAttempt;
@@ -135,6 +141,52 @@ export class DatabaseStorage implements IStorage {
       .from(registrationAttempts)
       .where(eq(registrationAttempts.email, email))
       .orderBy(desc(registrationAttempts.attemptTime));
+  }
+
+  async createSecurityRecommendation(recommendation: InsertSecurityRecommendation): Promise<SecurityRecommendation> {
+    const [createdRecommendation] = await db
+      .insert(securityRecommendations)
+      .values(recommendation)
+      .returning();
+    return createdRecommendation;
+  }
+
+  async getUserSecurityRecommendations(userId: number): Promise<SecurityRecommendation[]> {
+    return await db
+      .select()
+      .from(securityRecommendations)
+      .where(eq(securityRecommendations.userId, userId))
+      .orderBy(desc(securityRecommendations.createdAt));
+  }
+
+  async updateSecurityRecommendation(
+    id: number,
+    update: Partial<InsertSecurityRecommendation>
+  ): Promise<SecurityRecommendation> {
+    const [updatedRecommendation] = await db
+      .update(securityRecommendations)
+      .set(update)
+      .where(eq(securityRecommendations.id, id))
+      .returning();
+
+    if (!updatedRecommendation) {
+      throw new Error('Security recommendation not found');
+    }
+
+    return updatedRecommendation;
+  }
+
+  async dismissSecurityRecommendation(id: number): Promise<SecurityRecommendation> {
+    return this.updateSecurityRecommendation(id, {
+      status: 'dismissed'
+    });
+  }
+
+  async implementSecurityRecommendation(id: number): Promise<SecurityRecommendation> {
+    return this.updateSecurityRecommendation(id, {
+      status: 'implemented',
+      implementedAt: new Date()
+    });
   }
 }
 

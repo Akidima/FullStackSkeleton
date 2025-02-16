@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertMeetingSchema, updateMeetingSchema, loginUserSchema } from "@shared/schema";
+import { insertMeetingSchema, updateMeetingSchema, loginUserSchema, insertSecurityRecommendationSchema, updateSecurityRecommendationSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import passport from "./auth";
 import { semanticSearch } from "./services/search";
@@ -39,6 +39,12 @@ const isAdmin = (req: Request, res: Response, next: NextFunction) => {
   }
   next();
 };
+
+// Add this error handling utility
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
@@ -97,8 +103,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await sendPasswordResetEmail(email, resetToken);
 
         res.json({ message: "If an account exists with this email, you will receive password reset instructions." });
-      } catch (emailError) {
-        console.error("Detailed error:", emailError);
+      } catch (error) {
+        console.error("Detailed error:", getErrorMessage(error));
 
         // Revert the token if email sending fails
         await storage.updateUser(user.id, {
@@ -109,8 +115,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error("Failed to send password reset email. Please try again later.");
       }
     } catch (error) {
-      console.error("Password reset error:", error);
-      res.status(500).json({ message: error.message || "Failed to process password reset request" });
+      console.error("Password reset error:", getErrorMessage(error));
+      res.status(500).json({ message: getErrorMessage(error) || "Failed to process password reset request" });
     }
   });
 
@@ -300,6 +306,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Batch summarization error:", error);
       res.status(500).json({ message: "Failed to generate meeting summaries" });
+    }
+  });
+
+  // Security recommendation routes
+  app.get("/api/security-recommendations", isAuthenticated, async (req, res) => {
+    try {
+      const recommendations = await storage.getUserSecurityRecommendations(req.user!.id);
+      res.json(recommendations);
+    } catch (error) {
+      console.error("Error fetching security recommendations:", getErrorMessage(error));
+      res.status(500).json({ message: "Failed to fetch security recommendations" });
+    }
+  });
+
+  app.post("/api/security-recommendations", isAuthenticated, async (req, res) => {
+    try {
+      const recommendationData = insertSecurityRecommendationSchema.parse({
+        ...req.body,
+        userId: req.user!.id
+      });
+      const recommendation = await storage.createSecurityRecommendation(recommendationData);
+      res.status(201).json(recommendation);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: error.errors });
+      }
+      console.error("Error creating security recommendation:", getErrorMessage(error));
+      res.status(500).json({ message: "Failed to create security recommendation" });
+    }
+  });
+
+  app.patch("/api/security-recommendations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const recommendationData = updateSecurityRecommendationSchema.parse(req.body);
+      const recommendation = await storage.updateSecurityRecommendation(
+        Number(req.params.id),
+        recommendationData
+      );
+      res.json(recommendation);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: error.errors });
+      }
+      console.error("Error updating security recommendation:", getErrorMessage(error));
+      res.status(500).json({ message: "Failed to update security recommendation" });
+    }
+  });
+
+  app.post("/api/security-recommendations/:id/dismiss", isAuthenticated, async (req, res) => {
+    try {
+      const recommendation = await storage.dismissSecurityRecommendation(Number(req.params.id));
+      res.json(recommendation);
+    } catch (error) {
+      console.error("Error dismissing security recommendation:", getErrorMessage(error));
+      res.status(500).json({ message: "Failed to dismiss security recommendation" });
+    }
+  });
+
+  app.post("/api/security-recommendations/:id/implement", isAuthenticated, async (req, res) => {
+    try {
+      const recommendation = await storage.implementSecurityRecommendation(Number(req.params.id));
+      res.json(recommendation);
+    } catch (error) {
+      console.error("Error implementing security recommendation:", getErrorMessage(error));
+      res.status(500).json({ message: "Failed to implement security recommendation" });
     }
   });
 

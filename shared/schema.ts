@@ -40,8 +40,26 @@ export const registrationAttempts = pgTable("registration_attempts", {
   attemptTimeIdx: index("reg_attempts_time_idx").on(table.attemptTime),
 }));
 
+// Add after the registrationAttempts table
+export const securityRecommendations = pgTable("security_recommendations", {
+  id: serial("id").primaryKey(),
+  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  priority: text("priority").notNull(), // 'high', 'medium', 'low'
+  category: text("category").notNull(), // 'password', 'account', 'access', etc.
+  status: text("status").notNull().default('pending'), // 'pending', 'implemented', 'dismissed'
+  implementedAt: timestamp("implemented_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  userIdIdx: index("sec_rec_user_id_idx").on(table.userId),
+  statusIdx: index("sec_rec_status_idx").on(table.status),
+  priorityIdx: index("sec_rec_priority_idx").on(table.priority),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   meetings: many(meetings),
+  securityRecommendations: many(securityRecommendations),
 }));
 
 export const meetings = pgTable("meetings", {
@@ -81,6 +99,13 @@ export const tasks = pgTable("tasks", {
 export const tasksRelations = relations(tasks, ({ one }) => ({
   user: one(users, {
     fields: [tasks.userId],
+    references: [users.id],
+  }),
+}));
+
+export const securityRecommendationsRelations = relations(securityRecommendations, ({ one }) => ({
+  user: one(users, {
+    fields: [securityRecommendations.userId],
     references: [users.id],
   }),
 }));
@@ -136,6 +161,27 @@ export const insertRegistrationAttemptSchema = createInsertSchema(registrationAt
   attemptTime: true,
 });
 
+// Add after other insert schemas
+export const insertSecurityRecommendationSchema = createInsertSchema(securityRecommendations)
+  .omit({ 
+    id: true,
+    implementedAt: true,
+    createdAt: true,
+  })
+  .extend({
+    priority: z.enum(['high', 'medium', 'low']),
+    status: z.enum(['pending', 'implemented', 'dismissed']),
+    category: z.enum(['password', 'account', 'access', 'device', 'general']),
+  });
+
+export const updateSecurityRecommendationSchema = createInsertSchema(securityRecommendations)
+  .partial()
+  .extend({
+    priority: z.enum(['high', 'medium', 'low']).optional(),
+    status: z.enum(['pending', 'implemented', 'dismissed']).optional(),
+    category: z.enum(['password', 'account', 'access', 'device', 'general']).optional(),
+  });
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -145,3 +191,8 @@ export type InsertMeeting = z.infer<typeof insertMeetingSchema>;
 export type Meeting = typeof meetings.$inferSelect;
 export type InsertRegistrationAttempt = z.infer<typeof insertRegistrationAttemptSchema>;
 export type RegistrationAttempt = typeof registrationAttempts.$inferSelect;
+
+// Add to existing type exports
+export type InsertSecurityRecommendation = z.infer<typeof insertSecurityRecommendationSchema>;
+export type SecurityRecommendation = typeof securityRecommendations.$inferSelect;
+export type UpdateSecurityRecommendation = z.infer<typeof updateSecurityRecommendationSchema>;

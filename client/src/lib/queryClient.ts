@@ -8,7 +8,7 @@ async function throwIfResNotOk(res: Response) {
     try {
       if (contentType && contentType.includes("application/json")) {
         const errorData = await res.json();
-        errorMessage = errorData.message || res.statusText;
+        errorMessage = errorData.message || errorData.error || res.statusText;
       } else {
         errorMessage = await res.text() || res.statusText;
       }
@@ -45,11 +45,8 @@ export async function apiRequest(
 ): Promise<Response> {
   const headers: Record<string, string> = {
     'Accept': 'application/json',
+    'Content-Type': 'application/json',
   };
-
-  if (data) {
-    headers['Content-Type'] = 'application/json';
-  }
 
   const token = getAuthToken();
   if (token) {
@@ -60,39 +57,57 @@ export async function apiRequest(
   }
 
   console.log(`Making ${method} request to ${url}`);
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: 'include'
-  });
+  let response: Response;
 
-  if (res.status === 401) {
-    console.log("Received 401 unauthorized response");
-    clearAuthToken(); // Clear invalid token
-  }
-
-  await throwIfResNotOk(res);
-
-  // Check if response is empty
-  const text = await res.text();
-  if (!text) {
-    return new Response('{}', {
-      status: res.status,
-      headers: { 'content-type': 'application/json' }
-    });
-  }
-
-  // Parse JSON response
   try {
-    JSON.parse(text);
-    return new Response(text, {
-      status: res.status,
-      headers: { 'content-type': 'application/json' }
+    response = await fetch(url, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: 'include'
     });
-  } catch (e) {
-    console.error("Invalid JSON response:", text);
-    throw new Error("Invalid JSON response from server");
+
+    // Handle rate limiting
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After');
+      const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 15000;
+
+      throw new Error(`Too many requests. Please wait ${Math.ceil(waitTime/1000)} seconds before trying again.`);
+    }
+
+    // Handle authentication errors
+    if (response.status === 401) {
+      console.log("Received 401 unauthorized response");
+      clearAuthToken();
+    }
+
+    await throwIfResNotOk(response);
+
+    // Check if response is empty
+    const text = await response.text();
+    if (!text) {
+      return new Response('{}', {
+        status: response.status,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+
+    // Parse JSON response
+    try {
+      JSON.parse(text);
+      return new Response(text, {
+        status: response.status,
+        headers: { 'content-type': 'application/json' }
+      });
+    } catch (e) {
+      console.error("Invalid JSON response:", text);
+      throw new Error("Invalid JSON response from server");
+    }
+  } catch (error) {
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      throw new Error('Network error. Please check your connection and try again.');
+    }
+    throw error;
   }
 }
 
@@ -102,46 +117,59 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const headers: Record<string, string> = {
-      'Accept': 'application/json'
-    };
+    try {
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      };
 
-    const token = getAuthToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-      console.log("Adding auth token to query request");
-    } else {
-      console.log("No auth token available for query");
-    }
+      const token = getAuthToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        console.log("Adding auth token to query request");
+      } else {
+        console.log("No auth token available for query");
+      }
 
-    console.log(`Making query request to ${queryKey[0]}`);
-    const res = await fetch(queryKey[0] as string, {
-      headers,
-      credentials: 'include'
-    });
+      console.log(`Making query request to ${queryKey[0]}`);
+      const res = await fetch(queryKey[0] as string, {
+        headers,
+        credentials: 'include'
+      });
 
-    if (res.status === 401) {
-      console.log("Received 401 unauthorized response in query");
-      clearAuthToken(); // Clear invalid token
-      if (unauthorizedBehavior === "returnNull") {
+      // Handle rate limiting
+      if (res.status === 429) {
+        const retryAfter = res.headers.get('Retry-After');
+        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 15000;
+        throw new Error(`Too many requests. Please wait ${Math.ceil(waitTime/1000)} seconds before trying again.`);
+      }
+
+      if (res.status === 401) {
+        console.log("Received 401 unauthorized response in query");
+        clearAuthToken();
+        if (unauthorizedBehavior === "returnNull") {
+          return null;
+        }
+      }
+
+      await throwIfResNotOk(res);
+
+      const text = await res.text();
+      if (!text) {
         return null;
       }
-    }
 
-    await throwIfResNotOk(res);
-
-    // Check if response is empty
-    const text = await res.text();
-    if (!text) {
-      return null;
-    }
-
-    // Parse JSON response
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      console.error("Invalid JSON response:", text);
-      throw new Error("Invalid JSON response from server");
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error("Invalid JSON response:", text);
+        throw new Error("Invalid JSON response from server");
+      }
+    } catch (error) {
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+      throw error;
     }
   };
 

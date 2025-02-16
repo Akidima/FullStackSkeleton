@@ -9,6 +9,8 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { rateLimit } from 'express-rate-limit';
+import { errorHandler, asyncHandler } from "./middleware/errorHandler";
+import { AuthenticationError, ValidationError, ConflictError } from "./errors/AppError";
 
 // Fix the recursive type reference issue
 declare global {
@@ -228,21 +230,16 @@ const authLimiter = rateLimit({
 
 export function registerAuthEndpoints(app: express.Application) {
   // Update signup endpoint to ensure JSON response
-  app.post("/api/signup", authLimiter, async (req, res) => {
+  app.post("/api/signup", authLimiter, asyncHandler(async (req, res) => {
+    const existingUser = await storage.getUserByEmail(req.body.email);
+    if (existingUser) {
+      throw new ConflictError("Email already registered");
+    }
+
+    const verificationToken = generateVerificationToken();
+    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
     try {
-      // Set JSON content type
-      res.setHeader('Content-Type', 'application/json');
-
-      const existingUser = await storage.getUserByEmail(req.body.email);
-      if (existingUser) {
-        return res.status(400).json({ 
-          message: "Email already registered" 
-        });
-      }
-
-      const verificationToken = generateVerificationToken();
-      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
       const hashedPassword = await hashPassword(req.body.password);
       const user = await storage.createUser({
         ...req.body,
@@ -258,11 +255,10 @@ export function registerAuthEndpoints(app: express.Application) {
         await sendVerificationEmail(user.email, verificationToken);
       } catch (emailError) {
         console.error("Failed to send verification email:", emailError);
-        // Continue with signup even if email fails
       }
 
       const token = generateToken(user);
-      return res.status(201).json({ 
+      res.status(201).json({
         user: {
           id: user.id,
           email: user.email,
@@ -270,43 +266,36 @@ export function registerAuthEndpoints(app: express.Application) {
           isAdmin: user.isAdmin
         },
         token,
-        message: "Please check your email to verify your account" 
+        message: "Please check your email to verify your account"
       });
     } catch (error) {
-      console.error("Signup error:", error);
-      return res.status(500).json({ 
-        message: "Failed to create account" 
-      });
+      throw new ValidationError("Failed to create account");
     }
-  });
+  }));
 
   // Update login endpoint to ensure JSON response
   app.post("/api/login", authLimiter, (req, res, next) => {
-    res.setHeader('Content-Type', 'application/json');
-
     passport.authenticate("local", (err: Error | null, user: User | false, info: { message: string } | undefined) => {
       if (err) {
-        console.error("Authentication error:", err);
-        return res.status(500).json({ message: "Authentication error" });
+        return next(new AuthenticationError("Authentication error"));
       }
       if (!user) {
-        return res.status(401).json({ message: info?.message || "Authentication failed" });
+        return next(new AuthenticationError(info?.message || "Authentication failed"));
       }
 
       req.login(user, (loginErr) => {
         if (loginErr) {
-          console.error("Login error:", loginErr);
-          return res.status(500).json({ message: "Login error" });
+          return next(new AuthenticationError("Login error"));
         }
         const token = generateToken(user);
-        return res.json({ 
+        res.json({
           user: {
             id: user.id,
             email: user.email,
             displayName: user.displayName,
             isAdmin: user.isAdmin
-          }, 
-          token 
+          },
+          token
         });
       });
     })(req, res, next);
@@ -348,10 +337,10 @@ export function registerAuthEndpoints(app: express.Application) {
         try {
           console.log("Generating JWT token for user:", user.email);
           const token = jwt.sign(
-            { 
+            {
               id: user.id,
               email: user.email,
-              displayName: user.displayName 
+              displayName: user.displayName
             },
             process.env.JWT_SECRET!,
             { expiresIn: '24h' }

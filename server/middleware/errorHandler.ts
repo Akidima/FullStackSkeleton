@@ -22,7 +22,7 @@ export function errorHandler(
     details: (err as any).details
   });
 
-  // Set Content-Type to application/json
+  // Always set Content-Type to application/json
   res.setHeader('Content-Type', 'application/json');
 
   const response: ErrorResponse = {

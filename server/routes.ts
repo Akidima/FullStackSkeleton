@@ -10,6 +10,7 @@ import { sendPasswordResetEmail, sendVerificationEmail } from "./services/email"
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import { requireRecaptcha } from "./middleware/recaptcha";
+import { registerAuthEndpoints } from "./auth";
 
 // Extend Express Request type to include user
 declare global {
@@ -19,7 +20,7 @@ declare global {
       googleId: string;
       email: string;
       displayName: string;
-      isAdmin?: boolean; // Added isAdmin property
+      isAdmin?: boolean;
     }
   }
 }
@@ -47,28 +48,10 @@ function getErrorMessage(error: unknown): string {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth routes
-  app.get(
-    "/auth/google",
-    passport.authenticate("google", {
-      scope: ["profile", "email"],
-    })
-  );
+  // Register auth endpoints first
+  registerAuthEndpoints(app);
 
-  app.get(
-    "/auth/google/callback",
-    passport.authenticate("google", {
-      failureRedirect: "/login",
-      successRedirect: "/",
-    })
-  );
-
-  app.get("/auth/logout", (req, res) => {
-    req.logout(() => {
-      res.redirect("/");
-    });
-  });
-
+  // Protected routes follow...
   app.get("/api/me", (req, res) => {
     if (!req.user) {
       return res.status(401).json({ message: "Not authenticated" });

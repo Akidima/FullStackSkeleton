@@ -7,19 +7,14 @@ import MeetingList from "@/pages/meeting-list";
 import MeetingForm from "@/pages/meeting-form";
 import Login from "@/pages/login";
 import SignUp from "@/pages/signup";
-import ForgotPassword from "@/pages/forgot-password";
-import ResetPassword from "@/pages/reset-password";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
-import { OnboardingProvider } from "@/components/ui/onboarding";
 
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/signup" component={SignUp} />
-      <Route path="/forgot-password" component={ForgotPassword} />
-      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/" component={() => <ProtectedRoute component={MeetingList} />} />
       <Route path="/meetings/new" component={() => <ProtectedRoute component={MeetingForm} />} />
       <Route path="/meetings/:id/edit" component={() => <ProtectedRoute component={MeetingForm} />} />
@@ -32,10 +27,8 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <OnboardingProvider>
-          <Router />
-          <Toaster />
-        </OnboardingProvider>
+        <Router />
+        <Toaster />
       </AuthProvider>
     </QueryClientProvider>
   );

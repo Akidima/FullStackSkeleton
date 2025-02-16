@@ -7,7 +7,6 @@ import passport from "./auth";
 import { errorHandler, asyncHandler } from "./middleware/errorHandler";
 import { AuthenticationError, NotFoundError, ValidationError } from "./errors/AppError";
 
-// Authentication middleware
 const isAuthenticated = (req: Request, res: Response, next: NextFunction) => {
   if (req.isAuthenticated()) {
     return next();
@@ -27,7 +26,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }));
 
-  // Protected meeting routes
+  // Meeting Management Routes
   app.get("/api/meetings", isAuthenticated, asyncHandler(async (req, res) => {
     const meetings = await storage.getUserMeetings(req.user!.id);
     res.json({
@@ -100,50 +99,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(204).send();
   }));
 
-
-  // Search and summarization routes
-  app.post("/api/meetings/search", isAuthenticated, asyncHandler(async (req, res) => {
-    try {
-      const { query } = req.body;
-      if (!query || typeof query !== "string") {
-        throw new ValidationError("Search query is required");
-      }
-      const meetings = await storage.getUserMeetings(req.user!.id);
-      const searchResults = await semanticSearch(query, meetings);
-      res.json(searchResults);
-    } catch (error) {
-      throw error;
-    }
-  }));
-
-  app.post("/api/meetings/:id/summarize", isAuthenticated, asyncHandler(async (req, res) => {
-    try {
-      const meeting = await storage.getMeeting(Number(req.params.id));
-      if (!meeting || meeting.userId !== req.user!.id) {
-        throw new NotFoundError("Meeting");
-      }
-
-      const summary = await generateMeetingInsights(meeting);
-      const updatedMeeting = await storage.updateMeeting(meeting.id, { summary });
-      res.json({ summary });
-    } catch (error) {
-      throw error;
-    }
-  }));
-
-  app.post("/api/meetings/summarize-batch", isAuthenticated, asyncHandler(async (req, res) => {
-    try {
-      const meetings = await storage.getUserMeetings(req.user!.id);
-      const summaries = await batchSummarize(meetings);
-      for (const [meetingId, summary] of Object.entries(summaries)) {
-        await storage.updateMeeting(Number(meetingId), { summary });
-      }
-      res.json({ summaries });
-    } catch (error) {
-      throw error;
-    }
-  }));
-
   // Register error handler last
   app.use(errorHandler);
 
@@ -151,5 +106,3 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }
 
 import { registerAuthEndpoints } from "./auth";
-import { semanticSearch } from "./services/search";
-import { generateMeetingInsights, batchSummarize } from "./services/summarize";

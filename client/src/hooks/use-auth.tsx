@@ -22,11 +22,11 @@ function useLoginMutation() {
     mutationFn: async (credentials: LoginUser) => {
       const res = await apiRequest("POST", "/api/login", credentials);
       const data = await res.json();
-      if (data.status !== 'success' || !data.token) {
+      if (data.status !== 'success' || !data.data?.token) {
         throw new Error(data.message || 'Login failed');
       }
-      setAuthToken(data.token);
-      return data.user;
+      setAuthToken(data.data.token);
+      return data.data.user;
     },
     onSuccess: (user) => {
       queryClient.setQueryData(["/api/me"], user);
@@ -53,7 +53,11 @@ function useLogoutMutation() {
 
   return useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
+      const res = await apiRequest("POST", "/api/logout");
+      const data = await res.json();
+      if (data.status !== 'success') {
+        throw new Error(data.message || 'Logout failed');
+      }
       clearAuthToken();
     },
     onSuccess: () => {
@@ -82,11 +86,11 @@ function useRegisterMutation() {
     mutationFn: async (userData: any) => {
       const res = await apiRequest("POST", "/api/signup", userData);
       const data = await res.json();
-      if (data.status !== 'success' || !data.token) {
+      if (data.status !== 'success' || !data.data?.token) {
         throw new Error(data.message || 'Registration failed');
       }
-      setAuthToken(data.token);
-      return data.user;
+      setAuthToken(data.data.token);
+      return data.data.user;
     },
     onSuccess: (user) => {
       queryClient.setQueryData(["/api/me"], user);

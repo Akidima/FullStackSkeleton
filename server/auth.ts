@@ -5,7 +5,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
-import express from "express";
+import express, { Express } from "express";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { rateLimit } from 'express-rate-limit';
@@ -114,7 +114,7 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-export function registerAuthEndpoints(app: express.Application) {
+export function registerAuthEndpoints(app: Express) {
   app.post("/api/signup", authLimiter, asyncHandler(async (req, res, next) => {
     try {
       const { email, password, displayName } = req.body;
@@ -140,13 +140,15 @@ export function registerAuthEndpoints(app: express.Application) {
       const token = generateToken(user);
       res.status(201).json({
         status: 'success',
-        user: {
-          id: user.id,
-          email: user.email,
-          displayName: user.displayName,
-          isAdmin: user.isAdmin
-        },
-        token
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName,
+            isAdmin: user.isAdmin
+          },
+          token
+        }
       });
     } catch (error) {
       next(error);
@@ -170,13 +172,15 @@ export function registerAuthEndpoints(app: express.Application) {
         const token = generateToken(user);
         res.json({
           status: 'success',
-          user: {
-            id: user.id,
-            email: user.email,
-            displayName: user.displayName,
-            isAdmin: user.isAdmin
-          },
-          token
+          data: {
+            user: {
+              id: user.id,
+              email: user.email,
+              displayName: user.displayName,
+              isAdmin: user.isAdmin
+            },
+            token
+          }
         });
       });
     })(req, res, next);
@@ -301,11 +305,13 @@ export function registerAuthEndpoints(app: express.Application) {
       }
       res.json({
         status: 'success',
-        user: {
-          id: user.id,
-          email: user.email,
-          displayName: user.displayName,
-          isAdmin: user.isAdmin
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName,
+            isAdmin: user.isAdmin
+          }
         }
       });
     } catch (err) {
@@ -351,16 +357,7 @@ export function registerAuthEndpoints(app: express.Application) {
 
         try {
           console.log("Generating JWT token for user:", user.email);
-          const token = jwt.sign(
-            {
-              id: user.id,
-              email: user.email,
-              displayName: user.displayName
-            },
-            process.env.JWT_SECRET!,
-            { expiresIn: '24h' }
-          );
-
+          const token = generateToken(user);
           console.log("Successfully authenticated user:", user.email);
           // Redirect to frontend with token
           res.redirect(`/?token=${token}`);

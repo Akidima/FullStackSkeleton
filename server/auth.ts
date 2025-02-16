@@ -229,17 +229,16 @@ const authLimiter = rateLimit({
 });
 
 export function registerAuthEndpoints(app: express.Application) {
-  // Update signup endpoint to ensure JSON response
   app.post("/api/signup", authLimiter, asyncHandler(async (req, res) => {
-    const existingUser = await storage.getUserByEmail(req.body.email);
-    if (existingUser) {
-      throw new ConflictError("Email already registered");
-    }
-
-    const verificationToken = generateVerificationToken();
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
     try {
+      const existingUser = await storage.getUserByEmail(req.body.email);
+      if (existingUser) {
+        throw new ConflictError("Email already registered");
+      }
+
+      const verificationToken = generateVerificationToken();
+      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
       const hashedPassword = await hashPassword(req.body.password);
       const user = await storage.createUser({
         ...req.body,
@@ -269,11 +268,14 @@ export function registerAuthEndpoints(app: express.Application) {
         message: "Please check your email to verify your account"
       });
     } catch (error) {
+      if (error instanceof ValidationError || error instanceof ConflictError) {
+        throw error;
+      }
+      console.error("Signup error:", error);
       throw new ValidationError("Failed to create account");
     }
   }));
 
-  // Update login endpoint to ensure JSON response
   app.post("/api/login", authLimiter, (req, res, next) => {
     passport.authenticate("local", (err: Error | null, user: User | false, info: { message: string } | undefined) => {
       if (err) {

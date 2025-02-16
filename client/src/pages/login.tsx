@@ -2,7 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Shield, Eye, EyeOff } from "lucide-react";
+import { Shield, Eye, EyeOff, Calendar } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { useLocation, Link } from "wouter";
 import { loginUserSchema } from "@shared/schema";
@@ -85,11 +85,11 @@ export default function Login() {
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center space-y-2">
           <div className="flex justify-center mb-4">
-            <Shield className="h-12 w-12 text-primary animate-pulse" />
+            <Calendar className="h-12 w-12 text-primary animate-pulse" />
           </div>
-          <CardTitle className="text-2xl font-bold">Security Dashboard</CardTitle>
+          <CardTitle className="text-2xl font-bold">MeetMate AI</CardTitle>
           <p className="text-muted-foreground">
-            Sign in to manage your security settings and recommendations
+            Sign in to manage your meetings and get AI assistance
           </p>
         </CardHeader>
         <CardContent className="space-y-6">

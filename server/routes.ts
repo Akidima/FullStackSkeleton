@@ -1,16 +1,9 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertMeetingSchema, updateMeetingSchema, loginUserSchema, insertSecurityRecommendationSchema, updateSecurityRecommendationSchema } from "@shared/schema";
+import { insertMeetingSchema, updateMeetingSchema, loginUserSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import passport from "./auth";
-import { semanticSearch } from "./services/search";
-import { generateMeetingInsights, batchSummarize } from "./services/summarize";
-import { sendPasswordResetEmail, sendVerificationEmail } from "./services/email";
-import crypto from "crypto";
-import bcrypt from "bcrypt";
-import { requireRecaptcha } from "./middleware/recaptcha";
-import { registerAuthEndpoints } from "./auth";
 import { errorHandler, asyncHandler } from "./middleware/errorHandler";
 import { AuthenticationError, NotFoundError, ValidationError, ConflictError } from "./errors/AppError";
 
@@ -30,15 +23,73 @@ const isAdmin = (req: Request, res: Response, next: NextFunction) => {
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Register auth endpoints first
-  registerAuthEndpoints(app);
-
   // Protected routes using asyncHandler
   app.get("/api/me", asyncHandler(async (req, res) => {
     if (!req.user) {
       throw new AuthenticationError();
     }
     res.json(req.user);
+  }));
+
+  // Protected meeting routes
+  app.get("/api/meetings", isAuthenticated, asyncHandler(async (req, res) => {
+    const meetings = await storage.getUserMeetings(req.user!.id);
+    res.json(meetings);
+  }));
+
+  app.post("/api/meetings", isAuthenticated, asyncHandler(async (req, res) => {
+    try {
+      const meetingData = insertMeetingSchema.parse({
+        ...req.body,
+        userId: req.user!.id,
+      });
+      const meeting = await storage.createMeeting(meetingData);
+      res.status(201).json(meeting);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new ValidationError("Invalid meeting data", error.errors);
+      }
+      throw error;
+    }
+  }));
+
+  app.get("/api/meetings/:id", isAuthenticated, asyncHandler(async (req, res) => {
+    const meeting = await storage.getMeeting(Number(req.params.id));
+    if (!meeting || meeting.userId !== req.user!.id) {
+      throw new NotFoundError("Meeting");
+    }
+    res.json(meeting);
+  }));
+
+  app.patch("/api/meetings/:id", isAuthenticated, asyncHandler(async (req, res) => {
+    try {
+      const meeting = await storage.getMeeting(Number(req.params.id));
+      if (!meeting || meeting.userId !== req.user!.id) {
+        throw new NotFoundError("Meeting");
+      }
+
+      const meetingData = updateMeetingSchema.parse(req.body);
+      const updatedMeeting = await storage.updateMeeting(
+        Number(req.params.id),
+        meetingData
+      );
+      res.json(updatedMeeting);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new ValidationError("Invalid meeting data", error.errors);
+      }
+      throw error;
+    }
+  }));
+
+  app.delete("/api/meetings/:id", isAuthenticated, asyncHandler(async (req, res) => {
+    const meeting = await storage.getMeeting(Number(req.params.id));
+    if (!meeting || meeting.userId !== req.user!.id) {
+      throw new NotFoundError("Meeting");
+    }
+
+    await storage.deleteMeeting(Number(req.params.id));
+    res.status(204).send();
   }));
 
   // Password reset and email verification routes
@@ -131,62 +182,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-
-  // Example of using asyncHandler with error handling
-  app.post("/api/meetings", isAuthenticated, asyncHandler(async (req, res) => {
-    try {
-      const meetingData = insertMeetingSchema.parse({
-        ...req.body,
-        userId: req.user!.id,
-      });
-      const meeting = await storage.createMeeting(meetingData);
-      res.status(201).json(meeting);
-    } catch (error) {
-      if (error instanceof ZodError) {
-        throw new ValidationError("Invalid meeting data", error.errors);
-      }
-      throw error;
-    }
-  }));
-
-  app.get("/api/meetings/:id", isAuthenticated, asyncHandler(async (req, res) => {
-    const meeting = await storage.getMeeting(Number(req.params.id));
-    if (!meeting || meeting.userId !== req.user!.id) {
-      throw new NotFoundError("Meeting");
-    }
-    res.json(meeting);
-  }));
-
-  app.patch("/api/meetings/:id", isAuthenticated, asyncHandler(async (req, res) => {
-    try {
-      const meeting = await storage.getMeeting(Number(req.params.id));
-      if (!meeting || meeting.userId !== req.user!.id) {
-        throw new NotFoundError("Meeting");
-      }
-
-      const meetingData = updateMeetingSchema.parse(req.body);
-      const updatedMeeting = await storage.updateMeeting(
-        Number(req.params.id),
-        meetingData
-      );
-      res.json(updatedMeeting);
-    } catch (error) {
-      if (error instanceof ZodError) {
-        throw new ValidationError("Invalid meeting data", error.errors);
-      }
-      throw error;
-    }
-  }));
-
-  app.delete("/api/meetings/:id", isAuthenticated, asyncHandler(async (req, res) => {
-    const meeting = await storage.getMeeting(Number(req.params.id));
-    if (!meeting || meeting.userId !== req.user!.id) {
-      throw new NotFoundError("Meeting");
-    }
-
-    await storage.deleteMeeting(Number(req.params.id));
-    res.status(204).send();
-  }));
 
   // Search and summarization routes
   app.post("/api/meetings/search", isAuthenticated, asyncHandler(async (req, res) => {
@@ -319,15 +314,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  // Protected meeting routes
-  app.get("/api/meetings", isAuthenticated, asyncHandler(async (req, res) => {
-    const meetings = await storage.getUserMeetings(req.user!.id);
-    res.json(meetings);
-  }));
-
-
   // Register error handler last
   app.use(errorHandler);
 
   return createServer(app);
 }
+import crypto from "crypto";
+import bcrypt from "bcrypt";
+import { requireRecaptcha } from "./middleware/recaptcha";
+import { registerAuthEndpoints } from "./auth";
+import { semanticSearch } from "./services/search";
+import { generateMeetingInsights, batchSummarize } from "./services/summarize";
+import { sendPasswordResetEmail, sendVerificationEmail } from "./services/email";

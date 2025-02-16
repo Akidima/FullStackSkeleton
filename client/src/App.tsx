@@ -3,12 +3,13 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
+import MeetingList from "@/pages/meeting-list";
+import MeetingForm from "@/pages/meeting-form";
 import Login from "@/pages/login";
 import SignUp from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
 import AdminDashboard from "@/pages/admin-dashboard";
-import SecurityDashboard from "@/pages/security-dashboard";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { AdminRoute } from "@/lib/admin-route";
@@ -22,7 +23,9 @@ function Router() {
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />
-      <Route path="/" component={() => <ProtectedRoute component={SecurityDashboard} />} />
+      <Route path="/" component={() => <ProtectedRoute component={MeetingList} />} />
+      <Route path="/meetings/new" component={() => <ProtectedRoute component={MeetingForm} />} />
+      <Route path="/meetings/:id/edit" component={() => <ProtectedRoute component={MeetingForm} />} />
       <Route component={NotFound} />
     </Switch>
   );

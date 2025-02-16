@@ -24,7 +24,7 @@ export function errorHandler(
 
   const response: ErrorResponse = {
     status: 'error',
-    message: 'Internal server error'
+    message: err.message || 'Internal server error'
   };
 
   // Handle AppError and its subclasses

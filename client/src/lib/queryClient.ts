@@ -3,12 +3,19 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     let errorMessage;
+    const contentType = res.headers.get("content-type");
+
     try {
-      const errorData = await res.json();
-      errorMessage = errorData.message || res.statusText;
-    } catch {
-      errorMessage = await res.text() || res.statusText;
+      if (contentType && contentType.includes("application/json")) {
+        const errorData = await res.json();
+        errorMessage = errorData.message || res.statusText;
+      } else {
+        errorMessage = await res.text() || res.statusText;
+      }
+    } catch (e) {
+      errorMessage = res.statusText;
     }
+
     throw new Error(`${res.status}: ${errorMessage}`);
   }
 }
@@ -64,6 +71,13 @@ export async function apiRequest(
   }
 
   await throwIfResNotOk(res);
+
+  // Ensure response is JSON before trying to parse it
+  const contentType = res.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error("Expected JSON response but received " + contentType);
+  }
+
   return res;
 }
 
@@ -100,6 +114,13 @@ export const getQueryFn: <T>(options: {
     }
 
     await throwIfResNotOk(res);
+
+    // Ensure response is JSON before trying to parse it
+    const contentType = res.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error("Expected JSON response but received " + contentType);
+    }
+
     return await res.json();
   };
 

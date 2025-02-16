@@ -197,26 +197,17 @@ const authLimiter = rateLimit({
 });
 
 export function registerAuthEndpoints(app: express.Application) {
-  app.post("/api/login", authLimiter, (req, res, next) => {
-    passport.authenticate("local", (err: Error | null, user: User | false, info: { message: string } | undefined) => {
-      if (err) return next(err);
-      if (!user) {
-        return res.status(401).json({ message: info?.message || "Authentication failed" });
-      }
-
-      req.login(user, (loginErr) => {
-        if (loginErr) return next(loginErr);
-        const token = generateToken(user);
-        res.json({ user, token });
-      });
-    })(req, res, next);
-  });
-
-  app.post("/api/signup", authLimiter, async (req, res, next) => {
+  // Update signup endpoint to ensure JSON response
+  app.post("/api/signup", authLimiter, async (req, res) => {
     try {
+      // Set JSON content type
+      res.setHeader('Content-Type', 'application/json');
+
       const existingUser = await storage.getUserByEmail(req.body.email);
       if (existingUser) {
-        return res.status(400).json({ message: "Email already registered" });
+        return res.status(400).json({ 
+          message: "Email already registered" 
+        });
       }
 
       const verificationToken = generateVerificationToken();
@@ -233,10 +224,15 @@ export function registerAuthEndpoints(app: express.Application) {
       });
 
       // Send verification email
-      await sendVerificationEmail(user.email, verificationToken);
+      try {
+        await sendVerificationEmail(user.email, verificationToken);
+      } catch (emailError) {
+        console.error("Failed to send verification email:", emailError);
+        // Continue with signup even if email fails
+      }
 
       const token = generateToken(user);
-      res.status(201).json({ 
+      return res.status(201).json({ 
         user: {
           id: user.id,
           email: user.email,
@@ -247,10 +243,37 @@ export function registerAuthEndpoints(app: express.Application) {
         message: "Please check your email to verify your account" 
       });
     } catch (error) {
-      next(error);
+      console.error("Signup error:", error);
+      return res.status(500).json({ 
+        message: "Failed to create account" 
+      });
     }
   });
 
+  // Update login endpoint to ensure JSON response
+  app.post("/api/login", authLimiter, (req, res, next) => {
+    res.setHeader('Content-Type', 'application/json');
+
+    passport.authenticate("local", (err: Error | null, user: User | false, info: { message: string } | undefined) => {
+      if (err) {
+        return res.status(500).json({ message: "Authentication error" });
+      }
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Authentication failed" });
+      }
+
+      req.login(user, (loginErr) => {
+        if (loginErr) {
+          return res.status(500).json({ message: "Login error" });
+        }
+        const token = generateToken(user);
+        return res.json({ 
+          user, 
+          token 
+        });
+      });
+    })(req, res, next);
+  });
 
   app.get(
     "/auth/google",

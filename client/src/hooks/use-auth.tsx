@@ -24,6 +24,7 @@ function useLoginMutation() {
     mutationFn: async (credentials: LoginUser) => {
       const res = await apiRequest("POST", "/api/login", credentials);
       const data = await res.json();
+      console.log("Login successful, storing token");
       setAuthToken(data.token);
       return data.user;
     },
@@ -36,6 +37,7 @@ function useLoginMutation() {
       setLocation("/");
     },
     onError: (error: Error) => {
+      console.error("Login error:", error);
       toast({
         title: "Login failed",
         description: error.message,
@@ -73,6 +75,7 @@ function useRegisterMutation() {
     mutationFn: async (userData: any) => {
       const res = await apiRequest("POST", "/api/signup", userData);
       const data = await res.json();
+      console.log("Registration successful, storing token");
       setAuthToken(data.token);
       return data.user;
     },
@@ -85,6 +88,7 @@ function useRegisterMutation() {
       setLocation("/");
     },
     onError: (error: Error) => {
+      console.error("Registration error:", error);
       toast({
         title: "Registration failed",
         description: error.message,
@@ -112,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
     if (token) {
+      console.log("Received OAuth token, storing and refreshing user data");
       setAuthToken(token);
       // Remove token from URL
       window.history.replaceState({}, document.title, window.location.pathname);

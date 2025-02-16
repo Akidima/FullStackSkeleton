@@ -128,18 +128,22 @@ passport.deserializeUser(async (id: number, done) => {
 
 // Google OAuth Strategy
 const appDomain = `${process.env.REPL_SLUG?.toLowerCase()}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`;
+const appUrl = `https://${appDomain}`;
 console.log("Configuring Google OAuth with domain:", appDomain);
+console.log("Callback URL:", `${appUrl}/auth/google/callback`);
 
 passport.use(
   new GoogleStrategy(
     {
       clientID: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL: `https://${appDomain}/auth/google/callback`,
+      callbackURL: `${appUrl}/auth/google/callback`,
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
-        console.log("Processing Google auth for profile:", profile.id);
+        console.log("Google OAuth callback received for profile:", profile.id);
+        console.log("Profile email:", profile.emails?.[0]?.value);
+        console.log("Profile data:", JSON.stringify(profile, null, 2));
 
         let user = await storage.getUserByGoogleId(profile.id);
 
@@ -163,6 +167,9 @@ passport.use(
             password: null,
             isVerified: true, // Google OAuth users are automatically verified
           });
+          console.log("New user created:", user.id);
+        } else {
+          console.log("Existing user found:", user.id);
         }
 
         return done(null, {
@@ -250,12 +257,14 @@ export function registerAuthEndpoints(app: express.Application) {
     (req, res, next) => {
       try {
         console.log("Starting Google OAuth flow");
+        console.log("Using callback URL:", `${appUrl}/auth/google/callback`);
         passport.authenticate("google", {
           scope: ["profile", "email"],
           prompt: "select_account", // Always show account selector
+          session: false // Disable session as we're using JWT
         })(req, res, next);
       } catch (error) {
-        console.error("Google auth error:", error);
+        console.error("Google auth initiation error:", error);
         res.redirect('/login?error=google-auth-failed');
       }
     }
@@ -277,6 +286,7 @@ export function registerAuthEndpoints(app: express.Application) {
         }
 
         try {
+          console.log("Generating JWT token for user:", user.email);
           const token = jwt.sign(
             { 
               id: user.id,

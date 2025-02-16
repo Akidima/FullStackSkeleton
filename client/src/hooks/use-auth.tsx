@@ -1,8 +1,9 @@
-import { createContext, ReactNode, useContext } from "react";
+import { createContext, ReactNode, useContext, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { User, LoginUser, insertUserSchema } from "@shared/schema";
 import { getQueryFn, apiRequest, queryClient, setAuthToken, clearAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 type AuthContextType = {
   user: User | null;
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 function useLoginMutation() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   return useMutation({
     mutationFn: async (credentials: LoginUser) => {
@@ -31,6 +33,7 @@ function useLoginMutation() {
         title: "Success",
         description: "Logged in successfully",
       });
+      setLocation("/");
     },
     onError: (error: Error) => {
       toast({
@@ -44,6 +47,7 @@ function useLoginMutation() {
 
 function useLogoutMutation() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   return useMutation({
     mutationFn: async () => {
@@ -56,12 +60,14 @@ function useLogoutMutation() {
         title: "Success",
         description: "Logged out successfully",
       });
+      setLocation("/login");
     },
   });
 }
 
 function useRegisterMutation() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   return useMutation({
     mutationFn: async (userData: any) => {
@@ -76,6 +82,7 @@ function useRegisterMutation() {
         title: "Success",
         description: "Account created successfully",
       });
+      setLocation("/");
     },
     onError: (error: Error) => {
       toast({
@@ -89,6 +96,7 @@ function useRegisterMutation() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const {
     data: user,
@@ -98,6 +106,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ["/api/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
+
+  // Handle token from OAuth redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    if (token) {
+      setAuthToken(token);
+      // Remove token from URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      // Refetch user data
+      queryClient.invalidateQueries({ queryKey: ["/api/me"] });
+    }
+  }, []);
 
   const loginMutation = useLoginMutation();
   const logoutMutation = useLogoutMutation();

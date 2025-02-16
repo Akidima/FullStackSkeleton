@@ -48,7 +48,7 @@ function generateVerificationToken(): string {
 
 // Send verification email
 async function sendVerificationEmail(email: string, token: string) {
-  const appUrl = `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+  const appUrl = `https://${process.env.REPL_SLUG?.toLowerCase()}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`;
   const verificationUrl = `${appUrl}/verify-email?token=${token}`;
 
   await transporter.sendMail({
@@ -127,12 +127,15 @@ passport.deserializeUser(async (id: number, done) => {
 });
 
 // Google OAuth Strategy
+const appDomain = `${process.env.REPL_SLUG?.toLowerCase()}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`;
+console.log("Configuring Google OAuth with domain:", appDomain);
+
 passport.use(
   new GoogleStrategy(
     {
       clientID: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL: `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co/auth/google/callback`,
+      callbackURL: `https://${appDomain}/auth/google/callback`,
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -192,6 +195,7 @@ export function registerAuthEndpoints(app: express.Application) {
     "/auth/google",
     (req, res, next) => {
       try {
+        console.log("Starting Google OAuth flow");
         passport.authenticate("google", {
           scope: ["profile", "email"],
           prompt: "select_account", // Always show account selector
@@ -206,6 +210,7 @@ export function registerAuthEndpoints(app: express.Application) {
   app.get(
     "/auth/google/callback",
     (req, res, next) => {
+      console.log("Received Google OAuth callback");
       passport.authenticate("google", { session: false }, (err, user, info) => {
         if (err) {
           console.error("Google callback error:", err);
@@ -228,6 +233,7 @@ export function registerAuthEndpoints(app: express.Application) {
             { expiresIn: '24h' }
           );
 
+          console.log("Successfully authenticated user:", user.email);
           // Redirect to frontend with token
           res.redirect(`/?token=${token}`);
         } catch (error) {

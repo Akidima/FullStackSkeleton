@@ -165,6 +165,7 @@ passport.use(
             displayName: profile.displayName,
             profilePicture: profile.photos?.[0]?.value ?? null,
             password: null,
+            isVerified: true, // Google OAuth users are automatically verified
           });
         }
 

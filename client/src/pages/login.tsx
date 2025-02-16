@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
 import type { z } from "zod";
+import { AuthError } from "@/components/ui/auth-error";
 
 type FormData = z.infer<typeof loginUserSchema>;
 
@@ -86,16 +87,18 @@ export default function Login() {
           <div className="flex justify-center mb-4">
             <Calendar className="h-12 w-12 text-primary animate-pulse" />
           </div>
-          <CardTitle className="text-2xl font-bold">Meeting Assistant</CardTitle>
+          <CardTitle className="text-2xl font-bold">Security Dashboard</CardTitle>
           <p className="text-muted-foreground">
-            Sign in to manage your meetings and get AI assistance
+            Sign in to manage your security settings
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
           {error && (
-            <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-lg">
-              {error}
-            </div>
+            <AuthError
+              title="Authentication Error"
+              message={error}
+              className="mb-4"
+            />
           )}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

@@ -187,6 +187,36 @@ passport.use(
   )
 );
 
+// Update passport local strategy configuration
+passport.use(new LocalStrategy(
+  {
+    usernameField: 'email',
+    passwordField: 'password'
+  },
+  async (email, password, done) => {
+    try {
+      const user = await storage.getUserByEmail(email);
+
+      if (!user) {
+        return done(null, false, { message: "Invalid email or password" });
+      }
+
+      if (!user.password) {
+        return done(null, false, { message: "Account exists but requires different login method" });
+      }
+
+      const isValid = await comparePasswords(password, user.password);
+      if (!isValid) {
+        return done(null, false, { message: "Invalid email or password" });
+      }
+
+      return done(null, user);
+    } catch (error) {
+      return done(error);
+    }
+  }
+));
+
 // Adjust rate limiting to be more lenient
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -256,6 +286,7 @@ export function registerAuthEndpoints(app: express.Application) {
 
     passport.authenticate("local", (err: Error | null, user: User | false, info: { message: string } | undefined) => {
       if (err) {
+        console.error("Authentication error:", err);
         return res.status(500).json({ message: "Authentication error" });
       }
       if (!user) {
@@ -264,11 +295,17 @@ export function registerAuthEndpoints(app: express.Application) {
 
       req.login(user, (loginErr) => {
         if (loginErr) {
+          console.error("Login error:", loginErr);
           return res.status(500).json({ message: "Login error" });
         }
         const token = generateToken(user);
         return res.json({ 
-          user, 
+          user: {
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName,
+            isAdmin: user.isAdmin
+          }, 
           token 
         });
       });

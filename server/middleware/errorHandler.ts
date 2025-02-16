@@ -22,6 +22,9 @@ export function errorHandler(
     details: (err as any).details
   });
 
+  // Set Content-Type to application/json
+  res.setHeader('Content-Type', 'application/json');
+
   const response: ErrorResponse = {
     status: 'error',
     message: err.message || 'Internal server error'
@@ -29,8 +32,6 @@ export function errorHandler(
 
   // Handle AppError and its subclasses
   if (err instanceof AppError) {
-    response.status = 'error';
-    response.message = err.message;
     response.type = err.type;
     if (err.details) {
       response.details = err.details;
@@ -40,7 +41,6 @@ export function errorHandler(
 
   // Handle Zod validation errors
   if (err instanceof ZodError) {
-    response.status = 'error';
     response.type = 'ValidationError';
     response.message = 'Validation failed';
     response.details = err.errors;
@@ -49,25 +49,18 @@ export function errorHandler(
 
   // Handle JWT errors
   if (err.name === 'JsonWebTokenError') {
-    response.status = 'error';
     response.type = 'AuthenticationError';
     response.message = 'Invalid token';
     return res.status(401).json(response);
   }
 
   if (err.name === 'TokenExpiredError') {
-    response.status = 'error';
     response.type = 'AuthenticationError';
     response.message = 'Token expired';
     return res.status(401).json(response);
   }
 
-  // In development, send the stack trace
-  if (process.env.NODE_ENV === 'development') {
-    response.details = err.stack;
-  }
-
-  // Send generic error for unhandled cases
+  // Generic error handler
   res.status(500).json(response);
 }
 

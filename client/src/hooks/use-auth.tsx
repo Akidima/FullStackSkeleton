@@ -1,6 +1,6 @@
 import { createContext, ReactNode, useContext, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { User, LoginUser, insertUserSchema } from "@shared/schema";
+import { User, LoginUser } from "@shared/schema";
 import { getQueryFn, apiRequest, queryClient, setAuthToken, clearAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -14,8 +14,6 @@ type AuthContextType = {
   registerMutation: ReturnType<typeof useRegisterMutation>;
 };
 
-const AuthContext = createContext<AuthContextType | null>(null);
-
 function useLoginMutation() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -24,7 +22,9 @@ function useLoginMutation() {
     mutationFn: async (credentials: LoginUser) => {
       const res = await apiRequest("POST", "/api/login", credentials);
       const data = await res.json();
-      console.log("Login successful, storing token");
+      if (data.status !== 'success' || !data.token) {
+        throw new Error(data.message || 'Login failed');
+      }
       setAuthToken(data.token);
       return data.user;
     },
@@ -64,6 +64,13 @@ function useLogoutMutation() {
       });
       setLocation("/login");
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Logout failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 }
 
@@ -75,7 +82,9 @@ function useRegisterMutation() {
     mutationFn: async (userData: any) => {
       const res = await apiRequest("POST", "/api/signup", userData);
       const data = await res.json();
-      console.log("Registration successful, storing token");
+      if (data.status !== 'success' || !data.token) {
+        throw new Error(data.message || 'Registration failed');
+      }
       setAuthToken(data.token);
       return data.user;
     },
@@ -100,7 +109,6 @@ function useRegisterMutation() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
 
   const {
     data: user,
@@ -116,7 +124,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
     if (token) {
-      console.log("Received OAuth token, storing and refreshing user data");
       setAuthToken(token);
       // Remove token from URL
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -152,3 +159,5 @@ export function useAuth() {
   }
   return context;
 }
+
+const AuthContext = createContext<AuthContextType | null>(null);

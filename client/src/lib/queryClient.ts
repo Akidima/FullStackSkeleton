@@ -10,7 +10,7 @@ async function throwIfResNotOk(res: Response) {
         const errorData = await res.json();
         errorMessage = errorData.message || errorData.error || res.statusText;
       } else {
-        errorMessage = await res.text() || res.statusText;
+        errorMessage = await res.text();
       }
     } catch (e) {
       errorMessage = res.statusText;
@@ -52,15 +52,10 @@ export async function apiRequest(
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
     console.log("Adding auth token to request headers");
-  } else {
-    console.log("No auth token available for request");
   }
 
-  console.log(`Making ${method} request to ${url}`);
-  let response: Response;
-
   try {
-    response = await fetch(url, {
+    const response = await fetch(url, {
       method,
       headers,
       body: data ? JSON.stringify(data) : undefined,
@@ -71,7 +66,6 @@ export async function apiRequest(
     if (response.status === 429) {
       const retryAfter = response.headers.get('Retry-After');
       const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 15000;
-
       throw new Error(`Too many requests. Please wait ${Math.ceil(waitTime/1000)} seconds before trying again.`);
     }
 
@@ -81,9 +75,15 @@ export async function apiRequest(
       clearAuthToken();
     }
 
-    await throwIfResNotOk(response);
+    if (!response.ok) {
+      await throwIfResNotOk(response);
+    }
 
-    // Check if response is empty
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error("Expected JSON response from server");
+    }
+
     const text = await response.text();
     if (!text) {
       return new Response('{}', {
@@ -92,7 +92,6 @@ export async function apiRequest(
       });
     }
 
-    // Parse JSON response
     try {
       JSON.parse(text);
       return new Response(text, {
@@ -126,33 +125,28 @@ export const getQueryFn: <T>(options: {
       const token = getAuthToken();
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
-        console.log("Adding auth token to query request");
-      } else {
-        console.log("No auth token available for query");
       }
 
-      console.log(`Making query request to ${queryKey[0]}`);
       const res = await fetch(queryKey[0] as string, {
         headers,
         credentials: 'include'
       });
 
-      // Handle rate limiting
-      if (res.status === 429) {
-        const retryAfter = res.headers.get('Retry-After');
-        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 15000;
-        throw new Error(`Too many requests. Please wait ${Math.ceil(waitTime/1000)} seconds before trying again.`);
-      }
-
       if (res.status === 401) {
-        console.log("Received 401 unauthorized response in query");
         clearAuthToken();
         if (unauthorizedBehavior === "returnNull") {
           return null;
         }
       }
 
-      await throwIfResNotOk(res);
+      if (!res.ok) {
+        await throwIfResNotOk(res);
+      }
+
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Expected JSON response from server");
+      }
 
       const text = await res.text();
       if (!text) {

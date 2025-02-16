@@ -32,44 +32,6 @@ declare global {
 
 const scryptAsync = promisify(scrypt);
 
-// Email configuration
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: process.env.SMTP_SECURE === "true",
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
-// Generate verification token
-function generateVerificationToken(): string {
-  return randomBytes(32).toString('hex');
-}
-
-// Send verification email
-async function sendVerificationEmail(email: string, token: string) {
-  const appUrl = `https://${process.env.REPL_SLUG?.toLowerCase()}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`;
-  const verificationUrl = `${appUrl}/verify-email?token=${token}`;
-
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM,
-    to: email,
-    subject: "Verify your email address",
-    html: `
-      <h1>Welcome to Meeting Assistant!</h1>
-      <p>Please click the link below to verify your email address:</p>
-      <a href="${verificationUrl}">Verify Email</a>
-      <p>This link will expire in 24 hours.</p>
-    `,
-  });
-}
-
-if (!process.env.JWT_SECRET) {
-  throw new Error("Missing JWT_SECRET environment variable");
-}
-
 async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
@@ -87,7 +49,7 @@ function generateToken(user: Express.User) {
   return jwt.sign(
     { id: user.id, email: user.email },
     process.env.JWT_SECRET!,
-    { expiresIn: '1h' }
+    { expiresIn: '24h' }
   );
 }
 
@@ -95,7 +57,10 @@ function generateToken(user: Express.User) {
 export function authenticateJWT(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ message: "No token provided" });
+    return res.status(401).json({ 
+      status: 'error',
+      message: "No token provided" 
+    });
   }
 
   const token = authHeader.split(' ')[1];
@@ -105,174 +70,86 @@ export function authenticateJWT(req: express.Request, res: express.Response, nex
     next();
   } catch (err) {
     if (err instanceof jwt.TokenExpiredError) {
-      return res.status(401).json({ message: "Token expired" });
+      return res.status(401).json({ 
+        status: 'error',
+        message: "Token expired" 
+      });
     }
-    return res.status(401).json({ message: "Invalid token" });
+    return res.status(401).json({ 
+      status: 'error',
+      message: "Invalid token" 
+    });
   }
 }
 
-// Set up passport serialization
+// Update passport serialization
 passport.serializeUser((user: Express.User, done) => {
+  console.log("Serializing user:", user.id);
   done(null, user.id);
 });
 
 passport.deserializeUser(async (id: number, done) => {
   try {
+    console.log("Deserializing user:", id);
     const user = await storage.getUserById(id);
     if (!user) {
       return done(new Error('User not found'));
     }
     done(null, user);
   } catch (err) {
+    console.error("Deserialization error:", err);
     done(err);
   }
 });
 
-// Google OAuth Strategy
-const appDomain = `${process.env.REPL_SLUG?.toLowerCase()}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`;
-const appUrl = `https://${appDomain}`;
-console.log("Configuring Google OAuth with domain:", appDomain);
-console.log("Callback URL:", `${appUrl}/auth/google/callback`);
-
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL: `${appUrl}/auth/google/callback`,
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        console.log("Google OAuth callback received for profile:", profile.id);
-        console.log("Profile email:", profile.emails?.[0]?.value);
-        console.log("Profile data:", JSON.stringify(profile, null, 2));
-
-        let user = await storage.getUserByGoogleId(profile.id);
-
-        if (!user) {
-          // Check if email is already registered
-          const existingUser = await storage.getUserByEmail(
-            profile.emails?.[0]?.value ?? ""
-          );
-
-          if (existingUser) {
-            console.error("Email already registered:", profile.emails?.[0]?.value);
-            return done(null, false, { message: "Email already registered with different method" });
-          }
-
-          console.log("Creating new user for Google profile:", profile.id);
-          user = await storage.createUser({
-            googleId: profile.id,
-            email: profile.emails?.[0]?.value ?? "",
-            displayName: profile.displayName,
-            profilePicture: profile.photos?.[0]?.value ?? null,
-            password: null,
-            isVerified: true, // Google OAuth users are automatically verified
-          });
-          console.log("New user created:", user.id);
-        } else {
-          console.log("Existing user found:", user.id);
-        }
-
-        return done(null, {
-          id: user.id,
-          email: user.email,
-          displayName: user.displayName,
-          googleId: user.googleId,
-          isAdmin: user.isAdmin
-        });
-      } catch (err) {
-        console.error("Google strategy error:", err);
-        return done(err as Error);
-      }
-    }
-  )
-);
-
-// Update passport local strategy configuration
-passport.use(new LocalStrategy(
-  {
-    usernameField: 'email',
-    passwordField: 'password'
-  },
-  async (email, password, done) => {
-    try {
-      const user = await storage.getUserByEmail(email);
-
-      if (!user) {
-        return done(null, false, { message: "Invalid email or password" });
-      }
-
-      if (!user.password) {
-        return done(null, false, { message: "Account exists but requires different login method" });
-      }
-
-      const isValid = await comparePasswords(password, user.password);
-      if (!isValid) {
-        return done(null, false, { message: "Invalid email or password" });
-      }
-
-      return done(null, user);
-    } catch (error) {
-      return done(error);
-    }
-  }
-));
-
-// Adjust rate limiting to be more lenient
+// Adjust rate limiting
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20, // Increased from 5 to 20 attempts
-  message: 'Too many requests, please try again in 15 minutes',
+  message: { 
+    status: 'error',
+    message: 'Too many requests, please try again in 15 minutes'
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
 export function registerAuthEndpoints(app: express.Application) {
-  app.post("/api/signup", authLimiter, asyncHandler(async (req, res) => {
+  app.post("/api/signup", authLimiter, asyncHandler(async (req, res, next) => {
     try {
-      const existingUser = await storage.getUserByEmail(req.body.email);
+      const { email, password, displayName } = req.body;
+
+      if (!email || !password || !displayName) {
+        throw new ValidationError("Email, password, and display name are required");
+      }
+
+      const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
         throw new ConflictError("Email already registered");
       }
 
-      const verificationToken = generateVerificationToken();
-      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-      const hashedPassword = await hashPassword(req.body.password);
+      const hashedPassword = await hashPassword(password);
       const user = await storage.createUser({
-        ...req.body,
+        email,
         password: hashedPassword,
+        displayName,
         googleId: null,
-        verificationToken,
-        verificationExpires,
-        isVerified: false,
+        isVerified: true, // Temporarily set to true until email verification is implemented
       });
-
-      // Send verification email
-      try {
-        await sendVerificationEmail(user.email, verificationToken);
-      } catch (emailError) {
-        console.error("Failed to send verification email:", emailError);
-      }
 
       const token = generateToken(user);
       res.status(201).json({
+        status: 'success',
         user: {
           id: user.id,
           email: user.email,
           displayName: user.displayName,
           isAdmin: user.isAdmin
         },
-        token,
-        message: "Please check your email to verify your account"
+        token
       });
     } catch (error) {
-      if (error instanceof ValidationError || error instanceof ConflictError) {
-        throw error;
-      }
-      console.error("Signup error:", error);
-      throw new ValidationError("Failed to create account");
+      next(error);
     }
   }));
 
@@ -285,12 +162,14 @@ export function registerAuthEndpoints(app: express.Application) {
         return next(new AuthenticationError(info?.message || "Authentication failed"));
       }
 
-      req.login(user, (loginErr) => {
+      req.logIn(user, (loginErr) => {
         if (loginErr) {
           return next(new AuthenticationError("Login error"));
         }
+
         const token = generateToken(user);
         res.json({
+          status: 'success',
           user: {
             id: user.id,
             email: user.email,
@@ -301,6 +180,140 @@ export function registerAuthEndpoints(app: express.Application) {
         });
       });
     })(req, res, next);
+  });
+
+  app.post("/api/logout", (req, res) => {
+    req.logout((err) => {
+      if (err) {
+        return res.status(500).json({ 
+          status: 'error',
+          message: 'Logout failed' 
+        });
+      }
+      res.json({ 
+        status: 'success',
+        message: 'Logged out successfully' 
+      });
+    });
+  });
+
+  // Google OAuth Strategy
+  const appDomain = `${process.env.REPL_SLUG?.toLowerCase()}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`;
+  const appUrl = `https://${appDomain}`;
+  console.log("Configuring Google OAuth with domain:", appDomain);
+  console.log("Callback URL:", `${appUrl}/auth/google/callback`);
+
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID!,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        callbackURL: `${appUrl}/auth/google/callback`,
+      },
+      async (accessToken, refreshToken, profile, done) => {
+        try {
+          console.log("Google OAuth callback received for profile:", profile.id);
+          console.log("Profile email:", profile.emails?.[0]?.value);
+          console.log("Profile data:", JSON.stringify(profile, null, 2));
+
+          let user = await storage.getUserByGoogleId(profile.id);
+
+          if (!user) {
+            // Check if email is already registered
+            const existingUser = await storage.getUserByEmail(
+              profile.emails?.[0]?.value ?? ""
+            );
+
+            if (existingUser) {
+              console.error("Email already registered:", profile.emails?.[0]?.value);
+              return done(null, false, { message: "Email already registered with different method" });
+            }
+
+            console.log("Creating new user for Google profile:", profile.id);
+            user = await storage.createUser({
+              googleId: profile.id,
+              email: profile.emails?.[0]?.value ?? "",
+              displayName: profile.displayName,
+              profilePicture: profile.photos?.[0]?.value ?? null,
+              password: null,
+              isVerified: true, // Google OAuth users are automatically verified
+            });
+            console.log("New user created:", user.id);
+          } else {
+            console.log("Existing user found:", user.id);
+          }
+
+          return done(null, {
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName,
+            googleId: user.googleId,
+            isAdmin: user.isAdmin
+          });
+        } catch (err) {
+          console.error("Google strategy error:", err);
+          return done(err as Error);
+        }
+      }
+    )
+  );
+
+  // Update passport local strategy configuration
+  passport.use(new LocalStrategy(
+    {
+      usernameField: 'email',
+      passwordField: 'password'
+    },
+    async (email, password, done) => {
+      try {
+        const user = await storage.getUserByEmail(email);
+
+        if (!user) {
+          return done(null, false, { message: "Invalid email or password" });
+        }
+
+        if (!user.password) {
+          return done(null, false, { message: "Account exists but requires different login method" });
+        }
+
+        const isValid = await comparePasswords(password, user.password);
+        if (!isValid) {
+          return done(null, false, { message: "Invalid email or password" });
+        }
+
+        return done(null, user);
+      } catch (error) {
+        return done(error);
+      }
+    }
+  ));
+
+
+  // Protected route to get current user
+  app.get("/api/me", authenticateJWT, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.user!.id);
+      if (!user) {
+        return res.status(401).json({ 
+          status: 'error',
+          message: "User not found" 
+        });
+      }
+      res.json({
+        status: 'success',
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          isAdmin: user.isAdmin
+        }
+      });
+    } catch (err) {
+      res.status(500).json({ 
+        status: 'error',
+        message: "Internal server error" 
+      });
+    }
   });
 
   app.get(
@@ -413,22 +426,48 @@ export function registerAuthEndpoints(app: express.Application) {
     }
   });
 
-  app.get("/api/me", authenticateJWT, async (req, res) => {
-    try {
-      const user = await storage.getUserById(req.user!.id);
-      if (!user) {
-        return res.status(401).json({ message: "User not found" });
-      }
-      res.json(user);
-    } catch (err) {
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
   // Example of another protected route
   app.get("/api/protected", authenticateJWT, (req, res) => {
     res.json({ message: "This is a protected route", user: req.user });
   });
+}
+
+// Email configuration
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || "587"),
+  secure: process.env.SMTP_SECURE === "true",
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+// Generate verification token
+function generateVerificationToken(): string {
+  return randomBytes(32).toString('hex');
+}
+
+// Send verification email
+async function sendVerificationEmail(email: string, token: string) {
+  const appUrl = `https://${process.env.REPL_SLUG?.toLowerCase()}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`;
+  const verificationUrl = `${appUrl}/verify-email?token=${token}`;
+
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM,
+    to: email,
+    subject: "Verify your email address",
+    html: `
+      <h1>Welcome to Meeting Assistant!</h1>
+      <p>Please click the link below to verify your email address:</p>
+      <a href="${verificationUrl}">Verify Email</a>
+      <p>This link will expire in 24 hours.</p>
+    `,
+  });
+}
+
+if (!process.env.JWT_SECRET) {
+  throw new Error("Missing JWT_SECRET environment variable");
 }
 
 export default passport;

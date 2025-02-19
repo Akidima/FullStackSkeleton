@@ -18,6 +18,8 @@ export const users = pgTable("users", {
   passwordResetToken: text("password_reset_token"),
   passwordResetExpires: timestamp("password_reset_expires"),
   isAdmin: boolean("is_admin").notNull().default(false),
+  accessToken: text("access_token"),  // Added for Google OAuth
+  refreshToken: text("refresh_token"), // Added for Google OAuth
 }, (table) => ({
   emailIdx: index("email_idx").on(table.email),
   googleIdIdx: index("google_id_idx").on(table.googleId),
@@ -163,7 +165,7 @@ export const insertRegistrationAttemptSchema = createInsertSchema(registrationAt
 
 // Add after other insert schemas
 export const insertSecurityRecommendationSchema = createInsertSchema(securityRecommendations)
-  .omit({ 
+  .omit({
     id: true,
     implementedAt: true,
     createdAt: true,

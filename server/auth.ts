@@ -1,5 +1,6 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import { google } from 'googleapis';
 import { Strategy as LocalStrategy } from "passport-local";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
@@ -73,54 +74,120 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Configure passport strategies
-passport.use(new LocalStrategy(
-  {
-    usernameField: 'email',
-    passwordField: 'password'
-  },
-  async (email, password, done) => {
-    try {
-      const user = await storage.getUserByEmail(email);
-
-      if (!user) {
-        return done(null, false, { message: "Invalid email or password" });
-      }
-
-      if (!user.password) {
-        return done(null, false, { message: "Account exists but requires different login method" });
-      }
-
-      const isValid = await comparePasswords(password, user.password);
-      if (!isValid) {
-        return done(null, false, { message: "Invalid email or password" });
-      }
-
-      return done(null, user);
-    } catch (error) {
-      return done(error);
-    }
-  }
-));
-
-// Update passport serialization
-passport.serializeUser((user: Express.User, done) => {
-  done(null, user.id);
-});
-
-passport.deserializeUser(async (id: number, done) => {
-  try {
-    const user = await storage.getUserById(id);
-    if (!user) {
-      return done(new Error('User not found'));
-    }
-    done(null, user);
-  } catch (err) {
-    done(err);
-  }
-});
-
 export function registerAuthEndpoints(app: Express) {
+  // Google OAuth routes
+  const appDomain = `${process.env.REPL_SLUG?.toLowerCase()}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`;
+  const appUrl = `https://${appDomain}`;
+
+  // Configure Google OAuth Strategy with Calendar scope
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID!,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        callbackURL: `${appUrl}/auth/google/callback`,
+      },
+      async (accessToken, refreshToken, profile, done) => {
+        try {
+          let user = await storage.getUserByGoogleId(profile.id);
+
+          if (!user) {
+            // Check if email is already registered
+            const existingUser = await storage.getUserByEmail(profile.emails?.[0]?.value ?? "");
+            if (existingUser) {
+              return done(null, false, { message: "Email already registered with different method" });
+            }
+
+            user = await storage.createUser({
+              googleId: profile.id,
+              email: profile.emails?.[0]?.value ?? "",
+              displayName: profile.displayName,
+              accessToken,
+              refreshToken,
+              isVerified: true,
+              password: null,
+            });
+          } else {
+            // Update the access token
+            await storage.updateUser(user.id, {
+              accessToken,
+              refreshToken,
+            });
+          }
+
+          return done(null, user);
+        } catch (err) {
+          return done(err as Error);
+        }
+      }
+    )
+  );
+
+  app.get("/auth/google", (req, res, next) => {
+    passport.authenticate("google", {
+      scope: [
+        "profile",
+        "email",
+        "https://www.googleapis.com/auth/calendar.readonly"
+      ],
+      prompt: "consent",
+      accessType: 'offline',
+      session: false
+    })(req, res, next);
+  });
+
+  app.get("/auth/google/callback", (req, res, next) => {
+    passport.authenticate("google", { session: false }, (err, user, info) => {
+      if (err || !user) {
+        return res.redirect('/login?error=google-auth-failed');
+      }
+
+      const token = generateToken(user);
+      res.redirect(`/?token=${token}`);
+    })(req, res, next);
+  });
+
+  // Calendar events endpoint
+  app.get("/api/calendar/events", authenticateJWT, asyncHandler(async (req, res) => {
+    const user = await storage.getUserById(req.user!.id);
+
+    if (!user?.accessToken) {
+      throw new AuthenticationError("Google Calendar access not authorized");
+    }
+
+    const calendar = google.calendar({ version: 'v3', auth: new google.auth.OAuth2() });
+    const auth = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+
+    auth.setCredentials({ access_token: user.accessToken });
+    calendar.context._options.auth = auth;
+
+    try {
+      const response = await calendar.events.list({
+        calendarId: 'primary',
+        timeMin: new Date().toISOString(),
+        maxResults: 10,
+        singleEvents: true,
+        orderBy: 'startTime',
+      });
+
+      res.json({
+        status: 'success',
+        data: {
+          events: response.data.items
+        }
+      });
+    } catch (error: any) {
+      if (error.code === 401) {
+        // Token expired, need to re-authenticate
+        throw new AuthenticationError("Calendar access token expired. Please re-authenticate.");
+      }
+      throw error;
+    }
+  }));
+
   app.post("/api/signup", authLimiter, asyncHandler(async (req, res) => {
     const { email, password, displayName } = req.body;
 
@@ -231,28 +298,51 @@ export function registerAuthEndpoints(app: Express) {
       });
     }
   });
+  
+  passport.use(new LocalStrategy(
+    {
+      usernameField: 'email',
+      passwordField: 'password'
+    },
+    async (email, password, done) => {
+      try {
+        const user = await storage.getUserByEmail(email);
 
-  // Google OAuth routes
-  const appDomain = `${process.env.REPL_SLUG?.toLowerCase()}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`;
-  const appUrl = `https://${appDomain}`;
+        if (!user) {
+          return done(null, false, { message: "Invalid email or password" });
+        }
 
-  app.get("/auth/google", (req, res, next) => {
-    passport.authenticate("google", {
-      scope: ["profile", "email"],
-      prompt: "select_account",
-      session: false
-    })(req, res, next);
+        if (!user.password) {
+          return done(null, false, { message: "Account exists but requires different login method" });
+        }
+
+        const isValid = await comparePasswords(password, user.password);
+        if (!isValid) {
+          return done(null, false, { message: "Invalid email or password" });
+        }
+
+        return done(null, user);
+      } catch (error) {
+        return done(error);
+      }
+    }
+  ));
+
+  // Update passport serialization
+  passport.serializeUser((user: Express.User, done) => {
+    done(null, user.id);
   });
 
-  app.get("/auth/google/callback", (req, res, next) => {
-    passport.authenticate("google", { session: false }, (err, user, info) => {
-      if (err || !user) {
-        return res.redirect('/login?error=google-auth-failed');
+  passport.deserializeUser(async (id: number, done) => {
+    try {
+      const user = await storage.getUserById(id);
+      if (!user) {
+        return done(new Error('User not found'));
       }
-
-      const token = generateToken(user);
-      res.redirect(`/?token=${token}`);
-    })(req, res, next);
+      done(null, user);
+    } catch (err) {
+      done(err);
+    }
   });
 }
 

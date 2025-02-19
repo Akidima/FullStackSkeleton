@@ -11,7 +11,7 @@ type AuthContextType = {
   user: User | null;
   isLoading: boolean;
   error: Error | null;
-  loginWithGoogle: () => void;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -33,7 +33,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await logout();
+      const success = await logout();
+      if (!success) {
+        throw new Error("Logout failed");
+      }
     },
     onSuccess: () => {
       toast({
@@ -51,11 +54,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  // Handle OAuth redirects
+  // Handle OAuth redirects and errors
   useEffect(() => {
     const handleOAuthCallback = async () => {
       const urlParams = new URLSearchParams(window.location.search);
+      const error = urlParams.get('error');
       const userId = urlParams.get('userId');
+
+      if (error) {
+        toast({
+          title: "Authentication failed",
+          description: "Failed to authenticate with Google",
+          variant: "destructive",
+        });
+        setLocation('/login');
+        return;
+      }
 
       if (userId) {
         await refetch();
@@ -65,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     handleOAuthCallback();
-  }, [refetch]);
+  }, [refetch, setLocation, toast]);
 
   return (
     <AuthContext.Provider

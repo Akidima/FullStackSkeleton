@@ -7,6 +7,7 @@ import MeetingList from "@/pages/meeting-list";
 import MeetingForm from "@/pages/meeting-form";
 import Login from "@/pages/login";
 import SignUp from "@/pages/signup";
+import CalendarEvents from "@/pages/calendar-events";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/" component={() => <ProtectedRoute component={MeetingList} />} />
       <Route path="/meetings/new" component={() => <ProtectedRoute component={MeetingForm} />} />
       <Route path="/meetings/:id/edit" component={() => <ProtectedRoute component={MeetingForm} />} />
+      <Route path="/calendar" component={() => <ProtectedRoute component={CalendarEvents} />} />
       <Route component={NotFound} />
     </Switch>
   );

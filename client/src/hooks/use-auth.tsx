@@ -1,67 +1,41 @@
 import { createContext, ReactNode, useContext, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { User, LoginUser } from "@shared/schema";
-import { getQueryFn, apiRequest, queryClient, setAuthToken, clearAuthToken } from "@/lib/queryClient";
+import { account, getCurrentUser, loginWithGoogle, logout } from "@/lib/appwrite";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { Models } from 'appwrite';
+
+type User = Models.User<Models.Preferences>;
 
 type AuthContextType = {
   user: User | null;
   isLoading: boolean;
   error: Error | null;
-  loginMutation: ReturnType<typeof useLoginMutation>;
-  logoutMutation: ReturnType<typeof useLogoutMutation>;
-  registerMutation: ReturnType<typeof useRegisterMutation>;
+  loginWithGoogle: () => void;
+  logout: () => Promise<void>;
 };
 
-function useLoginMutation() {
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
-  return useMutation({
-    mutationFn: async (credentials: LoginUser) => {
-      const res = await apiRequest("POST", "/api/login", credentials);
-      const data = await res.json();
-      if (data.status !== 'success' || !data.data?.token) {
-        throw new Error(data.message || 'Login failed');
-      }
-      setAuthToken(data.data.token);
-      return data.data.user;
-    },
-    onSuccess: (user) => {
-      queryClient.setQueryData(["/api/me"], user);
-      toast({
-        title: "Success",
-        description: "Logged in successfully",
-      });
-      setLocation("/");
-    },
-    onError: (error: Error) => {
-      console.error("Login error:", error);
-      toast({
-        title: "Login failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
+  const {
+    data: user,
+    error,
+    isLoading,
+    refetch
+  } = useQuery({
+    queryKey: ['user'],
+    queryFn: getCurrentUser,
   });
-}
 
-function useLogoutMutation() {
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
-
-  return useMutation({
+  const logoutMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/logout");
-      const data = await res.json();
-      if (data.status !== 'success') {
-        throw new Error(data.message || 'Logout failed');
-      }
-      clearAuthToken();
+      await logout();
     },
     onSuccess: () => {
-      queryClient.setQueryData(["/api/me"], null);
       toast({
         title: "Success",
         description: "Logged out successfully",
@@ -76,69 +50,22 @@ function useLogoutMutation() {
       });
     },
   });
-}
 
-function useRegisterMutation() {
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
-
-  return useMutation({
-    mutationFn: async (userData: any) => {
-      const res = await apiRequest("POST", "/api/signup", userData);
-      const data = await res.json();
-      if (data.status !== 'success' || !data.data?.token) {
-        throw new Error(data.message || 'Registration failed');
-      }
-      setAuthToken(data.data.token);
-      return data.data.user;
-    },
-    onSuccess: (user) => {
-      queryClient.setQueryData(["/api/me"], user);
-      toast({
-        title: "Success",
-        description: "Account created successfully",
-      });
-      setLocation("/");
-    },
-    onError: (error: Error) => {
-      console.error("Registration error:", error);
-      toast({
-        title: "Registration failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-}
-
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const { toast } = useToast();
-
-  const {
-    data: user,
-    error,
-    isLoading,
-  } = useQuery<User | null>({
-    queryKey: ["/api/me"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-  });
-
-  // Handle token from OAuth redirect
+  // Handle OAuth redirects
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-    if (token) {
-      setAuthToken(token);
-      // Remove token from URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-      // Refetch user data
-      queryClient.invalidateQueries({ queryKey: ["/api/me"] });
-    }
-  }, []);
+    const handleOAuthCallback = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const userId = urlParams.get('userId');
 
-  const loginMutation = useLoginMutation();
-  const logoutMutation = useLogoutMutation();
-  const registerMutation = useRegisterMutation();
+      if (userId) {
+        await refetch();
+        // Remove query parameters
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    };
+
+    handleOAuthCallback();
+  }, [refetch]);
 
   return (
     <AuthContext.Provider
@@ -146,9 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: user ?? null,
         isLoading,
         error: error ?? null,
-        loginMutation,
-        logoutMutation,
-        registerMutation,
+        loginWithGoogle,
+        logout: logoutMutation.mutateAsync,
       }}
     >
       {children}
@@ -163,5 +89,3 @@ export function useAuth() {
   }
   return context;
 }
-
-const AuthContext = createContext<AuthContextType | null>(null);

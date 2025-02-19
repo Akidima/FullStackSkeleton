@@ -1,8 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import session from "express-session";
-import passport from "./auth";
 import rateLimit from 'express-rate-limit';
 
 const app = express();
@@ -22,36 +20,8 @@ const globalLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Specific rate limiter for registration endpoints
-const registrationLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  limit: 5, // Limit each IP to 5 registration attempts per hour
-  message: 'Too many registration attempts from this IP, please try again in an hour.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 // Apply rate limiters
 app.use(globalLimiter);
-app.use('/api/signup', registrationLimiter);
-app.use('/auth/google', registrationLimiter);
-
-// Session configuration
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "your-secret-key",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    },
-  })
-);
-
-// Initialize Passport and restore authentication state from session
-app.use(passport.initialize());
-app.use(passport.session());
 
 app.use((req, res, next) => {
   const start = Date.now();

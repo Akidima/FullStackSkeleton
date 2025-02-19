@@ -1,46 +1,24 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertMeetingSchema, updateMeetingSchema } from "@shared/schema";
 import { ZodError } from "zod";
-import passport from "./auth";
 import { errorHandler, asyncHandler } from "./middleware/errorHandler";
-import { AuthenticationError, NotFoundError, ValidationError } from "./errors/AppError";
-
-const isAuthenticated = (req: Request, res: Response, next: NextFunction) => {
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  throw new AuthenticationError();
-};
+import { NotFoundError, ValidationError } from "./errors/AppError";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Protected route to get current user
-  app.get("/api/me", asyncHandler(async (req, res) => {
-    if (!req.user) {
-      throw new AuthenticationError();
-    }
-    res.json({
-      status: 'success',
-      user: req.user
-    });
-  }));
-
   // Meeting Management Routes
-  app.get("/api/meetings", isAuthenticated, asyncHandler(async (req, res) => {
-    const meetings = await storage.getUserMeetings(req.user!.id);
+  app.get("/api/meetings", asyncHandler(async (req, res) => {
+    const meetings = await storage.getMeetings();
     res.json({
       status: 'success',
       meetings
     });
   }));
 
-  app.post("/api/meetings", isAuthenticated, asyncHandler(async (req, res) => {
+  app.post("/api/meetings", asyncHandler(async (req, res) => {
     try {
-      const meetingData = insertMeetingSchema.parse({
-        ...req.body,
-        userId: req.user!.id,
-      });
+      const meetingData = insertMeetingSchema.parse(req.body);
       const meeting = await storage.createMeeting(meetingData);
       res.status(201).json({
         status: 'success',
@@ -54,9 +32,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  app.get("/api/meetings/:id", isAuthenticated, asyncHandler(async (req, res) => {
+  app.get("/api/meetings/:id", asyncHandler(async (req, res) => {
     const meeting = await storage.getMeeting(Number(req.params.id));
-    if (!meeting || meeting.userId !== req.user!.id) {
+    if (!meeting) {
       throw new NotFoundError("Meeting");
     }
     res.json({
@@ -65,10 +43,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }));
 
-  app.patch("/api/meetings/:id", isAuthenticated, asyncHandler(async (req, res) => {
+  app.patch("/api/meetings/:id", asyncHandler(async (req, res) => {
     try {
       const meeting = await storage.getMeeting(Number(req.params.id));
-      if (!meeting || meeting.userId !== req.user!.id) {
+      if (!meeting) {
         throw new NotFoundError("Meeting");
       }
 
@@ -89,9 +67,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  app.delete("/api/meetings/:id", isAuthenticated, asyncHandler(async (req, res) => {
+  app.delete("/api/meetings/:id", asyncHandler(async (req, res) => {
     const meeting = await storage.getMeeting(Number(req.params.id));
-    if (!meeting || meeting.userId !== req.user!.id) {
+    if (!meeting) {
       throw new NotFoundError("Meeting");
     }
 
@@ -104,5 +82,3 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   return createServer(app);
 }
-
-import { registerAuthEndpoints } from "./auth";

@@ -12,6 +12,10 @@ import { OnboardingTooltip } from "@/components/ui/onboarding";
 export default function MeetingList() {
   const { data: meetings, isLoading, error } = useQuery<Meeting[]>({ 
     queryKey: ["/api/meetings"],
+    retry: 1, // Only retry once on failure
+    onError: (error) => {
+      console.error("Failed to fetch meetings:", error);
+    }
   });
 
   if (isLoading) {
@@ -23,9 +27,13 @@ export default function MeetingList() {
   }
 
   if (error) {
+    console.error("Meeting list error:", error);
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="flex flex-col justify-center items-center min-h-screen gap-4">
         <p className="text-red-500">Error loading meetings</p>
+        <Button onClick={() => window.location.reload()}>
+          Try Again
+        </Button>
       </div>
     );
   }

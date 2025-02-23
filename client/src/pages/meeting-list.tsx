@@ -10,12 +10,11 @@ import { SearchBar } from "@/components/SearchBar";
 import { OnboardingTooltip } from "@/components/ui/onboarding";
 
 export default function MeetingList() {
-  const { data: meetings, isLoading, error } = useQuery<Meeting[]>({ 
+  const { data: meetings = [], isLoading, error } = useQuery<Meeting[]>({
     queryKey: ["/api/meetings"],
-    retry: 1, // Only retry once on failure
-    onError: (error) => {
-      console.error("Failed to fetch meetings:", error);
-    }
+    refetchOnWindowFocus: false,
+    retry: 1,
+    select: (data: Meeting[]) => data ?? [],
   });
 
   if (isLoading) {
@@ -54,7 +53,7 @@ export default function MeetingList() {
         </div>
 
         <div className="grid gap-4">
-          {meetings && meetings.length > 0 ? (
+          {meetings.length > 0 ? (
             meetings.map((meeting) => (
               <Card key={meeting.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader className="pb-2">

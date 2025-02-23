@@ -36,6 +36,7 @@ export default function MeetingForm() {
       notes: "",
       isCompleted: false,
       summary: "",
+      userId: 1, // Set the demo user ID
     },
   });
 
@@ -69,28 +70,6 @@ export default function MeetingForm() {
         description: "Failed to save meeting",
         variant: "destructive",
       });
-    }
-  };
-
-  const generateSummary = async () => {
-    if (!params.id) return;
-
-    try {
-      setIsSummarizing(true);
-      await apiRequest("POST", `/api/meetings/${params.id}/summarize`);
-      queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
-      toast({
-        title: "Success",
-        description: "Meeting summary generated successfully",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to generate meeting summary",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSummarizing(false);
     }
   };
 
@@ -206,27 +185,7 @@ export default function MeetingForm() {
                     </FormItem>
                   )}
                 />
-                {params.id && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={generateSummary}
-                    disabled={isSummarizing}
-                  >
-                    {isSummarizing ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Generating Summary...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        Generate Summary
-                      </>
-                    )}
-                  </Button>
-                )}
+
                 <Button type="submit" className="w-full">
                   {params.id ? "Update Meeting" : "Schedule Meeting"}
                 </Button>

@@ -10,20 +10,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
   app.get("/api/meetings", asyncHandler(async (req, res) => {
     const meetings = await storage.getMeetings();
-    res.json({
-      status: 'success',
-      meetings
-    });
+    // Return just the meetings array instead of wrapping it
+    res.json(meetings);
   }));
 
   app.post("/api/meetings", asyncHandler(async (req, res) => {
     try {
       const meetingData = insertMeetingSchema.parse(req.body);
       const meeting = await storage.createMeeting(meetingData);
-      res.status(201).json({
-        status: 'success',
-        meeting
-      });
+      res.status(201).json(meeting);
     } catch (error) {
       if (error instanceof ZodError) {
         throw new ValidationError("Invalid meeting data", error.errors);
@@ -37,10 +32,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!meeting) {
       throw new NotFoundError("Meeting");
     }
-    res.json({
-      status: 'success',
-      meeting
-    });
+    res.json(meeting);
   }));
 
   app.patch("/api/meetings/:id", asyncHandler(async (req, res) => {
@@ -55,10 +47,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         Number(req.params.id),
         meetingData
       );
-      res.json({
-        status: 'success',
-        meeting: updatedMeeting
-      });
+      res.json(updatedMeeting);
     } catch (error) {
       if (error instanceof ZodError) {
         throw new ValidationError("Invalid meeting data", error.errors);

@@ -40,7 +40,9 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   async getMeetings(): Promise<Meeting[]> {
     try {
-      return await db.select().from(meetings);
+      const allMeetings = await db.select().from(meetings);
+      console.log('Fetched meetings:', allMeetings); // Add logging
+      return allMeetings;
     } catch (error) {
       console.error('Error fetching meetings:', error);
       throw error;

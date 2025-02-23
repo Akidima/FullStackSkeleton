@@ -2,11 +2,11 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCop2XcZMcFgbM3o-Nz7F6jB_J0VhRmbZ8",
-  authDomain: "meetmate-ai.firebaseapp.com",
-  projectId: "meetmate-ai",
-  storageBucket: "meetmate-ai.appspot.com",
-  appId: "1:751859924211:web:d5040037c044b47e418b86",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.appspot.com`,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 // Initialize Firebase
@@ -59,6 +59,8 @@ export const loginWithGoogle = async () => {
           throw new Error('Sign-in cancelled. Please try again.');
         case 'auth/too-many-requests':
           throw new Error('Too many sign-in attempts. Please try again later.');
+        case 'auth/unauthorized-domain':
+          throw new Error('This domain is not authorized for Google Sign-In. Please contact the administrator.');
         default:
           throw new Error('Failed to sign in with Google. Please try again.');
       }

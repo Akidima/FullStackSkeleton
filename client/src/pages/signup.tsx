@@ -1,3 +1,5 @@
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar, Eye, EyeOff } from "lucide-react";
@@ -6,9 +8,6 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import {
   Form,
   FormControl,
@@ -19,6 +18,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { getAuth, createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { z } from "zod";
 
 const signupSchema = z.object({
   email: z.string().email("Please enter a valid email"),
@@ -56,17 +56,43 @@ export default function SignUp() {
     return null;
   }
 
+  const retryOperation = async (operation: () => Promise<any>, maxRetries = 3, retryDelay = 1000) => {
+    let retries = 0;
+    while (retries < maxRetries) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (
+          typeof error === 'object' && 
+          error !== null && 
+          'code' in error && 
+          error.code === 'auth/too-many-requests'
+        ) {
+          console.log(`Rate limited. Retrying in ${retryDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          retryDelay *= 2; // Exponential backoff
+          retries++;
+        } else {
+          throw error; // Re-throw non-rate-limit errors
+        }
+      }
+    }
+    throw new Error('Too many retries. Rate limit exceeded.');
+  };
+
   const onSubmit = async (data: SignupFormData) => {
     try {
       setIsLoading(true);
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        data.email,
-        data.password
-      );
-
-      await updateProfile(userCredential.user, {
-        displayName: data.name
+      const userCredential = await retryOperation(async () => {
+        const credential = await createUserWithEmailAndPassword(
+          auth,
+          data.email,
+          data.password
+        );
+        await updateProfile(credential.user, {
+          displayName: data.name
+        });
+        return credential;
       });
 
       toast({
@@ -74,10 +100,34 @@ export default function SignUp() {
         description: "You are now logged in",
       });
       setLocation("/");
-    } catch (error: any) {
+    } catch (error) {
+      let errorMessage = 'Failed to create account. Please try again.';
+
+      // Type guard for Firebase error object
+      if (typeof error === 'object' && error !== null && 'code' in error) {
+        const errorCode = error.code as string;
+        switch (errorCode) {
+          case 'auth/email-already-in-use':
+            errorMessage = 'This email is already registered. Please try logging in instead.';
+            break;
+          case 'auth/invalid-email':
+            errorMessage = 'Please enter a valid email address.';
+            break;
+          case 'auth/operation-not-allowed':
+            errorMessage = 'Email/password accounts are not enabled. Please contact support.';
+            break;
+          case 'auth/weak-password':
+            errorMessage = 'Please choose a stronger password.';
+            break;
+          case 'auth/too-many-requests':
+            errorMessage = 'Too many attempts. Please try again later.';
+            break;
+        }
+      }
+
       toast({
         title: "Error creating account",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

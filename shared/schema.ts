@@ -154,8 +154,21 @@ export const updateUserSchema = createInsertSchema(users).partial();
 
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true });
 export const updateTaskSchema = createInsertSchema(tasks).partial();
-export const insertMeetingSchema = createInsertSchema(meetings).omit({ id: true });
-export const updateMeetingSchema = createInsertSchema(meetings).partial();
+export const insertMeetingSchema = createInsertSchema(meetings)
+  .extend({
+    date: z.string()
+      .transform((str) => new Date(str)),
+    participants: z.array(z.string()).optional(),
+  })
+  .omit({ id: true });
+export const updateMeetingSchema = createInsertSchema(meetings)
+  .partial()
+  .extend({
+    date: z.string()
+      .transform((str) => new Date(str))
+      .optional(),
+    participants: z.array(z.string()).optional(),
+  });
 
 // Add new schema for registration attempts
 export const insertRegistrationAttemptSchema = createInsertSchema(registrationAttempts).omit({

@@ -10,14 +10,25 @@ import { SearchBar } from "@/components/SearchBar";
 import { OnboardingTooltip } from "@/components/ui/onboarding";
 
 export default function MeetingList() {
-  const [searchResults, setSearchResults] = useState<Meeting[] | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
-
-  const { data: meetings, isLoading } = useQuery<Meeting[]>({ 
-    queryKey: ["/api/meetings"]
+  const { data: meetings, isLoading, error } = useQuery<Meeting[]>({ 
+    queryKey: ["/api/meetings"],
   });
 
-  const displayedMeetings = searchResults || meetings;
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <p className="text-red-500">Error loading meetings</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -25,79 +36,68 @@ export default function MeetingList() {
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-2">
             <Calendar className="h-8 w-8" />
-            <h1 className="text-3xl font-bold">Meeting Assistant</h1>
+            <h1 className="text-3xl font-bold">Meeting Dashboard</h1>
           </div>
-          <OnboardingTooltip id="new-meeting-button">
-            <Link href="/meetings/new">
-              <Button>
-                <Plus className="mr-2 h-4 w-4" /> New Meeting
-              </Button>
-            </Link>
-          </OnboardingTooltip>
+          <Link href="/meetings/new">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" /> New Meeting
+            </Button>
+          </Link>
         </div>
 
-        <div className="mb-6">
-          <OnboardingTooltip id="search-meetings">
-            <SearchBar 
-              onSearchResults={setSearchResults}
-              onSearching={setIsSearching}
-            />
-          </OnboardingTooltip>
-        </div>
-
-        {(isLoading || isSearching) ? (
-          <div className="flex justify-center">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
-        ) : (
-          <OnboardingTooltip id="calendar-view">
-            <div className="grid gap-4">
-              {displayedMeetings?.map((meeting) => (
-                <Card key={meeting.id}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex justify-between items-center">
-                      <span className={meeting.isCompleted ? "text-muted-foreground" : ""}>
-                        {meeting.title}
-                      </span>
-                      {meeting.isCompleted && (
-                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                      )}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">
-                        <Calendar className="inline-block w-4 h-4 mr-1" />
-                        {format(new Date(meeting.date), "PPP")}
+        <div className="grid gap-4">
+          {meetings && meetings.length > 0 ? (
+            meetings.map((meeting) => (
+              <Card key={meeting.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex justify-between items-center">
+                    <span className={meeting.isCompleted ? "text-muted-foreground" : ""}>
+                      {meeting.title}
+                    </span>
+                    {meeting.isCompleted && (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground flex items-center">
+                      <Calendar className="inline-block w-4 h-4 mr-2" />
+                      {format(new Date(meeting.date), "PPP 'at' p")}
+                    </p>
+                    {meeting.participants && meeting.participants.length > 0 && (
+                      <p className="text-sm text-muted-foreground flex items-center">
+                        <Users className="inline-block w-4 h-4 mr-2" />
+                        {meeting.participants.join(", ")}
                       </p>
-                      {meeting.participants && meeting.participants.length > 0 && (
-                        <p className="text-sm text-muted-foreground">
-                          <Users className="inline-block w-4 h-4 mr-1" />
-                          {meeting.participants.join(", ")}
-                        </p>
-                      )}
-                      {meeting.description && (
-                        <p className="text-sm mt-2">{meeting.description}</p>
-                      )}
-                      <div className="flex justify-end mt-4">
-                        <Link href={`/meetings/${meeting.id}/edit`}>
-                          <Button variant="outline" size="sm">
-                            Edit Meeting
-                          </Button>
-                        </Link>
-                      </div>
+                    )}
+                    {meeting.description && (
+                      <p className="text-sm mt-2 text-foreground/80">{meeting.description}</p>
+                    )}
+                    <div className="flex justify-end space-x-2 mt-4">
+                      <Link href={`/meetings/${meeting.id}/edit`}>
+                        <Button variant="outline" size="sm">
+                          Edit Meeting
+                        </Button>
+                      </Link>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-              {displayedMeetings?.length === 0 && (
-                <p className="text-center text-muted-foreground">
-                  {searchResults ? "No matching meetings found" : "No meetings yet"}
-                </p>
-              )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <div className="text-center py-8">
+              <Calendar className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No Meetings Yet</h3>
+              <p className="text-muted-foreground mb-4">Get started by creating your first meeting</p>
+              <Link href="/meetings/new">
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" /> Schedule Meeting
+                </Button>
+              </Link>
             </div>
-          </OnboardingTooltip>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

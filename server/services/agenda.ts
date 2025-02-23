@@ -1,5 +1,6 @@
 import { Meeting } from '@shared/schema';
 import { pipeline } from '@xenova/transformers';
+import { format } from 'date-fns';
 
 interface AgendaSuggestion {
   topics: string[];
@@ -23,11 +24,11 @@ export class AgendaService {
 
   private static async analyzeContext(pastMeetings: Meeting[], upcomingTasks: any[]): Promise<string> {
     const meetingsContext = pastMeetings
-      .map(m => `Meeting "${m.title}" on ${m.date}: ${m.description}`)
+      .map(m => `Meeting "${m.title}" on ${format(new Date(m.date), 'PPP')}: ${m.description}`)
       .join('\n');
 
     const tasksContext = upcomingTasks
-      .map(t => `Task "${t.title}" due ${t.dueDate}: ${t.description}`)
+      .map(t => `Task "${t.title}" due ${format(new Date(t.dueDate), 'PPP')}: ${t.description}`)
       .join('\n');
 
     const fullContext = `Past Meetings:\n${meetingsContext}\n\nUpcoming Tasks:\n${tasksContext}`;

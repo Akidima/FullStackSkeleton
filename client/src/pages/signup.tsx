@@ -18,8 +18,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useMutation } from "@tanstack/react-query";
-import { account } from "@/lib/appwrite";
+import { getAuth, createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 
 const signupSchema = z.object({
   email: z.string().email("Please enter a valid email"),
@@ -39,6 +38,8 @@ export default function SignUp() {
   const { user, loginWithGoogle } = useAuth();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const auth = getAuth();
 
   const form = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
@@ -49,39 +50,39 @@ export default function SignUp() {
     },
   });
 
-  const signupMutation = useMutation({
-    mutationFn: async (data: SignupFormData) => {
-      return await account.create(
-        'unique()', // Generate unique ID
-        data.email,
-        data.password,
-        data.name
-      );
-    },
-    onSuccess: () => {
-      toast({
-        title: "Account created successfully",
-        description: "Please log in with your credentials",
-      });
-      setLocation("/login");
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error creating account",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
   // Redirect if already logged in
   if (user) {
     setLocation("/");
     return null;
   }
 
-  const onSubmit = (data: SignupFormData) => {
-    signupMutation.mutate(data);
+  const onSubmit = async (data: SignupFormData) => {
+    try {
+      setIsLoading(true);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        data.email,
+        data.password
+      );
+
+      await updateProfile(userCredential.user, {
+        displayName: data.name
+      });
+
+      toast({
+        title: "Account created successfully",
+        description: "You are now logged in",
+      });
+      setLocation("/");
+    } catch (error: any) {
+      toast({
+        title: "Error creating account",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -161,9 +162,9 @@ export default function SignUp() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={signupMutation.isPending}
+                disabled={isLoading}
               >
-                {signupMutation.isPending ? "Creating account..." : "Sign Up"}
+                {isLoading ? "Creating account..." : "Sign Up"}
               </Button>
             </form>
           </Form>

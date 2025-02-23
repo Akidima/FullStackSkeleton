@@ -1,14 +1,11 @@
-import { createContext, ReactNode, useContext, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { account, getCurrentUser, loginWithGoogle, logout } from "@/lib/appwrite";
-import { useToast } from "@/hooks/use-toast";
+import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Models } from 'appwrite';
-
-type User = Models.User<Models.Preferences>;
+import { useToast } from "@/hooks/use-toast";
+import { auth, loginWithGoogle as firebaseLoginWithGoogle, logout as firebaseLogout } from "@/lib/firebase";
+import { User as FirebaseUser } from "firebase/auth";
 
 type AuthContextType = {
-  user: User | null;
+  user: FirebaseUser | null;
   isLoading: boolean;
   error: Error | null;
   loginWithGoogle: () => Promise<void>;
@@ -18,77 +15,69 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
-  const {
-    data: user,
-    error,
-    isLoading,
-    refetch
-  } = useQuery({
-    queryKey: ['user'],
-    queryFn: getCurrentUser,
-  });
-
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      const success = await logout();
-      if (!success) {
-        throw new Error("Logout failed");
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(
+      (user) => {
+        setUser(user);
+        setIsLoading(false);
+      },
+      (error) => {
+        setError(error);
+        setIsLoading(false);
       }
-    },
-    onSuccess: () => {
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  const loginWithGoogle = async () => {
+    try {
+      await firebaseLoginWithGoogle();
       toast({
         title: "Success",
-        description: "Logged out successfully",
+        description: "Successfully signed in with Google",
       });
-      setLocation("/login");
-    },
-    onError: (error: Error) => {
+      setLocation("/");
+    } catch (error: any) {
       toast({
-        title: "Logout failed",
+        title: "Error",
         description: error.message,
         variant: "destructive",
       });
-    },
-  });
+    }
+  };
 
-  // Handle OAuth redirects and errors
-  useEffect(() => {
-    const handleOAuthCallback = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const error = urlParams.get('error');
-      const userId = urlParams.get('userId');
-
-      if (error) {
-        toast({
-          title: "Authentication failed",
-          description: "Failed to authenticate with Google",
-          variant: "destructive",
-        });
-        setLocation('/login');
-        return;
-      }
-
-      if (userId) {
-        await refetch();
-        // Remove query parameters
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    };
-
-    handleOAuthCallback();
-  }, [refetch, setLocation, toast]);
+  const logout = async () => {
+    try {
+      await firebaseLogout();
+      toast({
+        title: "Success",
+        description: "Successfully logged out",
+      });
+      setLocation("/login");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <AuthContext.Provider
       value={{
-        user: user ?? null,
+        user,
         isLoading,
-        error: error ?? null,
+        error,
         loginWithGoogle,
-        logout: logoutMutation.mutateAsync,
+        logout,
       }}
     >
       {children}

@@ -73,11 +73,6 @@ export async function apiRequest(
       await throwIfResNotOk(response);
     }
 
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      throw new Error("Expected JSON response from server");
-    }
-
     return response;
   } catch (error) {
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
@@ -87,50 +82,39 @@ export async function apiRequest(
   }
 }
 
-export const getQueryFn: <T>(options: {
-  on401: "returnNull" | "throw";
-}) => QueryFunction<T> =
-  ({ on401: unauthorizedBehavior }) =>
-  async ({ queryKey }) => {
-    const headers: Record<string, string> = {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json'
-    };
-
-    const token = getAuthToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const res = await fetch(queryKey[0] as string, {
-      headers,
-      credentials: 'include'
-    });
-
-    if (res.status === 401) {
-      clearAuthToken();
-      if (unauthorizedBehavior === "returnNull") {
-        return null;
-      }
-    }
-
-    if (!res.ok) {
-      await throwIfResNotOk(res);
-    }
-
-    const contentType = res.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      throw new Error("Expected JSON response from server");
-    }
-
-    const data = await res.json();
-    return data.data?.user || null;
+export const getQueryFn: QueryFunction = async ({ queryKey }) => {
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
   };
+
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(queryKey[0] as string, {
+    headers,
+    credentials: 'include'
+  });
+
+  if (res.status === 401) {
+    clearAuthToken();
+    return null;
+  }
+
+  if (!res.ok) {
+    await throwIfResNotOk(res);
+  }
+
+  const data = await res.json();
+  return data.data;
+};
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      queryFn: getQueryFn({ on401: "throw" }),
+      queryFn: getQueryFn,
       refetchInterval: false,
       refetchOnWindowFocus: false,
       staleTime: Infinity,

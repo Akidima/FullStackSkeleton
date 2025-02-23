@@ -29,7 +29,7 @@ export default function MeetingForm() {
     resolver: zodResolver(insertMeetingSchema),
     defaultValues: {
       title: "",
-      date: new Date().toISOString(),
+      date: new Date().toISOString().slice(0, 16), // Format for datetime-local input
       description: "",
       participants: [],
       agenda: "",
@@ -41,14 +41,20 @@ export default function MeetingForm() {
 
   const onSubmit = async (data: any) => {
     try {
+      // Convert the date string to a Date object before sending
+      const formattedData = {
+        ...data,
+        date: new Date(data.date).toISOString(),
+      };
+
       if (params.id) {
-        await apiRequest("PATCH", `/api/meetings/${params.id}`, data);
+        await apiRequest("PATCH", `/api/meetings/${params.id}`, formattedData);
         toast({
           title: "Success",
           description: "Meeting updated successfully",
         });
       } else {
-        await apiRequest("POST", "/api/meetings", data);
+        await apiRequest("POST", "/api/meetings", formattedData);
         toast({
           title: "Success",
           description: "Meeting created successfully",
@@ -57,6 +63,7 @@ export default function MeetingForm() {
       queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
       setLocation("/");
     } catch (error) {
+      console.error('Form submission error:', error);
       toast({
         title: "Error",
         description: "Failed to save meeting",
@@ -128,7 +135,13 @@ export default function MeetingForm() {
                     <FormItem>
                       <FormLabel>Date & Time</FormLabel>
                       <FormControl>
-                        <Input type="datetime-local" {...field} />
+                        <Input 
+                          type="datetime-local" 
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e.target.value);
+                          }}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

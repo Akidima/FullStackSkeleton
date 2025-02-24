@@ -12,9 +12,16 @@ import { OnboardingTooltip } from "@/components/ui/onboarding";
 export default function MeetingList() {
   const { data: meetings = [], isLoading, error } = useQuery<Meeting[]>({
     queryKey: ["/api/meetings"],
+    queryFn: async () => {
+      const response = await fetch("/api/meetings");
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      return data || [];
+    },
     refetchOnWindowFocus: false,
     retry: 1,
-    select: (data: Meeting[]) => data ?? [],
   });
 
   if (isLoading) {

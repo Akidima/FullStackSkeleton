@@ -9,45 +9,97 @@ import {
   Zap,
   CheckCircle,
   ArrowRight,
+  Globe,
 } from "lucide-react";
+import {
+  SiGmail,
+  SiGoogle,
+  SiSlack,
+  SiZoom,
+  SiCisco,
+  SiMicrosoft,
+} from "react-icons/si";
 
 export default function Landing() {
   const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero Section */}
-      <section className="relative py-20 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-background z-0" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center">
-            <h1 className="text-4xl sm:text-6xl font-bold tracking-tight mb-8">
-              Intelligent Meeting Management{" "}
-              <span className="text-primary">Made Simple</span>
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto mb-12">
-              Transform your meetings with AI-powered insights, mood tracking, and
-              effortless scheduling. Experience the future of collaborative work.
-            </p>
-            <div className="flex gap-4 justify-center">
+      {/* Header/Navigation */}
+      <header className="border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center">
+              <Link href="/">
+                <span className="text-2xl font-bold text-primary">MeetFlow</span>
+              </Link>
+            </div>
+            <nav className="hidden md:flex items-center gap-8">
+              <Link href="/features">
+                <span className="text-muted-foreground hover:text-foreground">Features</span>
+              </Link>
+              <Link href="/solutions">
+                <span className="text-muted-foreground hover:text-foreground">Solutions</span>
+              </Link>
+              <Link href="/pricing">
+                <span className="text-muted-foreground hover:text-foreground">Pricing</span>
+              </Link>
+            </nav>
+            <div className="flex items-center gap-4">
               {user ? (
-                <Link href="/meetings">
-                  <Button size="lg" className="gap-2">
-                    Go to Dashboard <ArrowRight className="h-5 w-5" />
-                  </Button>
+                <Link href="/dashboard">
+                  <Button>Go to Dashboard</Button>
                 </Link>
               ) : (
                 <>
-                  <Link href="/signup">
-                    <Button size="lg">Get Started Free</Button>
-                  </Link>
                   <Link href="/login">
-                    <Button size="lg" variant="outline">
-                      Sign In
-                    </Button>
+                    <Button variant="ghost">Log in</Button>
+                  </Link>
+                  <Link href="/signup">
+                    <Button>Sign up free</Button>
                   </Link>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <section className="relative py-20 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-background z-0" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="text-center mb-20">
+            <h1 className="text-4xl sm:text-6xl font-bold tracking-tight mb-6">
+              Easy scheduling <span className="text-primary">ahead</span>
+            </h1>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
+              Smarter scheduling with AI-powered insights. Streamline your meetings,
+              boost productivity, and make every interaction count.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              {!user && (
+                <Link href="/signup">
+                  <Button size="lg" className="w-full sm:w-auto">
+                    Sign up for free <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+              )}
+            </div>
+          </div>
+
+          {/* Integration Logos */}
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground mb-6">
+              Seamlessly connects with your favorite tools
+            </p>
+            <div className="flex flex-wrap justify-center gap-8 text-muted-foreground/60">
+              <SiGmail className="h-8 w-8" />
+              <SiGoogle className="h-8 w-8" />
+              <SiSlack className="h-8 w-8" />
+              <SiZoom className="h-8 w-8" />
+              <SiCisco className="h-8 w-8" />
+              <SiMicrosoft className="h-8 w-8" />
             </div>
           </div>
         </div>
@@ -117,45 +169,64 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* How It Works Section */}
+      {/* Stats Section */}
+      <section className="py-20 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+            <div>
+              <div className="text-4xl font-bold text-primary mb-2">24%</div>
+              <p className="text-muted-foreground">Less time spent scheduling</p>
+            </div>
+            <div>
+              <div className="text-4xl font-bold text-primary mb-2">20%</div>
+              <p className="text-muted-foreground">Increase in meeting efficiency</p>
+            </div>
+            <div>
+              <div className="text-4xl font-bold text-primary mb-2">260%</div>
+              <p className="text-muted-foreground">ROI on meeting management</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold mb-4">How It Works</h2>
+            <h2 className="text-3xl font-bold mb-4">Schedule your team in record time</h2>
             <p className="text-lg text-muted-foreground">
-              Get started in minutes, not hours
+              Let AI handle the complexities of scheduling while you focus on what matters
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                step: "1",
-                title: "Sign Up",
-                description:
-                  "Create your account and set your preferences in minutes.",
-              },
-              {
-                step: "2",
-                title: "Schedule Meetings",
-                description:
-                  "Use our intuitive drag-and-drop calendar to plan meetings.",
-              },
-              {
-                step: "3",
-                title: "Get Insights",
-                description:
-                  "Receive AI-powered suggestions and track meeting success.",
-              },
-            ].map((step, index) => (
-              <div key={index} className="text-center">
-                <div className="w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">
-                  {step.step}
-                </div>
-                <h3 className="text-xl font-semibold mb-2">{step.title}</h3>
-                <p className="text-muted-foreground">{step.description}</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+            <div className="text-center">
+              <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-6">
+                <Globe className="h-6 w-6" />
               </div>
-            ))}
+              <h3 className="text-xl font-semibold mb-2">Share your booking page</h3>
+              <p className="text-muted-foreground">
+                Send guests your personalized booking page
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-6">
+                <Calendar className="h-6 w-6" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">They pick a time</h3>
+              <p className="text-muted-foreground">
+                Guests book available time slots that work for everyone
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckCircle className="h-6 w-6" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">The meeting is scheduled</h3>
+              <p className="text-muted-foreground">
+                The event is added to everyone's calendar
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -163,9 +234,7 @@ export default function Landing() {
       {/* CTA Section */}
       <section className="py-20 bg-primary text-primary-foreground">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold mb-4">
-            Ready to Transform Your Meetings?
-          </h2>
+          <h2 className="text-3xl font-bold mb-4">Start scheduling smarter today</h2>
           <p className="text-xl mb-8 text-primary-foreground/90">
             Join thousands of teams who've improved their meeting efficiency
           </p>
@@ -176,12 +245,96 @@ export default function Landing() {
                 variant="secondary"
                 className="bg-background text-foreground hover:bg-background/90"
               >
-                Get Started Free
+                Get started free
               </Button>
             </Link>
           )}
         </div>
       </section>
+
+      {/* Footer */}
+      <footer className="bg-muted/30 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div>
+              <h3 className="font-semibold mb-4">Product</h3>
+              <ul className="space-y-2">
+                <li>
+                  <Link href="/features">
+                    <span className="text-muted-foreground hover:text-foreground">
+                      Features
+                    </span>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/security">
+                    <span className="text-muted-foreground hover:text-foreground">
+                      Security
+                    </span>
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-4">Solutions</h3>
+              <ul className="space-y-2">
+                <li>
+                  <Link href="/enterprise">
+                    <span className="text-muted-foreground hover:text-foreground">
+                      Enterprise
+                    </span>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/teams">
+                    <span className="text-muted-foreground hover:text-foreground">
+                      Teams
+                    </span>
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-4">Resources</h3>
+              <ul className="space-y-2">
+                <li>
+                  <Link href="/help">
+                    <span className="text-muted-foreground hover:text-foreground">
+                      Help Center
+                    </span>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/blog">
+                    <span className="text-muted-foreground hover:text-foreground">
+                      Blog
+                    </span>
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-4">Company</h3>
+              <ul className="space-y-2">
+                <li>
+                  <Link href="/about">
+                    <span className="text-muted-foreground hover:text-foreground">
+                      About Us
+                    </span>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/contact">
+                    <span className="text-muted-foreground hover:text-foreground">
+                      Contact
+                    </span>
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

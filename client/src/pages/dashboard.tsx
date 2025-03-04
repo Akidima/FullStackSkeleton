@@ -2,23 +2,42 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus } from "lucide-react";
+import { Plus, Menu, LayoutDashboard, Calendar, Settings } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { Progress } from "@/components/ui/progress";
 import { MeetingCardSkeleton } from "@/components/ui/loading-skeleton";
+import { toast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
-  const { data: meetings = [], isLoading } = useQuery<Meeting[]>({
+  const { data: meetings = [], isLoading, error } = useQuery<Meeting[]>({
     queryKey: ["/api/meetings"],
     queryFn: async () => {
-      const response = await fetch("/api/meetings");
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      try {
+        const response = await fetch("/api/meetings");
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        return data || [];
+      } catch (error) {
+        console.error("Failed to fetch meetings:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load meetings. Please try again later.",
+          variant: "destructive",
+        });
+        throw error;
       }
-      const data = await response.json();
-      return data || [];
     },
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
   // Calculate completion metrics
@@ -42,12 +61,47 @@ export default function Dashboard() {
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
           <h1 className="text-4xl font-bold">Dashboard</h1>
-          <Link href="/meetings/new">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Schedule Meeting
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <Menu className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link href="/" className="flex items-center">
+                    <LayoutDashboard className="h-4 w-4 mr-2" />
+                    Dashboard
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/meetings" className="flex items-center">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Meetings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/calendar" className="flex items-center">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Calendar
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/profile/settings" className="flex items-center">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Link href="/meetings/new">
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Schedule Meeting
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Metrics Overview */}

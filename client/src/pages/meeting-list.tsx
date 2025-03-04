@@ -1,17 +1,30 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Calendar, Plus, Users, CheckCircle2, Clock, Search } from "lucide-react";
+import { Calendar, Plus, Users, CheckCircle2, Clock, Search, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { MeetingCardSkeleton } from "@/components/ui/loading-skeleton";
+import { toast } from "@/hooks/use-toast";
 
 export default function MeetingList() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [meetingToDelete, setMeetingToDelete] = useState<Meeting | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: meetings = [], isLoading, error } = useQuery<Meeting[]>({
     queryKey: ["/api/meetings"],
@@ -25,6 +38,32 @@ export default function MeetingList() {
     },
     refetchOnWindowFocus: false,
     retry: 1,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (meetingId: number) => {
+      const response = await fetch(`/api/meetings/${meetingId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete meeting');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/meetings'] });
+      toast({
+        title: "Meeting Deleted",
+        description: "The meeting has been successfully deleted.",
+      });
+      setMeetingToDelete(null);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete the meeting. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const filteredMeetings = meetings.filter(meeting => 
@@ -150,6 +189,15 @@ export default function MeetingList() {
                           Edit Meeting
                         </Button>
                       </Link>
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => setMeetingToDelete(meeting)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </Button>
                     </div>
                   </div>
                 </CardContent>
@@ -171,6 +219,31 @@ export default function MeetingList() {
           )}
         </div>
       </div>
+
+      <AlertDialog open={!!meetingToDelete} onOpenChange={() => setMeetingToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this meeting?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the meeting 
+              {meetingToDelete?.title && ` "${meetingToDelete.title}"`} and all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (meetingToDelete) {
+                  deleteMutation.mutate(meetingToDelete.id);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Meeting
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

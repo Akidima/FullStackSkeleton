@@ -171,6 +171,31 @@ export const meetingOutcomes = pgTable("meeting_outcomes", {
   meetingIdIdx: index("meeting_outcomes_meeting_id_idx").on(table.meetingId),
 }));
 
+// Add after the meetingOutcomes table
+export const meetingMoods = pgTable("meeting_moods", {
+  id: serial("id").primaryKey(),
+  meetingId: serial("meeting_id").references(() => meetings.id, { onDelete: 'cascade' }),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  sentiment: text("sentiment").notNull(), // positive, negative, neutral
+  confidence: integer("confidence").notNull(), // 0-100
+  moodLabels: text("mood_labels").array(), // array of specific emotions detected
+  textSnippet: text("text_snippet"), // the text that was analyzed
+  source: text("source").notNull(), // 'transcript', 'chat', 'notes'
+}, (table) => ({
+  meetingIdIdx: index("meeting_moods_meeting_id_idx").on(table.meetingId),
+  timestampIdx: index("meeting_moods_timestamp_idx").on(table.timestamp),
+}));
+
+export const tasks = pgTable("tasks", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  completed: boolean("completed").notNull().default(false),
+  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  userIdIdx: index("tasks_user_id_idx").on(table.userId),
+  completedIdx: index("completed_idx").on(table.completed),
+}));
 
 export const usersRelations = relations(users, ({ many }) => ({
   meetings: many(meetings),
@@ -197,17 +222,6 @@ export const meetingsRelations = relations(meetings, ({ one }) => ({
     fields: [meetings.roomId],
     references: [rooms.id],
   }),
-}));
-
-export const tasks = pgTable("tasks", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  completed: boolean("completed").notNull().default(false),
-  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
-}, (table) => ({
-  userIdIdx: index("tasks_user_id_idx").on(table.userId),
-  completedIdx: index("completed_idx").on(table.completed),
 }));
 
 export const tasksRelations = relations(tasks, ({ one }) => ({
@@ -254,6 +268,14 @@ export const meetingInsightsRelations = relations(meetingInsights, ({ one }) => 
 export const meetingOutcomesRelations = relations(meetingOutcomes, ({ one }) => ({
   meeting: one(meetings, {
     fields: [meetingOutcomes.meetingId],
+    references: [meetings.id],
+  }),
+}));
+
+// Add to existing relations
+export const meetingMoodsRelations = relations(meetingMoods, ({ one }) => ({
+  meeting: one(meetings, {
+    fields: [meetingMoods.meetingId],
     references: [meetings.id],
   }),
 }));
@@ -372,6 +394,15 @@ export const insertMeetingInsightSchema = createInsertSchema(meetingInsights)
 export const insertMeetingOutcomeSchema = createInsertSchema(meetingOutcomes)
   .omit({ id: true, createdAt: true });
 
+// Add after existing schemas
+export const insertMeetingMoodSchema = createInsertSchema(meetingMoods)
+  .omit({ id: true })
+  .extend({
+    sentiment: z.enum(['positive', 'negative', 'neutral']),
+    confidence: z.number().min(0).max(100),
+    moodLabels: z.array(z.string()),
+  });
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -400,3 +431,7 @@ export type MeetingInsight = typeof meetingInsights.$inferSelect;
 export type InsertMeetingInsight = z.infer<typeof insertMeetingInsightSchema>;
 export type MeetingOutcome = typeof meetingOutcomes.$inferSelect;
 export type InsertMeetingOutcome = z.infer<typeof insertMeetingOutcomeSchema>;
+
+// Add to existing type exports
+export type MeetingMood = typeof meetingMoods.$inferSelect;
+export type InsertMeetingMood = z.infer<typeof insertMeetingMoodSchema>;

@@ -1,4 +1,4 @@
-import { meetings, users, registrationAttempts, securityRecommendations, rooms, calendarEvents, userAvailability, meetingPreferences, type Meeting, type InsertMeeting, type User, type InsertUser, type RegistrationAttempt, type InsertRegistrationAttempt, type SecurityRecommendation, type InsertSecurityRecommendation, type Room, type InsertRoom, type CalendarEvent, type InsertCalendarEvent, type UserAvailability, type InsertUserAvailability, type MeetingPreference, type InsertMeetingPreference, type MeetingInsight, type InsertMeetingInsight, type MeetingOutcome, type InsertMeetingOutcome } from "@shared/schema";
+import { meetings, users, registrationAttempts, securityRecommendations, rooms, calendarEvents, userAvailability, meetingPreferences, meetingMoods, type Meeting, type InsertMeeting, type User, type InsertUser, type RegistrationAttempt, type InsertRegistrationAttempt, type SecurityRecommendation, type InsertSecurityRecommendation, type Room, type InsertRoom, type CalendarEvent, type InsertCalendarEvent, type UserAvailability, type InsertUserAvailability, type MeetingPreference, type InsertMeetingPreference, type MeetingInsight, type InsertMeetingInsight, type MeetingOutcome, type InsertMeetingOutcome, type MeetingMood, type InsertMeetingMood } from "@shared/schema";
 import { db, testConnection } from "./db";
 import { eq, desc, and, gte, lte } from "drizzle-orm";
 
@@ -62,6 +62,15 @@ export interface IStorage {
   getRecommendations(): Promise<MeetingInsight[]>;
   getMeetingOutcomes(meetingId: number): Promise<MeetingOutcome[]>;
   createMeetingOutcome(outcome: InsertMeetingOutcome): Promise<MeetingOutcome>;
+
+  // Meeting mood tracking operations
+  getMeetingMoods(meetingId: number): Promise<MeetingMood[]>;
+  createMeetingMood(mood: InsertMeetingMood): Promise<MeetingMood>;
+  getMeetingMoodSummary(meetingId: number): Promise<{
+    overallSentiment: string;
+    dominantMoods: string[];
+    confidenceAvg: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -575,6 +584,87 @@ export class DatabaseStorage implements IStorage {
       return createdOutcome;
     } catch (error) {
       console.error('Error creating meeting outcome:', error);
+      throw error;
+    }
+  }
+
+  async getMeetingMoods(meetingId: number): Promise<MeetingMood[]> {
+    try {
+      return await db
+        .select()
+        .from(meetingMoods)
+        .where(eq(meetingMoods.meetingId, meetingId))
+        .orderBy(desc(meetingMoods.timestamp));
+    } catch (error) {
+      console.error(`Error fetching moods for meeting ${meetingId}:`, error);
+      throw error;
+    }
+  }
+
+  async createMeetingMood(mood: InsertMeetingMood): Promise<MeetingMood> {
+    try {
+      const [createdMood] = await db
+        .insert(meetingMoods)
+        .values(mood)
+        .returning();
+      return createdMood;
+    } catch (error) {
+      console.error('Error creating meeting mood:', error);
+      throw error;
+    }
+  }
+
+  async getMeetingMoodSummary(meetingId: number): Promise<{
+    overallSentiment: string;
+    dominantMoods: string[];
+    confidenceAvg: number;
+  }> {
+    try {
+      const moods = await this.getMeetingMoods(meetingId);
+
+      if (moods.length === 0) {
+        return {
+          overallSentiment: 'neutral',
+          dominantMoods: [],
+          confidenceAvg: 0
+        };
+      }
+
+      // Calculate sentiment counts
+      const sentimentCounts = moods.reduce((acc: Record<string, number>, mood) => {
+        acc[mood.sentiment] = (acc[mood.sentiment] || 0) + 1;
+        return acc;
+      }, {});
+
+      // Get overall sentiment
+      const overallSentiment = Object.entries(sentimentCounts)
+        .reduce((a, b) => (a[1] > b[1] ? a : b))[0];
+
+      // Calculate average confidence
+      const confidenceAvg = Math.round(
+        moods.reduce((sum, mood) => sum + mood.confidence, 0) / moods.length
+      );
+
+      // Get dominant moods
+      const moodCounts = moods.reduce((acc: Record<string, number>, mood) => {
+        mood.moodLabels.forEach(label => {
+          acc[label] = (acc[label] || 0) + 1;
+        });
+        return acc;
+      }, {});
+
+      const dominantMoods = Object.entries(moodCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([mood]) => mood);
+
+      return {
+        overallSentiment,
+        dominantMoods,
+        confidenceAvg
+      };
+    } catch (error) {
+      console.error(`Error getting mood summary for meeting ${meetingId}:`, error);
       throw error;
     }
   }

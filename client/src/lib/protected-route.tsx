@@ -3,7 +3,12 @@ import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
-export function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+interface ProtectedRouteProps {
+  children?: React.ReactNode;
+  component?: React.ComponentType;
+}
+
+export function ProtectedRoute({ children, component: Component }: ProtectedRouteProps) {
   const [, setLocation] = useLocation();
   const { user, isLoading } = useAuth();
 
@@ -25,5 +30,9 @@ export function ProtectedRoute({ component: Component }: { component: React.Comp
     return null;
   }
 
-  return <Component />;
+  if (Component) {
+    return <Component />;
+  }
+
+  return <>{children}</>;
 }

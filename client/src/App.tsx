@@ -13,19 +13,83 @@ import CalendarEvents from "@/pages/calendar-events";
 import ProfileSettings from "@/pages/profile-settings";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
+import { Layout } from "@/components/layout";
 
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/signup" component={SignUp} />
-      <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
-      <Route path="/meetings" component={() => <ProtectedRoute component={MeetingList} />} />
-      <Route path="/meetings/new" component={() => <ProtectedRoute component={MeetingForm} />} />
-      <Route path="/meetings/:id" component={() => <ProtectedRoute component={MeetingDetails} />} />
-      <Route path="/meetings/:id/edit" component={() => <ProtectedRoute component={MeetingForm} />} />
-      <Route path="/calendar" component={() => <ProtectedRoute component={CalendarEvents} />} />
-      <Route path="/profile/settings" component={() => <ProtectedRoute component={ProfileSettings} />} />
+      <Route 
+        path="/" 
+        component={() => (
+          <ProtectedRoute>
+            <Layout>
+              <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        )} 
+      />
+      <Route 
+        path="/meetings" 
+        component={() => (
+          <ProtectedRoute>
+            <Layout>
+              <MeetingList />
+            </Layout>
+          </ProtectedRoute>
+        )} 
+      />
+      <Route 
+        path="/meetings/new" 
+        component={() => (
+          <ProtectedRoute>
+            <Layout>
+              <MeetingForm />
+            </Layout>
+          </ProtectedRoute>
+        )} 
+      />
+      <Route 
+        path="/meetings/:id" 
+        component={() => (
+          <ProtectedRoute>
+            <Layout>
+              <MeetingDetails />
+            </Layout>
+          </ProtectedRoute>
+        )} 
+      />
+      <Route 
+        path="/meetings/:id/edit" 
+        component={() => (
+          <ProtectedRoute>
+            <Layout>
+              <MeetingForm />
+            </Layout>
+          </ProtectedRoute>
+        )} 
+      />
+      <Route 
+        path="/calendar" 
+        component={() => (
+          <ProtectedRoute>
+            <Layout>
+              <CalendarEvents />
+            </Layout>
+          </ProtectedRoute>
+        )} 
+      />
+      <Route 
+        path="/profile/settings" 
+        component={() => (
+          <ProtectedRoute>
+            <Layout>
+              <ProfileSettings />
+            </Layout>
+          </ProtectedRoute>
+        )} 
+      />
       <Route component={NotFound} />
     </Switch>
   );

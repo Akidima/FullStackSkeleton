@@ -17,6 +17,7 @@ import { insertUserSchema, type InsertUser } from "@shared/schema";
 import { LoadingSpinner } from "@/components/ui/loading-skeleton";
 import { Bell, Mail, Calendar, CheckCircle } from "lucide-react";
 import { z } from "zod";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 
 // Define notification preferences schema
 const notificationPreferencesSchema = z.object({
@@ -127,7 +128,9 @@ export default function ProfileSettings() {
                       name="displayName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Display Name</FormLabel>
+                          <HelpTooltip context="profile.displayName">
+                            <FormLabel>Display Name</FormLabel>
+                          </HelpTooltip>
                           <FormControl>
                             <Input {...field} />
                           </FormControl>
@@ -141,7 +144,9 @@ export default function ProfileSettings() {
                       name="bio"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Bio</FormLabel>
+                          <HelpTooltip context="profile.bio">
+                            <FormLabel>Bio</FormLabel>
+                          </HelpTooltip>
                           <FormControl>
                             <Textarea {...field} />
                           </FormControl>
@@ -206,7 +211,9 @@ export default function ProfileSettings() {
                       name="theme"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Theme</FormLabel>
+                          <HelpTooltip context="profile.theme">
+                            <FormLabel>Theme</FormLabel>
+                          </HelpTooltip>
                           <Select 
                             onValueChange={field.onChange} 
                             defaultValue={field.value}
@@ -232,7 +239,9 @@ export default function ProfileSettings() {
                       name="language"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Language</FormLabel>
+                          <HelpTooltip context="profile.language">
+                            <FormLabel>Language</FormLabel>
+                          </HelpTooltip>
                           <Select 
                             onValueChange={field.onChange} 
                             defaultValue={field.value}

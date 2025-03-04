@@ -1,65 +1,54 @@
-import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus } from "lucide-react";
-import { Meeting } from "@shared/schema";
 import { Progress } from "@/components/ui/progress";
-import { MeetingCardSkeleton } from "@/components/ui/loading-skeleton";
+import { Plus, Calendar, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { Meeting } from "@shared/schema";
 import { toast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
 
 export default function Dashboard() {
-  const { data: meetings = [], isLoading, error } = useQuery<Meeting[]>({
+  // Fetch meetings
+  const { data: meetings = [], isLoading: meetingsLoading } = useQuery<Meeting[]>({
     queryKey: ["/api/meetings"],
-    queryFn: async () => {
-      try {
-        const response = await fetch("/api/meetings");
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        return data || [];
-      } catch (error) {
-        console.error("Failed to fetch meetings:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load meetings. Please try again later.",
-          variant: "destructive",
-        });
-        throw error;
-      }
-    },
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
-  // Calculate completion metrics
-  const completedMeetings = meetings.filter(m => m.isCompleted).length;
-  const completionRate = meetings.length ? (completedMeetings / meetings.length) * 100 : 0;
+  // Fetch tasks with progress
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
+    queryKey: ["/api/tasks"],
+  });
 
-  if (isLoading) {
-    return (
-      <div className="space-y-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-4xl font-bold">Dashboard</h1>
-          <Button disabled>
-            <Plus className="h-4 w-4 mr-2" />
-            Schedule Meeting
-          </Button>
-        </div>
-        <div className="grid gap-6 md:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <MeetingCardSkeleton key={i} />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  // Fetch recent meeting notes
+  const { data: recentNotes = [], isLoading: notesLoading } = useQuery({
+    queryKey: ["/api/meetings/notes"],
+  });
+
+  const upcomingMeetings = meetings
+    .filter(m => new Date(m.date) > new Date())
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 5);
+
+  const completedTasks = tasks.filter(t => t.completed).length;
+  const completionRate = tasks.length ? (completedTasks / tasks.length) * 100 : 0;
+
+  const priorityColors = {
+    high: "bg-red-500",
+    medium: "bg-yellow-500",
+    low: "bg-green-500",
+  };
 
   return (
     <div className="space-y-8">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-4xl font-bold">Dashboard</h1>
+        <div>
+          <h1 className="text-4xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground mt-2">
+            Welcome back! Here's what's happening today.
+          </p>
+        </div>
         <Link href="/meetings/new">
           <Button>
             <Plus className="h-4 w-4 mr-2" />
@@ -68,43 +57,149 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Metrics Overview */}
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card>
+      {/* Main Grid */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {/* Upcoming Meetings Widget */}
+        <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-lg">Total Meetings</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              Upcoming Meetings
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{meetings.length}</div>
-            <Progress value={completionRate} className="mt-2" />
-            <p className="text-sm text-muted-foreground mt-2">
-              {completedMeetings} completed
-            </p>
+            {meetingsLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-16 bg-muted animate-pulse rounded" />
+                ))}
+              </div>
+            ) : upcomingMeetings.length > 0 ? (
+              <div className="space-y-4">
+                {upcomingMeetings.map(meeting => (
+                  <Link key={meeting.id} href={`/meetings/${meeting.id}`}>
+                    <div className="p-4 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold">{meeting.title || "Untitled Meeting"}</h3>
+                        <span className="text-sm text-muted-foreground">
+                          {format(new Date(meeting.date), "MMM d, h:mm a")}
+                        </span>
+                      </div>
+                      {meeting.description && (
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                          {meeting.description}
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center py-8">
+                No upcoming meetings scheduled
+              </p>
+            )}
           </CardContent>
         </Card>
 
+        {/* Action Items Progress Widget */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Action Items</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-primary" />
+              Action Items
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">0</div>
-            <Progress value={0} className="mt-2" />
-            <p className="text-sm text-muted-foreground mt-2">
-              0 completed
-            </p>
+            {tasksLoading ? (
+              <div className="space-y-4">
+                <div className="h-4 bg-muted animate-pulse rounded" />
+                <div className="h-2 bg-muted animate-pulse rounded" />
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-2xl font-bold">{completedTasks}/{tasks.length}</span>
+                  <span className="text-muted-foreground">completed</span>
+                </div>
+                <Progress value={completionRate} className="mb-4" />
+                <div className="space-y-2">
+                  {tasks.slice(0, 3).map(task => (
+                    <div key={task.id} className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${priorityColors[task.priority]}`} />
+                      <span className={task.completed ? "line-through text-muted-foreground" : ""}>
+                        {task.title}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
+        {/* Recent Notes Widget */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Upcoming Meetings</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-primary" />
+              Recent Notes & Decisions
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">0</div>
-            <p className="text-sm text-muted-foreground mt-2">
-              No upcoming meetings
-            </p>
+            {notesLoading ? (
+              <div className="space-y-4">
+                {[1, 2].map(i => (
+                  <div key={i} className="h-20 bg-muted animate-pulse rounded" />
+                ))}
+              </div>
+            ) : recentNotes.length > 0 ? (
+              <div className="space-y-4">
+                {recentNotes.map(note => (
+                  <div key={note.id} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{note.meetingTitle}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {format(new Date(note.createdAt), "MMM d")}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{note.content}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center py-8">
+                No recent notes available
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Action Items Summary Widget */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-primary" />
+              Action Items Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Object.entries(
+                tasks.reduce((acc, task) => {
+                  acc[task.priority] = (acc[task.priority] || 0) + 1;
+                  return acc;
+                }, {})
+              ).map(([priority, count]) => (
+                <div key={priority} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${priorityColors[priority]}`} />
+                    <span className="capitalize">{priority}</span>
+                  </div>
+                  <Badge variant="secondary">{count}</Badge>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>

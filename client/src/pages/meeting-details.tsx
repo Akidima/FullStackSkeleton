@@ -3,11 +3,12 @@ import { useRoute, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Calendar, Clock, Users, ArrowLeft, FileText, CheckCircle2, Loader2 } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, FileText, CheckCircle2 } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { LoadingSpinner, MeetingCardSkeleton } from "@/components/ui/loading-skeleton";
 
 export default function MeetingDetails() {
   const [, params] = useRoute("/meetings/:id");
@@ -55,10 +56,12 @@ export default function MeetingDetails() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-center h-96">
-            <Loader2 className="h-8 w-8 animate-spin" />
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="h-10 w-32 bg-muted animate-pulse rounded" />
+            <div className="h-10 w-40 bg-muted animate-pulse rounded" />
           </div>
+          <MeetingCardSkeleton />
         </div>
       </div>
     );
@@ -100,11 +103,11 @@ export default function MeetingDetails() {
               className="gap-2"
             >
               {generateSummary.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <LoadingSpinner size="small" className="text-white" />
               ) : (
                 <FileText className="h-4 w-4" />
               )}
-              Generate Summary
+              {generateSummary.isPending ? "Generating..." : "Generate Summary"}
             </Button>
           )}
         </div>

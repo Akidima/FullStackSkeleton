@@ -3,11 +3,12 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Calendar, Plus, Loader2, Users, CheckCircle2, Clock, Search } from "lucide-react";
+import { Calendar, Plus, Users, CheckCircle2, Clock, Search } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { MeetingCardSkeleton } from "@/components/ui/loading-skeleton";
 
 export default function MeetingList() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,7 +28,7 @@ export default function MeetingList() {
   });
 
   const filteredMeetings = meetings.filter(meeting => 
-    meeting.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    meeting.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     meeting.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -35,26 +36,27 @@ export default function MeetingList() {
     return (
       <div className="min-h-screen bg-background p-6">
         <div className="max-w-4xl mx-auto space-y-6">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader className="pb-2">
-                <div className="h-6 bg-muted rounded w-1/3"></div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="h-4 bg-muted rounded w-1/4"></div>
-                  <div className="h-4 bg-muted rounded w-1/2"></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          <div className="flex flex-col gap-6 mb-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Calendar className="h-8 w-8 text-primary animate-pulse" />
+                <div className="h-8 w-48 bg-muted animate-pulse rounded" />
+              </div>
+              <div className="h-10 w-32 bg-muted animate-pulse rounded" />
+            </div>
+            <div className="h-10 bg-muted animate-pulse rounded" />
+          </div>
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <MeetingCardSkeleton key={i} />
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   if (error) {
-    console.error("Meeting list error:", error);
     return (
       <div className="flex flex-col justify-center items-center min-h-screen gap-4">
         <p className="text-red-500">Error loading meetings</p>

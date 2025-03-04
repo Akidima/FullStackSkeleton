@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Calendar, Clock, Users, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
+import { Calendar, Plus, Users, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
 import { Progress } from "@/components/ui/progress";

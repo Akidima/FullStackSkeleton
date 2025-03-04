@@ -27,7 +27,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">
-        <Sidebar>
+        <Sidebar variant="sidebar" collapsible="icon">
           <SidebarHeader className="flex items-center justify-between">
             <div className="flex items-center gap-2 px-2">
               <Calendar className="h-6 w-6 text-primary" />
@@ -38,39 +38,39 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <SidebarContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  as={Link}
-                  href="/"
-                  isActive={location === "/"}
-                  tooltip="Dashboard"
-                >
-                  <LayoutDashboard />
-                  <span>Dashboard</span>
-                </SidebarMenuButton>
+                <Link href="/">
+                  <SidebarMenuButton
+                    isActive={location === "/"}
+                    tooltip="Dashboard"
+                  >
+                    <LayoutDashboard />
+                    <span>Dashboard</span>
+                  </SidebarMenuButton>
+                </Link>
               </SidebarMenuItem>
 
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  as={Link}
-                  href="/meetings"
-                  isActive={location.startsWith("/meetings")}
-                  tooltip="Meetings"
-                >
-                  <Calendar />
-                  <span>Meetings</span>
-                </SidebarMenuButton>
+                <Link href="/meetings">
+                  <SidebarMenuButton
+                    isActive={location.startsWith("/meetings")}
+                    tooltip="Meetings"
+                  >
+                    <Calendar />
+                    <span>Meetings</span>
+                  </SidebarMenuButton>
+                </Link>
               </SidebarMenuItem>
 
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  as={Link}
-                  href="/calendar"
-                  isActive={location === "/calendar"}
-                  tooltip="Calendar"
-                >
-                  <Calendar />
-                  <span>Calendar</span>
-                </SidebarMenuButton>
+                <Link href="/calendar">
+                  <SidebarMenuButton
+                    isActive={location === "/calendar"}
+                    tooltip="Calendar"
+                  >
+                    <Calendar />
+                    <span>Calendar</span>
+                  </SidebarMenuButton>
+                </Link>
               </SidebarMenuItem>
 
               <SidebarMenuItem>
@@ -90,15 +90,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="mt-auto">
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    as={Link}
-                    href="/profile/settings"
-                    isActive={location === "/profile/settings"}
-                    tooltip="Settings"
-                  >
-                    <Settings />
-                    <span>Settings</span>
-                  </SidebarMenuButton>
+                  <Link href="/profile/settings">
+                    <SidebarMenuButton
+                      isActive={location === "/profile/settings"}
+                      tooltip="Settings"
+                    >
+                      <Settings />
+                      <span>Settings</span>
+                    </SidebarMenuButton>
+                  </Link>
                 </SidebarMenuItem>
               </SidebarMenu>
             </div>

@@ -6,15 +6,16 @@ import { ZodError } from "zod";
 import { errorHandler, asyncHandler } from "./middleware/errorHandler";
 import { NotFoundError, ValidationError } from "./errors/AppError";
 import { AgendaService } from "./services/agenda";
+import { generateMeetingInsights, batchSummarize } from "./services/summarize";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
-  app.get("/api/meetings", asyncHandler(async (req, res) => {
+  app.get("/api/meetings", asyncHandler(async (req: Request, res: Response) => {
     const meetings = await storage.getMeetings();
     res.json(meetings);
   }));
 
-  app.post("/api/meetings", asyncHandler(async (req, res) => {
+  app.post("/api/meetings", asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetingData = insertMeetingSchema.parse(req.body);
       const meeting = await storage.createMeeting(meetingData);
@@ -27,8 +28,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  // New endpoint for generating meeting agenda
-  app.post("/api/meetings/generate-agenda", asyncHandler(async (req, res) => {
+  // Generate meeting summary endpoint
+  app.post("/api/meetings/:id/summarize", asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const meeting = await storage.getMeeting(Number(req.params.id));
+      if (!meeting) {
+        throw new NotFoundError("Meeting");
+      }
+
+      const summary = await generateMeetingInsights(meeting);
+
+      // Update the meeting with the new summary
+      const updatedMeeting = await storage.updateMeeting(meeting.id, {
+        summary: summary.summary
+      });
+
+      res.json({
+        meeting: updatedMeeting,
+        summaryDetails: summary
+      });
+    } catch (error) {
+      console.error("Error generating meeting summary:", error);
+      throw error;
+    }
+  }));
+
+  // Generate agenda endpoint
+  app.post("/api/meetings/generate-agenda", asyncHandler(async (req: Request, res: Response) => {
     try {
       const { title, userId, duration = 60 } = req.body;
 
@@ -39,10 +65,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ]);
       }
 
-      // Get past meetings for context
       const pastMeetings = await storage.getUserMeetings(userId);
-
-      // For now, we'll pass an empty array for upcomingTasks since we haven't implemented task storage yet
       const upcomingTasks = [];
 
       const agendaSuggestion = await AgendaService.generateAgenda(
@@ -59,7 +82,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  app.get("/api/meetings/:id", asyncHandler(async (req, res) => {
+  app.get("/api/meetings/:id", asyncHandler(async (req: Request, res: Response) => {
     const meeting = await storage.getMeeting(Number(req.params.id));
     if (!meeting) {
       throw new NotFoundError("Meeting");
@@ -67,7 +90,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(meeting);
   }));
 
-  app.patch("/api/meetings/:id", asyncHandler(async (req, res) => {
+  app.patch("/api/meetings/:id", asyncHandler(async (req: Request, res: Response) => {
     try {
       const meeting = await storage.getMeeting(Number(req.params.id));
       if (!meeting) {
@@ -88,7 +111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  app.delete("/api/meetings/:id", asyncHandler(async (req, res) => {
+  app.delete("/api/meetings/:id", asyncHandler(async (req: Request, res: Response) => {
     const meeting = await storage.getMeeting(Number(req.params.id));
     if (!meeting) {
       throw new NotFoundError("Meeting");

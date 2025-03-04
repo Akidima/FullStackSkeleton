@@ -12,6 +12,7 @@ import { toast } from "@/hooks/use-toast";
 import { LoadingSpinner, MeetingCardSkeleton } from "@/components/ui/loading-skeleton";
 import { MeetingInsights } from "@/components/meeting-insights";
 import { useWebSocket } from "@/hooks/use-websocket";
+import { TaskManager } from "@/components/task-manager";
 
 // Rate limiting configuration
 const RETRY_DELAY = 1000; // Start with 1 second
@@ -362,6 +363,11 @@ export default function MeetingDetails() {
               )}
 
               <MeetingInsights meetingId={parseInt(meetingId!)} />
+
+              <div className="space-y-2">
+                <h3 className="font-semibold">Action Items</h3>
+                <TaskManager meetingId={parseInt(meetingId!)} />
+              </div>
 
               <div className="flex justify-end gap-2">
                 <Link href={`/meetings/${meeting.id}/edit`}>

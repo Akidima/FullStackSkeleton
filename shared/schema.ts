@@ -186,15 +186,58 @@ export const meetingMoods = pgTable("meeting_moods", {
   timestampIdx: index("meeting_moods_timestamp_idx").on(table.timestamp),
 }));
 
+// Enhance the tasks table with more fields for better tracking
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
-  description: text("description").notNull(),
+  description: text("description"),
+  dueDate: timestamp("due_date"),
+  reminderDate: timestamp("reminder_date"),
+  priority: text("priority").notNull().default('medium'), // 'high', 'medium', 'low'
+  status: text("status").notNull().default('pending'), // 'pending', 'in_progress', 'completed', 'blocked'
+  progress: integer("progress").default(0), // 0-100
   completed: boolean("completed").notNull().default(false),
-  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  assigneeId: serial("assignee_id").references(() => users.id, { onDelete: 'set null' }),
+  creatorId: serial("creator_id").references(() => users.id, { onDelete: 'cascade' }),
+  meetingId: serial("meeting_id").references(() => meetings.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  lastNotificationSent: timestamp("last_notification_sent"),
 }, (table) => ({
-  userIdIdx: index("tasks_user_id_idx").on(table.userId),
+  userIdIdx: index("tasks_user_id_idx").on(table.assigneeId),
+  meetingIdIdx: index("tasks_meeting_id_idx").on(table.meetingId),
+  statusIdx: index("tasks_status_idx").on(table.status),
+  dueDateIdx: index("tasks_due_date_idx").on(table.dueDate),
   completedIdx: index("completed_idx").on(table.completed),
+}));
+
+// Add task comments for progress updates and discussions
+export const taskComments = pgTable("task_comments", {
+  id: serial("id").primaryKey(),
+  taskId: serial("task_id").references(() => tasks.id, { onDelete: 'cascade' }),
+  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  type: text("type").notNull().default('comment'), // 'comment', 'progress_update', 'status_change'
+}, (table) => ({
+  taskIdIdx: index("task_comments_task_id_idx").on(table.taskId),
+  userIdIdx: index("task_comments_user_id_idx").on(table.userId),
+}));
+
+// Add task notifications for reminders and updates
+export const taskNotifications = pgTable("task_notifications", {
+  id: serial("id").primaryKey(),
+  taskId: serial("task_id").references(() => tasks.id, { onDelete: 'cascade' }),
+  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  type: text("type").notNull(), // 'due_soon', 'overdue', 'status_change', 'assigned', 'completed'
+  message: text("message").notNull(),
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  taskIdIdx: index("task_notifications_task_id_idx").on(table.taskId),
+  userIdIdx: index("task_notifications_user_id_idx").on(table.userId),
+  readIdx: index("task_notifications_read_idx").on(table.read),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -224,11 +267,21 @@ export const meetingsRelations = relations(meetings, ({ one }) => ({
   }),
 }));
 
-export const tasksRelations = relations(tasks, ({ one }) => ({
-  user: one(users, {
-    fields: [tasks.userId],
+export const tasksRelations = relations(tasks, ({ one, many }) => ({
+  assignee: one(users, {
+    fields: [tasks.assigneeId],
     references: [users.id],
   }),
+  creator: one(users, {
+    fields: [tasks.creatorId],
+    references: [users.id],
+  }),
+  meeting: one(meetings, {
+    fields: [tasks.meetingId],
+    references: [meetings.id],
+  }),
+  comments: many(taskComments),
+  notifications: many(taskNotifications),
 }));
 
 export const securityRecommendationsRelations = relations(securityRecommendations, ({ one }) => ({
@@ -280,6 +333,28 @@ export const meetingMoodsRelations = relations(meetingMoods, ({ one }) => ({
   }),
 }));
 
+export const taskCommentsRelations = relations(taskComments, ({ one }) => ({
+  task: one(tasks, {
+    fields: [taskComments.taskId],
+    references: [tasks.id],
+  }),
+  user: one(users, {
+    fields: [taskComments.userId],
+    references: [users.id],
+  }),
+}));
+
+export const taskNotificationsRelations = relations(taskNotifications, ({ one }) => ({
+  task: one(tasks, {
+    fields: [taskNotifications.taskId],
+    references: [tasks.id],
+  }),
+  user: one(users, {
+    fields: [taskNotifications.userId],
+    references: [users.id],
+  }),
+}));
+
 export const insertUserSchema = createInsertSchema(users)
   .extend({
     email: z.string()
@@ -327,7 +402,22 @@ export const loginUserSchema = z.object({
 
 export const updateUserSchema = createInsertSchema(users).partial();
 
-export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true });
+export const insertTaskSchema = createInsertSchema(tasks)
+  .extend({
+    dueDate: z.string().transform(str => new Date(str)).optional(),
+    reminderDate: z.string().transform(str => new Date(str)).optional(),
+    priority: z.enum(['high', 'medium', 'low']).default('medium'),
+    status: z.enum(['pending', 'in_progress', 'completed', 'blocked']).default('pending'),
+    progress: z.number().min(0).max(100).default(0),
+  })
+  .omit({ 
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+    completedAt: true,
+    lastNotificationSent: true,
+  });
+
 export const updateTaskSchema = createInsertSchema(tasks).partial();
 export const insertMeetingSchema = createInsertSchema(meetings)
   .extend({
@@ -403,6 +493,20 @@ export const insertMeetingMoodSchema = createInsertSchema(meetingMoods)
     moodLabels: z.array(z.string()),
   });
 
+// Add new insert schemas
+export const insertTaskCommentSchema = createInsertSchema(taskComments)
+  .extend({
+    type: z.enum(['comment', 'progress_update', 'status_change']).default('comment'),
+  })
+  .omit({ id: true, createdAt: true });
+
+export const insertTaskNotificationSchema = createInsertSchema(taskNotifications)
+  .extend({
+    type: z.enum(['due_soon', 'overdue', 'status_change', 'assigned', 'completed']),
+  })
+  .omit({ id: true, createdAt: true });
+
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -435,3 +539,7 @@ export type InsertMeetingOutcome = z.infer<typeof insertMeetingOutcomeSchema>;
 // Add to existing type exports
 export type MeetingMood = typeof meetingMoods.$inferSelect;
 export type InsertMeetingMood = z.infer<typeof insertMeetingMoodSchema>;
+export type TaskComment = typeof taskComments.$inferSelect;
+export type InsertTaskComment = z.infer<typeof insertTaskCommentSchema>;
+export type TaskNotification = typeof taskNotifications.$inferSelect;
+export type InsertTaskNotification = z.infer<typeof insertTaskNotificationSchema>;

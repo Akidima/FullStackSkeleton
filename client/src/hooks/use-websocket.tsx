@@ -16,43 +16,67 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    const ws = new WebSocket(wsUrl);
+    const host = window.location.hostname;
+    const port = window.location.port || '5000'; // Default to server port if client port is not available
+    const wsUrl = `${protocol}//${host}:${port}/ws`;
 
-    ws.addEventListener('open', () => {
-      console.log('WebSocket connected');
-      setIsConnected(true);
-      setSocket(ws);
-    });
+    let reconnectTimeout: NodeJS.Timeout;
+    let ws: WebSocket;
 
-    ws.addEventListener('message', (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type.startsWith('meeting:')) {
-        // Invalidate meetings query to trigger a refetch
-        queryClient.invalidateQueries({ queryKey: ['/api/meetings'] });
+    function connect() {
+      ws = new WebSocket(wsUrl);
 
-        const messages = {
-          'meeting:create': 'New meeting created',
-          'meeting:update': 'Meeting updated',
-          'meeting:delete': 'Meeting deleted',
-          'meeting:notes': 'Meeting notes updated'
-        };
+      ws.addEventListener('open', () => {
+        console.log('WebSocket connected');
+        setIsConnected(true);
+        setSocket(ws);
+      });
 
-        toast({
-          title: 'Meeting Update',
-          description: messages[data.type as keyof typeof messages]
-        });
-      }
-    });
+      ws.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type.startsWith('meeting:')) {
+            // Invalidate meetings query to trigger a refetch
+            queryClient.invalidateQueries({ queryKey: ['/api/meetings'] });
 
-    ws.addEventListener('close', () => {
-      console.log('WebSocket disconnected');
-      setIsConnected(false);
-      setSocket(null);
-    });
+            const messages = {
+              'meeting:create': 'New meeting created',
+              'meeting:update': 'Meeting updated',
+              'meeting:delete': 'Meeting deleted',
+              'meeting:notes': 'Meeting notes updated'
+            };
+
+            toast({
+              title: 'Meeting Update',
+              description: messages[data.type as keyof typeof messages]
+            });
+          }
+        } catch (error) {
+          console.error('Failed to parse WebSocket message:', error);
+        }
+      });
+
+      ws.addEventListener('close', () => {
+        console.log('WebSocket disconnected, attempting to reconnect...');
+        setIsConnected(false);
+        setSocket(null);
+
+        // Attempt to reconnect after 2 seconds
+        reconnectTimeout = setTimeout(connect, 2000);
+      });
+
+      ws.addEventListener('error', (error) => {
+        console.error('WebSocket error:', error);
+      });
+    }
+
+    connect();
 
     return () => {
-      ws.close();
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.close();
+      }
     };
   }, [queryClient]);
 

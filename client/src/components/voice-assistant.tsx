@@ -17,6 +17,8 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState<string[]>([]);
+  const [isTranscriberReady, setIsTranscriberReady] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const transcriber = useRef<any>(null);
@@ -25,8 +27,11 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
     const initializeTranscriber = async () => {
       try {
         transcriber.current = await pipeline('automatic-speech-recognition', 'Xenova/whisper-small');
+        setIsTranscriberReady(true);
+        setInitError(null);
       } catch (error) {
         console.error('Failed to initialize transcriber:', error);
+        setInitError('Failed to initialize voice assistant. Please try refreshing the page.');
         toast({
           title: "Error",
           description: "Failed to initialize voice assistant. Please try again.",
@@ -36,9 +41,26 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
     };
 
     initializeTranscriber();
+
+    // Cleanup function
+    return () => {
+      if (mediaRecorder.current && isRecording) {
+        mediaRecorder.current.stop();
+        mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
+      }
+    };
   }, []);
 
   const startRecording = async () => {
+    if (!isTranscriberReady) {
+      toast({
+        title: "Error",
+        description: "Voice assistant is not ready yet. Please wait.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorder.current = new MediaRecorder(stream);
@@ -81,7 +103,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
       // Convert audio blob to array buffer for processing
       const arrayBuffer = await audioBlob.arrayBuffer();
       const result = await transcriber.current(arrayBuffer);
-      
+
       if (result.text) {
         setTranscript(prev => [...prev, result.text]);
         onTranscript?.(result.text);
@@ -107,6 +129,38 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   };
 
   if (!isActive) return null;
+
+  if (initError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mic className="h-5 w-5" />
+            Voice Assistant Error
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-destructive">{initError}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!isTranscriberReady) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Initializing Voice Assistant
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">Please wait while we set up the voice assistant...</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

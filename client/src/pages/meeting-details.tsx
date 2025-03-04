@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -96,7 +96,7 @@ export default function MeetingDetails() {
   });
 
   // Handle real-time collaboration
-  React.useEffect(() => {
+  useEffect(() => {
     if (!socket || !meetingId) return;
 
     socket.emit('join-meeting', meetingId);
@@ -174,7 +174,7 @@ export default function MeetingDetails() {
                 )}
               </Button>
             ) : notes && !meeting.summary && (
-              <Button 
+              <Button
                 onClick={() => generateSummary.mutate()}
                 disabled={generateSummary.isPending}
                 className="gap-2"

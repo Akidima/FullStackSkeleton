@@ -60,12 +60,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // Room Management Routes
-  app.get("/api/rooms", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/rooms", asyncHandler(async (req: Request, res: Response) => {
     const rooms = await storage.getRooms();
     res.json(rooms);
   }));
 
-  app.get("/api/rooms/available", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/rooms/available", asyncHandler(async (req: Request, res: Response) => {
     const { startTime, endTime, capacity } = req.query;
 
     if (!startTime || !endTime) {

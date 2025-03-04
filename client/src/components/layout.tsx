@@ -25,9 +25,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen">
-        <Sidebar variant="sidebar" collapsible="icon">
+    <SidebarProvider defaultOpen={true}>
+      <div className="flex min-h-screen bg-background">
+        <Sidebar variant="inset" collapsible="icon">
           <SidebarHeader className="flex items-center justify-between">
             <div className="flex items-center gap-2 px-2">
               <Calendar className="h-6 w-6 text-primary" />
@@ -72,19 +72,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="w-full justify-start gap-2"
-                >
-                  <Link href="/meetings/new">
-                    <Plus className="h-4 w-4" />
-                    New Meeting
-                  </Link>
-                </Button>
-              </SidebarMenuItem>
             </SidebarMenu>
 
             <div className="mt-auto">
@@ -105,7 +92,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </SidebarContent>
         </Sidebar>
 
-        <main className="flex-1 overflow-x-hidden bg-background">{children}</main>
+        <main className="flex-1 overflow-x-hidden">{children}</main>
       </div>
     </SidebarProvider>
   );

@@ -13,6 +13,7 @@ import CalendarEvents from "@/pages/calendar-events";
 import ProfileSettings from "@/pages/profile-settings";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
+import { Layout } from "@/components/layout";
 
 function Router() {
   return (
@@ -23,7 +24,9 @@ function Router() {
         path="/" 
         component={() => (
           <ProtectedRoute>
-            <Dashboard />
+            <Layout>
+              <Dashboard />
+            </Layout>
           </ProtectedRoute>
         )} 
       />
@@ -31,7 +34,9 @@ function Router() {
         path="/meetings" 
         component={() => (
           <ProtectedRoute>
-            <MeetingList />
+            <Layout>
+              <MeetingList />
+            </Layout>
           </ProtectedRoute>
         )} 
       />
@@ -39,7 +44,9 @@ function Router() {
         path="/meetings/new" 
         component={() => (
           <ProtectedRoute>
-            <MeetingForm />
+            <Layout>
+              <MeetingForm />
+            </Layout>
           </ProtectedRoute>
         )} 
       />
@@ -47,7 +54,9 @@ function Router() {
         path="/meetings/:id" 
         component={() => (
           <ProtectedRoute>
-            <MeetingDetails />
+            <Layout>
+              <MeetingDetails />
+            </Layout>
           </ProtectedRoute>
         )} 
       />
@@ -55,7 +64,9 @@ function Router() {
         path="/meetings/:id/edit" 
         component={() => (
           <ProtectedRoute>
-            <MeetingForm />
+            <Layout>
+              <MeetingForm />
+            </Layout>
           </ProtectedRoute>
         )} 
       />
@@ -63,7 +74,9 @@ function Router() {
         path="/calendar" 
         component={() => (
           <ProtectedRoute>
-            <CalendarEvents />
+            <Layout>
+              <CalendarEvents />
+            </Layout>
           </ProtectedRoute>
         )} 
       />
@@ -71,7 +84,9 @@ function Router() {
         path="/profile/settings" 
         component={() => (
           <ProtectedRoute>
-            <ProfileSettings />
+            <Layout>
+              <ProfileSettings />
+            </Layout>
           </ProtectedRoute>
         )} 
       />

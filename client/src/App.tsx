@@ -14,6 +14,7 @@ import ProfileSettings from "@/pages/profile-settings";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { Layout } from "@/components/layout";
+import { WebSocketProvider } from "@/hooks/use-websocket";
 
 function Router() {
   return (
@@ -81,8 +82,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Router />
-        <Toaster />
+        <WebSocketProvider>
+          <Router />
+          <Toaster />
+        </WebSocketProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

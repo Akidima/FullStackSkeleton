@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { ErrorBoundary } from "@/components/error-boundary";
 import NotFound from "@/pages/not-found";
+import Landing from "@/pages/landing";
 import MeetingList from "@/pages/meeting-list";
 import MeetingForm from "@/pages/meeting-form";
 import MeetingDetails from "@/pages/meeting-details";
@@ -20,10 +21,11 @@ import { WebSocketProvider } from "@/hooks/use-websocket";
 function Router() {
   return (
     <Switch>
+      <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={SignUp} />
       <Route 
-        path="/" 
+        path="/dashboard" 
         component={() => (
           <ProtectedRoute>
             <Layout>

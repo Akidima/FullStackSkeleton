@@ -3,18 +3,25 @@ import { useRoute, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { Calendar, Clock, Users, ArrowLeft, FileText, CheckCircle2 } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { LoadingSpinner, MeetingCardSkeleton } from "@/components/ui/loading-skeleton";
+import { MeetingInsights } from "@/components/meeting-insights";
+import { useWebSocket } from "@/hooks/use-websocket";
 
 export default function MeetingDetails() {
   const [, params] = useRoute("/meetings/:id");
   const meetingId = params?.id;
   const queryClient = useQueryClient();
+  const socket = useWebSocket();
+  const [notes, setNotes] = useState("");
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
 
+  // Fetch meeting details
   const { data: meeting, isLoading, error } = useQuery<Meeting>({
     queryKey: [`/api/meetings/${meetingId}`],
     queryFn: async () => {
@@ -22,11 +29,46 @@ export default function MeetingDetails() {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      return response.json();
+      const data = await response.json();
+      setNotes(data.notes || "");
+      return data;
     },
     enabled: !!meetingId,
   });
 
+  // Save notes mutation
+  const saveNotes = useMutation({
+    mutationFn: async (newNotes: string) => {
+      const response = await fetch(`/api/meetings/${meetingId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ notes: newNotes }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to save notes');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/meetings/${meetingId}`] });
+      toast({
+        title: "Notes Saved",
+        description: "Your notes have been saved successfully.",
+      });
+      setIsEditingNotes(false);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to save notes. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Generate summary mutation
   const generateSummary = useMutation({
     mutationFn: async () => {
       const response = await fetch(`/api/meetings/${meetingId}/summarize`, {
@@ -52,6 +94,28 @@ export default function MeetingDetails() {
       });
     },
   });
+
+  // Handle real-time collaboration
+  React.useEffect(() => {
+    if (!socket || !meetingId) return;
+
+    socket.emit('join-meeting', meetingId);
+
+    socket.on('notes-updated', (updatedNotes: string) => {
+      setNotes(updatedNotes);
+    });
+
+    return () => {
+      socket.emit('leave-meeting', meetingId);
+      socket.off('notes-updated');
+    };
+  }, [socket, meetingId]);
+
+  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newNotes = e.target.value;
+    setNotes(newNotes);
+    socket?.emit('update-notes', { meetingId, notes: newNotes });
+  };
 
   if (isLoading) {
     return (
@@ -96,20 +160,34 @@ export default function MeetingDetails() {
               <ArrowLeft className="h-4 w-4" /> Back to Meetings
             </Button>
           </Link>
-          {meeting.notes && !meeting.summary && (
-            <Button 
-              onClick={() => generateSummary.mutate()}
-              disabled={generateSummary.isPending}
-              className="gap-2"
-            >
-              {generateSummary.isPending ? (
-                <LoadingSpinner size="small" className="text-white" />
-              ) : (
-                <FileText className="h-4 w-4" />
-              )}
-              {generateSummary.isPending ? "Generating..." : "Generate Summary"}
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {isEditingNotes ? (
+              <Button
+                onClick={() => saveNotes.mutate(notes)}
+                disabled={saveNotes.isPending}
+                variant="default"
+              >
+                {saveNotes.isPending ? (
+                  <LoadingSpinner size="small" className="text-white" />
+                ) : (
+                  "Save Notes"
+                )}
+              </Button>
+            ) : notes && !meeting.summary && (
+              <Button 
+                onClick={() => generateSummary.mutate()}
+                disabled={generateSummary.isPending}
+                className="gap-2"
+              >
+                {generateSummary.isPending ? (
+                  <LoadingSpinner size="small" className="text-white" />
+                ) : (
+                  <FileText className="h-4 w-4" />
+                )}
+                {generateSummary.isPending ? "Generating..." : "Generate Summary"}
+              </Button>
+            )}
+          </div>
         </div>
 
         <Card>
@@ -148,12 +226,30 @@ export default function MeetingDetails() {
                 </div>
               )}
 
-              {meeting.notes && (
-                <div className="space-y-2">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
                   <h3 className="font-semibold">Notes</h3>
-                  <p className="text-muted-foreground whitespace-pre-wrap">{meeting.notes}</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsEditingNotes(!isEditingNotes)}
+                  >
+                    {isEditingNotes ? "Preview" : "Edit"}
+                  </Button>
                 </div>
-              )}
+                {isEditingNotes ? (
+                  <Textarea
+                    value={notes}
+                    onChange={handleNotesChange}
+                    placeholder="Take meeting notes here..."
+                    className="min-h-[200px]"
+                  />
+                ) : (
+                  <p className="text-muted-foreground whitespace-pre-wrap">
+                    {notes || "No notes taken yet."}
+                  </p>
+                )}
+              </div>
 
               {meeting.summary && (
                 <div className="space-y-2">
@@ -161,6 +257,8 @@ export default function MeetingDetails() {
                   <p className="text-muted-foreground">{meeting.summary}</p>
                 </div>
               )}
+
+              <MeetingInsights meetingId={parseInt(meetingId)} />
 
               <div className="flex justify-end gap-2">
                 <Link href={`/meetings/${meeting.id}/edit`}>

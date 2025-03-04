@@ -17,7 +17,7 @@ import {
   SiSlack,
   SiZoom,
   SiCisco,
-  SiMicrosoft,
+  SiGithub,
 } from "react-icons/si";
 
 export default function Landing() {
@@ -66,22 +66,22 @@ export default function Landing() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative py-20 overflow-hidden">
+      <section className="relative pb-20 pt-32 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-background z-0" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center mb-20">
-            <h1 className="text-4xl sm:text-6xl font-bold tracking-tight mb-6">
-              Easy scheduling <span className="text-primary">ahead</span>
+          <div className="text-center max-w-3xl mx-auto mb-20">
+            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight mb-8 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/80">
+              Easy scheduling ahead
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
+            <p className="text-xl text-muted-foreground mb-12">
               Smarter scheduling with AI-powered insights. Streamline your meetings,
               boost productivity, and make every interaction count.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               {!user && (
                 <Link href="/signup">
-                  <Button size="lg" className="w-full sm:w-auto">
-                    Sign up for free <ArrowRight className="ml-2 h-4 w-4" />
+                  <Button size="lg" className="w-full sm:w-auto text-lg px-8 py-6">
+                    Sign up for free <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
               )}
@@ -89,30 +89,30 @@ export default function Landing() {
           </div>
 
           {/* Integration Logos */}
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground mb-6">
+          <div className="text-center mt-32">
+            <p className="text-sm font-medium text-muted-foreground mb-8">
               Seamlessly connects with your favorite tools
             </p>
-            <div className="flex flex-wrap justify-center gap-8 text-muted-foreground/60">
-              <SiGmail className="h-8 w-8" />
-              <SiGoogle className="h-8 w-8" />
-              <SiSlack className="h-8 w-8" />
-              <SiZoom className="h-8 w-8" />
-              <SiCisco className="h-8 w-8" />
-              <SiMicrosoft className="h-8 w-8" />
+            <div className="flex flex-wrap justify-center gap-12 items-center">
+              <SiGmail className="h-10 w-10 text-muted-foreground/60 hover:text-primary transition-colors" />
+              <SiGoogle className="h-10 w-10 text-muted-foreground/60 hover:text-primary transition-colors" />
+              <SiSlack className="h-10 w-10 text-muted-foreground/60 hover:text-primary transition-colors" />
+              <SiZoom className="h-10 w-10 text-muted-foreground/60 hover:text-primary transition-colors" />
+              <SiCisco className="h-10 w-10 text-muted-foreground/60 hover:text-primary transition-colors" />
+              <SiGithub className="h-10 w-10 text-muted-foreground/60 hover:text-primary transition-colors" />
             </div>
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="py-20 bg-muted/30">
+      <section className="py-32 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold mb-4">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl font-bold mb-6">
               Everything You Need for Better Meetings
             </h2>
-            <p className="text-lg text-muted-foreground">
+            <p className="text-xl text-muted-foreground">
               Powerful features to make every meeting count
             </p>
           </div>
@@ -158,10 +158,10 @@ export default function Landing() {
             ].map((feature, index) => (
               <div
                 key={index}
-                className="bg-background p-6 rounded-lg border hover:shadow-lg transition-shadow"
+                className="bg-background/50 backdrop-blur p-8 rounded-lg border hover:shadow-lg transition-all hover:scale-105"
               >
-                <feature.icon className="h-12 w-12 text-primary mb-4" />
-                <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
+                <feature.icon className="h-12 w-12 text-primary mb-6" />
+                <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>
                 <p className="text-muted-foreground">{feature.description}</p>
               </div>
             ))}
@@ -169,81 +169,41 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="py-20 bg-muted/30">
+      {/* Stats Section with Gradient Cards */}
+      <section className="py-32 bg-gradient-to-b from-background to-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-            <div>
-              <div className="text-4xl font-bold text-primary mb-2">24%</div>
-              <p className="text-muted-foreground">Less time spent scheduling</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 backdrop-blur p-8 rounded-lg border">
+              <div className="text-5xl font-bold text-primary mb-4">24%</div>
+              <p className="text-lg text-muted-foreground">Less time spent scheduling</p>
             </div>
-            <div>
-              <div className="text-4xl font-bold text-primary mb-2">20%</div>
-              <p className="text-muted-foreground">Increase in meeting efficiency</p>
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 backdrop-blur p-8 rounded-lg border">
+              <div className="text-5xl font-bold text-primary mb-4">20%</div>
+              <p className="text-lg text-muted-foreground">Increase in meeting efficiency</p>
             </div>
-            <div>
-              <div className="text-4xl font-bold text-primary mb-2">260%</div>
-              <p className="text-muted-foreground">ROI on meeting management</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold mb-4">Schedule your team in record time</h2>
-            <p className="text-lg text-muted-foreground">
-              Let AI handle the complexities of scheduling while you focus on what matters
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-            <div className="text-center">
-              <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-6">
-                <Globe className="h-6 w-6" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Share your booking page</h3>
-              <p className="text-muted-foreground">
-                Send guests your personalized booking page
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-6">
-                <Calendar className="h-6 w-6" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">They pick a time</h3>
-              <p className="text-muted-foreground">
-                Guests book available time slots that work for everyone
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle className="h-6 w-6" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">The meeting is scheduled</h3>
-              <p className="text-muted-foreground">
-                The event is added to everyone's calendar
-              </p>
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 backdrop-blur p-8 rounded-lg border">
+              <div className="text-5xl font-bold text-primary mb-4">260%</div>
+              <p className="text-lg text-muted-foreground">ROI on meeting management</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-primary text-primary-foreground">
+      <section className="py-32 bg-primary">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold mb-4">Start scheduling smarter today</h2>
-          <p className="text-xl mb-8 text-primary-foreground/90">
-            Join thousands of teams who've improved their meeting efficiency
+          <h2 className="text-4xl font-bold mb-6 text-primary-foreground">
+            Start scheduling smarter today
+          </h2>
+          <p className="text-xl mb-12 text-primary-foreground/90 max-w-2xl mx-auto">
+            Join thousands of teams who've improved their meeting efficiency with our AI-powered scheduling platform.
           </p>
           {!user && (
             <Link href="/signup">
               <Button
                 size="lg"
                 variant="secondary"
-                className="bg-background text-foreground hover:bg-background/90"
+                className="bg-background text-foreground hover:bg-background/90 text-lg px-8 py-6"
               >
                 Get started free
               </Button>
@@ -253,22 +213,22 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-muted/30 py-12">
+      <footer className="bg-muted/30 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
             <div>
-              <h3 className="font-semibold mb-4">Product</h3>
-              <ul className="space-y-2">
+              <h3 className="font-semibold mb-6">Product</h3>
+              <ul className="space-y-4">
                 <li>
                   <Link href="/features">
-                    <span className="text-muted-foreground hover:text-foreground">
+                    <span className="text-muted-foreground hover:text-foreground transition-colors">
                       Features
                     </span>
                   </Link>
                 </li>
                 <li>
                   <Link href="/security">
-                    <span className="text-muted-foreground hover:text-foreground">
+                    <span className="text-muted-foreground hover:text-foreground transition-colors">
                       Security
                     </span>
                   </Link>
@@ -276,18 +236,18 @@ export default function Landing() {
               </ul>
             </div>
             <div>
-              <h3 className="font-semibold mb-4">Solutions</h3>
-              <ul className="space-y-2">
+              <h3 className="font-semibold mb-6">Solutions</h3>
+              <ul className="space-y-4">
                 <li>
                   <Link href="/enterprise">
-                    <span className="text-muted-foreground hover:text-foreground">
+                    <span className="text-muted-foreground hover:text-foreground transition-colors">
                       Enterprise
                     </span>
                   </Link>
                 </li>
                 <li>
                   <Link href="/teams">
-                    <span className="text-muted-foreground hover:text-foreground">
+                    <span className="text-muted-foreground hover:text-foreground transition-colors">
                       Teams
                     </span>
                   </Link>
@@ -295,18 +255,18 @@ export default function Landing() {
               </ul>
             </div>
             <div>
-              <h3 className="font-semibold mb-4">Resources</h3>
-              <ul className="space-y-2">
+              <h3 className="font-semibold mb-6">Resources</h3>
+              <ul className="space-y-4">
                 <li>
                   <Link href="/help">
-                    <span className="text-muted-foreground hover:text-foreground">
+                    <span className="text-muted-foreground hover:text-foreground transition-colors">
                       Help Center
                     </span>
                   </Link>
                 </li>
                 <li>
                   <Link href="/blog">
-                    <span className="text-muted-foreground hover:text-foreground">
+                    <span className="text-muted-foreground hover:text-foreground transition-colors">
                       Blog
                     </span>
                   </Link>
@@ -314,18 +274,18 @@ export default function Landing() {
               </ul>
             </div>
             <div>
-              <h3 className="font-semibold mb-4">Company</h3>
-              <ul className="space-y-2">
+              <h3 className="font-semibold mb-6">Company</h3>
+              <ul className="space-y-4">
                 <li>
                   <Link href="/about">
-                    <span className="text-muted-foreground hover:text-foreground">
+                    <span className="text-muted-foreground hover:text-foreground transition-colors">
                       About Us
                     </span>
                   </Link>
                 </li>
                 <li>
                   <Link href="/contact">
-                    <span className="text-muted-foreground hover:text-foreground">
+                    <span className="text-muted-foreground hover:text-foreground transition-colors">
                       Contact
                     </span>
                   </Link>

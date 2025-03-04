@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, Clock, Users, ArrowLeft, FileText, CheckCircle2 } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, FileText, CheckCircle2, Mic } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ import { LoadingSpinner, MeetingCardSkeleton } from "@/components/ui/loading-ske
 import { MeetingInsights } from "@/components/meeting-insights";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { TaskManager } from "@/components/task-manager";
+import { VoiceAssistant } from "@/components/voice-assistant";
 
 // Rate limiting configuration
 const RETRY_DELAY = 1000; // Start with 1 second
@@ -25,6 +26,7 @@ export default function MeetingDetails() {
   const socket = useWebSocket();
   const [notes, setNotes] = useState("");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [isVoiceAssistantActive, setIsVoiceAssistantActive] = useState(false);
 
   // Fetch meeting details with retry logic
   const { data: meeting, isLoading, error } = useQuery<Meeting>({
@@ -165,6 +167,58 @@ export default function MeetingDetails() {
     }
   };
 
+  const handleVoiceCommand = async (command: string) => {
+    const lowerCommand = command.toLowerCase();
+
+    if (lowerCommand.includes('create task') || lowerCommand.includes('add action item')) {
+      // Extract task details from voice command
+      const taskTitle = command.replace(/create task|add action item/i, '').trim();
+      if (taskTitle) {
+        try {
+          const response = await fetch('/api/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: taskTitle,
+              meetingId: parseInt(meetingId!),
+              status: 'pending',
+              priority: 'medium',
+            }),
+          });
+
+          if (!response.ok) throw new Error('Failed to create task');
+
+          queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+          toast({
+            title: "Task Created",
+            description: `New task added: ${taskTitle}`,
+          });
+        } catch (error) {
+          toast({
+            title: "Error",
+            description: "Failed to create task. Please try again.",
+            variant: "destructive",
+          });
+        }
+      }
+    } else if (lowerCommand.includes('generate summary')) {
+      generateSummary.mutate();
+    }
+  };
+
+  const handleVoiceTranscript = (transcript: string) => {
+    if (!isEditingNotes) setIsEditingNotes(true);
+    setNotes(prev => prev + (prev ? '\n' : '') + transcript);
+
+    if (socket?.socket?.readyState === WebSocket.OPEN) {
+      socket.socket.send(JSON.stringify({
+        type: 'meeting:notes',
+        meetingId,
+        notes: notes + (notes ? '\n' : '') + transcript
+      }));
+    }
+  };
+
   // Update the WebSocket effect
   useEffect(() => {
     if (!socket?.socket || !meetingId) return;
@@ -265,6 +319,14 @@ export default function MeetingDetails() {
             </Button>
           </Link>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsVoiceAssistantActive(!isVoiceAssistantActive)}
+              className="gap-2"
+            >
+              <Mic className="h-4 w-4" />
+              {isVoiceAssistantActive ? "Disable" : "Enable"} Voice Assistant
+            </Button>
             {isEditingNotes ? (
               <Button
                 onClick={() => saveNotes.mutate(notes)}
@@ -293,6 +355,14 @@ export default function MeetingDetails() {
             )}
           </div>
         </div>
+
+        {isVoiceAssistantActive && (
+          <VoiceAssistant
+            isActive={true}
+            onCommand={handleVoiceCommand}
+            onTranscript={handleVoiceTranscript}
+          />
+        )}
 
         <Card>
           <CardHeader>

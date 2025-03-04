@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Calendar, Plus, Users, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
+import { Calendar, Plus, Users, CheckCircle2, AlertCircle, ArrowRight, Clock } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
 import { Progress } from "@/components/ui/progress";
@@ -17,7 +17,7 @@ interface ActionItem {
 }
 
 export default function Dashboard() {
-  const { data: meetings = [], isLoading: meetingsLoading } = useQuery<Meeting[]>({
+  const { data: meetings = [], isLoading } = useQuery<Meeting[]>({
     queryKey: ["/api/meetings"],
     queryFn: async () => {
       const response = await fetch("/api/meetings");
@@ -52,7 +52,7 @@ export default function Dashboard() {
   const completedMeetings = meetings.filter(m => m.isCompleted).length;
   const completionRate = meetings.length ? (completedMeetings / meetings.length) * 100 : 0;
 
-  if (meetingsLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background p-6">
         <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-2">

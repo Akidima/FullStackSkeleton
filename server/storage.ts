@@ -1,4 +1,4 @@
-import { meetings, users, registrationAttempts, securityRecommendations, rooms, calendarEvents, userAvailability, meetingPreferences, type Meeting, type InsertMeeting, type User, type InsertUser, type RegistrationAttempt, type InsertRegistrationAttempt, type SecurityRecommendation, type InsertSecurityRecommendation, type Room, type InsertRoom, type CalendarEvent, type InsertCalendarEvent, type UserAvailability, type InsertUserAvailability, type MeetingPreference, type InsertMeetingPreference } from "@shared/schema";
+import { meetings, users, registrationAttempts, securityRecommendations, rooms, calendarEvents, userAvailability, meetingPreferences, type Meeting, type InsertMeeting, type User, type InsertUser, type RegistrationAttempt, type InsertRegistrationAttempt, type SecurityRecommendation, type InsertSecurityRecommendation, type Room, type InsertRoom, type CalendarEvent, type InsertCalendarEvent, type UserAvailability, type InsertUserAvailability, type MeetingPreference, type InsertMeetingPreference, type MeetingInsight, type InsertMeetingInsight, type MeetingOutcome, type InsertMeetingOutcome } from "@shared/schema";
 import { db, testConnection } from "./db";
 import { eq, desc, and, gte, lte } from "drizzle-orm";
 
@@ -55,6 +55,13 @@ export interface IStorage {
   // Preferences operations
   getMeetingPreferences(userId: number): Promise<MeetingPreference | undefined>;
   setMeetingPreferences(preferences: InsertMeetingPreference): Promise<MeetingPreference>;
+
+  // Meeting insights operations
+  getMeetingInsights(meetingId: number): Promise<MeetingInsight[]>;
+  createMeetingInsight(insight: InsertMeetingInsight): Promise<MeetingInsight>;
+  getRecommendations(): Promise<MeetingInsight[]>;
+  getMeetingOutcomes(meetingId: number): Promise<MeetingOutcome[]>;
+  createMeetingOutcome(outcome: InsertMeetingOutcome): Promise<MeetingOutcome>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -501,6 +508,73 @@ export class DatabaseStorage implements IStorage {
       return created;
     } catch (error) {
       console.error('Error setting meeting preferences:', error);
+      throw error;
+    }
+  }
+
+  async getMeetingInsights(meetingId: number): Promise<MeetingInsight[]> {
+    try {
+      return await db
+        .select()
+        .from(meetingInsights)
+        .where(eq(meetingInsights.meetingId, meetingId))
+        .orderBy(desc(meetingInsights.relevanceScore));
+    } catch (error) {
+      console.error(`Error fetching insights for meeting ${meetingId}:`, error);
+      throw error;
+    }
+  }
+
+  async createMeetingInsight(insight: InsertMeetingInsight): Promise<MeetingInsight> {
+    try {
+      const [createdInsight] = await db
+        .insert(meetingInsights)
+        .values(insight)
+        .returning();
+      return createdInsight;
+    } catch (error) {
+      console.error('Error creating meeting insight:', error);
+      throw error;
+    }
+  }
+
+  async getRecommendations(): Promise<MeetingInsight[]> {
+    try {
+      // Get general recommendations and best practices
+      return await db
+        .select()
+        .from(meetingInsights)
+        .where(eq(meetingInsights.category, 'best_practice'))
+        .orderBy(desc(meetingInsights.relevanceScore))
+        .limit(5);
+    } catch (error) {
+      console.error('Error fetching recommendations:', error);
+      throw error;
+    }
+  }
+
+  async getMeetingOutcomes(meetingId: number): Promise<MeetingOutcome[]> {
+    try {
+      return await db
+        .select()
+        .from(meetingOutcomes)
+        .where(eq(meetingOutcomes.meetingId, meetingId))
+        .orderBy(desc(meetingOutcomes.createdAt));
+    } catch (error) {
+      console.error(`Error fetching outcomes for meeting ${meetingId}:`, error);
+      throw error;
+    }
+  }
+
+  async createMeetingOutcome(outcome: InsertMeetingOutcome): Promise<MeetingOutcome> {
+    try {
+      const [createdOutcome] = await db
+        .insert(meetingOutcomes)
+        .values(outcome)
+        .returning();
+      return createdOutcome;
+    } catch (error) {
+      console.error('Error creating meeting outcome:', error);
       throw error;
     }
   }

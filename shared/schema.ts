@@ -127,22 +127,6 @@ export const meetingPreferences = pgTable("meeting_preferences", {
   userIdIdx: index("meeting_preferences_user_id_idx").on(table.userId),
 }));
 
-export const usersRelations = relations(users, ({ many }) => ({
-  meetings: many(meetings),
-  securityRecommendations: many(securityRecommendations),
-  preferences: many(userPreferences),
-  calendarEvents: many(calendarEvents),
-  userAvailability: many(userAvailability),
-  meetingPreferences: many(meetingPreferences),
-}));
-
-export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
-  user: one(users, {
-    fields: [userPreferences.userId],
-    references: [users.id],
-  }),
-}));
-
 export const meetings = pgTable("meetings", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -159,6 +143,49 @@ export const meetings = pgTable("meetings", {
   dateIdx: index("date_idx").on(table.date),
   userIdIdx: index("user_id_idx").on(table.userId),
   roomIdIdx: index("room_id_idx").on(table.roomId),
+}));
+
+// Add after the meetings table definition
+export const meetingInsights = pgTable("meeting_insights", {
+  id: serial("id").primaryKey(),
+  meetingId: serial("meeting_id").references(() => meetings.id, { onDelete: 'cascade' }),
+  insight: text("insight").notNull(),
+  category: text("category").notNull(), // 'policy', 'historical', 'best_practice'
+  relevanceScore: integer("relevance_score").notNull(),
+  source: text("source"), // Where this insight came from
+  appliedAt: timestamp("applied_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  meetingIdIdx: index("meeting_insights_meeting_id_idx").on(table.meetingId),
+  categoryIdx: index("meeting_insights_category_idx").on(table.category),
+}));
+
+export const meetingOutcomes = pgTable("meeting_outcomes", {
+  id: serial("id").primaryKey(),
+  meetingId: serial("meeting_id").references(() => meetings.id, { onDelete: 'cascade' }),
+  outcome: text("outcome").notNull(),
+  effectiveness: integer("effectiveness").notNull(), // 1-10 rating
+  participantFeedback: text("participant_feedback").array(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  meetingIdIdx: index("meeting_outcomes_meeting_id_idx").on(table.meetingId),
+}));
+
+
+export const usersRelations = relations(users, ({ many }) => ({
+  meetings: many(meetings),
+  securityRecommendations: many(securityRecommendations),
+  preferences: many(userPreferences),
+  calendarEvents: many(calendarEvents),
+  userAvailability: many(userAvailability),
+  meetingPreferences: many(meetingPreferences),
+}));
+
+export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [userPreferences.userId],
+    references: [users.id],
+  }),
 }));
 
 export const meetingsRelations = relations(meetings, ({ one }) => ({
@@ -216,6 +243,20 @@ export const calendarEventsRelations = relations(calendarEvents, ({ one }) => ({
   }),
 }));
 
+// Add to existing relations
+export const meetingInsightsRelations = relations(meetingInsights, ({ one }) => ({
+  meeting: one(meetings, {
+    fields: [meetingInsights.meetingId],
+    references: [meetings.id],
+  }),
+}));
+
+export const meetingOutcomesRelations = relations(meetingOutcomes, ({ one }) => ({
+  meeting: one(meetings, {
+    fields: [meetingOutcomes.meetingId],
+    references: [meetings.id],
+  }),
+}));
 
 export const insertUserSchema = createInsertSchema(users)
   .extend({
@@ -324,6 +365,13 @@ export const insertCalendarEventSchema = createInsertSchema(calendarEvents)
 export const insertUserAvailabilitySchema = createInsertSchema(userAvailability).omit({ id: true });
 export const insertMeetingPreferenceSchema = createInsertSchema(meetingPreferences).omit({ id: true });
 
+// Add after existing schemas
+export const insertMeetingInsightSchema = createInsertSchema(meetingInsights)
+  .omit({ id: true, createdAt: true, appliedAt: true });
+
+export const insertMeetingOutcomeSchema = createInsertSchema(meetingOutcomes)
+  .omit({ id: true, createdAt: true });
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -348,3 +396,7 @@ export type UserAvailability = typeof userAvailability.$inferSelect;
 export type InsertUserAvailability = z.infer<typeof insertUserAvailabilitySchema>;
 export type MeetingPreference = typeof meetingPreferences.$inferSelect;
 export type InsertMeetingPreference = z.infer<typeof insertMeetingPreferenceSchema>;
+export type MeetingInsight = typeof meetingInsights.$inferSelect;
+export type InsertMeetingInsight = z.infer<typeof insertMeetingInsightSchema>;
+export type MeetingOutcome = typeof meetingOutcomes.$inferSelect;
+export type InsertMeetingOutcome = z.infer<typeof insertMeetingOutcomeSchema>;

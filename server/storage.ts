@@ -1,6 +1,8 @@
 import { meetings, users, registrationAttempts, securityRecommendations, type Meeting, type InsertMeeting, type User, type InsertUser, type RegistrationAttempt, type InsertRegistrationAttempt, type SecurityRecommendation, type InsertSecurityRecommendation } from "@shared/schema";
 import { db, testConnection } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, gte, lte } from "drizzle-orm";
+import { type Room, type InsertRoom, type CalendarEvent, type InsertCalendarEvent, type UserAvailability, type InsertUserAvailability, type MeetingPreference, type InsertMeetingPreference } from "@shared/schema";
+
 
 // Test database connection on startup
 testConnection().catch(console.error);
@@ -35,6 +37,26 @@ export interface IStorage {
   updateSecurityRecommendation(id: number, update: Partial<InsertSecurityRecommendation>): Promise<SecurityRecommendation>;
   dismissSecurityRecommendation(id: number): Promise<SecurityRecommendation>;
   implementSecurityRecommendation(id: number): Promise<SecurityRecommendation>;
+
+  // Room operations
+  getRooms(): Promise<Room[]>;
+  getAvailableRooms(startTime: Date, endTime: Date, capacity?: number): Promise<Room[]>;
+  createRoom(room: InsertRoom): Promise<Room>;
+  updateRoom(id: number, room: Partial<InsertRoom>): Promise<Room>;
+
+  // Calendar operations
+  getUserCalendarEvents(userId: number, startDate: Date, endDate: Date): Promise<CalendarEvent[]>;
+  createCalendarEvent(event: InsertCalendarEvent): Promise<CalendarEvent>;
+  updateCalendarEvent(id: number, event: Partial<InsertCalendarEvent>): Promise<CalendarEvent>;
+  deleteCalendarEvent(id: number): Promise<boolean>;
+
+  // Availability operations
+  getUserAvailability(userId: number): Promise<UserAvailability[]>;
+  setUserAvailability(availability: InsertUserAvailability): Promise<UserAvailability>;
+
+  // Preferences operations
+  getMeetingPreferences(userId: number): Promise<MeetingPreference | undefined>;
+  setMeetingPreferences(preferences: InsertMeetingPreference): Promise<MeetingPreference>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -296,10 +318,184 @@ export class DatabaseStorage implements IStorage {
     try {
       const now = new Date();
       return await this.updateSecurityRecommendation(id, {
-        status: 'implemented'
+        status: 'implemented',
+        implementedAt: now
       });
     } catch (error) {
       console.error(`Error implementing security recommendation ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async getRooms(): Promise<Room[]> {
+    try {
+      return await db.select().from(rooms);
+    } catch (error) {
+      console.error('Error fetching rooms:', error);
+      throw error;
+    }
+  }
+
+  async getAvailableRooms(startTime: Date, endTime: Date, capacity?: number): Promise<Room[]> {
+    try {
+      // Get all rooms that meet capacity requirement
+      let availableRooms = await db
+        .select()
+        .from(rooms)
+        .where(
+          and(
+            eq(rooms.isAvailable, true),
+            capacity ? gte(rooms.capacity, capacity) : undefined
+          )
+        );
+
+      // Filter out rooms with conflicting bookings
+      const conflictingEvents = await db
+        .select()
+        .from(calendarEvents)
+        .where(
+          and(
+            lte(calendarEvents.startTime, endTime),
+            gte(calendarEvents.endTime, startTime)
+          )
+        );
+
+      const bookedRoomIds = new Set(conflictingEvents.map(event => event.roomId));
+      return availableRooms.filter(room => !bookedRoomIds.has(room.id));
+    } catch (error) {
+      console.error('Error fetching available rooms:', error);
+      throw error;
+    }
+  }
+
+  async createRoom(room: InsertRoom): Promise<Room> {
+    try {
+      const [createdRoom] = await db.insert(rooms).values(room).returning();
+      return createdRoom;
+    } catch (error) {
+      console.error('Error creating room:', error);
+      throw error;
+    }
+  }
+
+  async updateRoom(id: number, update: Partial<InsertRoom>): Promise<Room> {
+    try {
+      const [updatedRoom] = await db
+        .update(rooms)
+        .set(update)
+        .where(eq(rooms.id, id))
+        .returning();
+      return updatedRoom;
+    } catch (error) {
+      console.error(`Error updating room ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async getUserCalendarEvents(userId: number, startDate: Date, endDate: Date): Promise<CalendarEvent[]> {
+    try {
+      return await db
+        .select()
+        .from(calendarEvents)
+        .where(
+          and(
+            eq(calendarEvents.userId, userId),
+            gte(calendarEvents.startTime, startDate),
+            lte(calendarEvents.endTime, endDate)
+          )
+        )
+        .orderBy(calendarEvents.startTime);
+    } catch (error) {
+      console.error('Error fetching user calendar events:', error);
+      throw error;
+    }
+  }
+
+  async createCalendarEvent(event: InsertCalendarEvent): Promise<CalendarEvent> {
+    try {
+      const [createdEvent] = await db.insert(calendarEvents).values(event).returning();
+      return createdEvent;
+    } catch (error) {
+      console.error('Error creating calendar event:', error);
+      throw error;
+    }
+  }
+
+  async updateCalendarEvent(id: number, update: Partial<InsertCalendarEvent>): Promise<CalendarEvent> {
+    try {
+      const [updatedEvent] = await db
+        .update(calendarEvents)
+        .set(update)
+        .where(eq(calendarEvents.id, id))
+        .returning();
+      return updatedEvent;
+    } catch (error) {
+      console.error(`Error updating calendar event ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async deleteCalendarEvent(id: number): Promise<boolean> {
+    try {
+      const [deletedEvent] = await db
+        .delete(calendarEvents)
+        .where(eq(calendarEvents.id, id))
+        .returning();
+      return !!deletedEvent;
+    } catch (error) {
+      console.error(`Error deleting calendar event ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async getUserAvailability(userId: number): Promise<UserAvailability[]> {
+    try {
+      return await db
+        .select()
+        .from(userAvailability)
+        .where(eq(userAvailability.userId, userId))
+        .orderBy(userAvailability.dayOfWeek);
+    } catch (error) {
+      console.error(`Error fetching user availability for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  async setUserAvailability(availability: InsertUserAvailability): Promise<UserAvailability> {
+    try {
+      const [created] = await db
+        .insert(userAvailability)
+        .values(availability)
+        .returning();
+      return created;
+    } catch (error) {
+      console.error('Error setting user availability:', error);
+      throw error;
+    }
+  }
+
+  async getMeetingPreferences(userId: number): Promise<MeetingPreference | undefined> {
+    try {
+      const [preferences] = await db
+        .select()
+        .from(meetingPreferences)
+        .where(eq(meetingPreferences.userId, userId));
+      return preferences;
+    } catch (error) {
+      console.error(`Error fetching meeting preferences for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  async setMeetingPreferences(preferences: InsertMeetingPreference): Promise<MeetingPreference> {
+    try {
+      const [created] = await db
+        .insert(meetingPreferences)
+        .values(preferences)
+        .returning();
+      return created;
+    } catch (error) {
+      console.error('Error setting meeting preferences:', error);
       throw error;
     }
   }

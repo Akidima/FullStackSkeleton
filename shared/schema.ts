@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, index, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, index, integer, jsonb } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -79,10 +79,61 @@ export const userPreferences = pgTable("user_preferences", {
   keyIdx: index("user_prefs_key_idx").on(table.key),
 }));
 
+export const rooms = pgTable("rooms", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  capacity: integer("capacity").notNull(),
+  location: text("location"),
+  amenities: text("amenities").array(),
+  isAvailable: boolean("is_available").notNull().default(true),
+}, (table) => ({
+  nameIdx: index("room_name_idx").on(table.name),
+}));
+
+export const calendarEvents = pgTable("calendar_events", {
+  id: serial("id").primaryKey(),
+  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  title: text("title").notNull(),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time").notNull(),
+  recurrence: text("recurrence"), // JSON string for recurrence rules
+  meetingId: serial("meeting_id").references(() => meetings.id, { onDelete: 'set null' }),
+  roomId: serial("room_id").references(() => rooms.id, { onDelete: 'set null' }),
+}, (table) => ({
+  userIdIdx: index("calendar_events_user_id_idx").on(table.userId),
+  timeRangeIdx: index("calendar_events_time_range_idx").on(table.startTime, table.endTime),
+}));
+
+export const userAvailability = pgTable("user_availability", {
+  id: serial("id").primaryKey(),
+  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  dayOfWeek: integer("day_of_week").notNull(), // 0-6 for Sunday-Saturday
+  startTime: text("start_time").notNull(), // HH:mm format
+  endTime: text("end_time").notNull(), // HH:mm format
+  timezone: text("timezone").notNull(),
+}, (table) => ({
+  userDayIdx: index("user_availability_user_day_idx").on(table.userId, table.dayOfWeek),
+}));
+
+export const meetingPreferences = pgTable("meeting_preferences", {
+  id: serial("id").primaryKey(),
+  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  preferredDuration: integer("preferred_duration"), // in minutes
+  preferredRoomCapacity: integer("preferred_room_capacity"),
+  requiredAmenities: text("required_amenities").array(),
+  reminderTime: integer("reminder_time"), // minutes before meeting
+  bufferTime: integer("buffer_time"), // minutes between meetings
+}, (table) => ({
+  userIdIdx: index("meeting_preferences_user_id_idx").on(table.userId),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   meetings: many(meetings),
   securityRecommendations: many(securityRecommendations),
   preferences: many(userPreferences),
+  calendarEvents: many(calendarEvents),
+  userAvailability: many(userAvailability),
+  meetingPreferences: many(meetingPreferences),
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
@@ -139,6 +190,26 @@ export const securityRecommendationsRelations = relations(securityRecommendation
     references: [users.id],
   }),
 }));
+
+export const roomsRelations = relations(rooms, ({ many }) => ({
+  calendarEvents: many(calendarEvents),
+}));
+
+export const calendarEventsRelations = relations(calendarEvents, ({ one }) => ({
+  user: one(users, {
+    fields: [calendarEvents.userId],
+    references: [users.id],
+  }),
+  meeting: one(meetings, {
+    fields: [calendarEvents.meetingId],
+    references: [meetings.id],
+  }),
+  room: one(rooms, {
+    fields: [calendarEvents.roomId],
+    references: [rooms.id],
+  }),
+}));
+
 
 export const insertUserSchema = createInsertSchema(users)
   .extend({
@@ -236,6 +307,16 @@ export const updateSecurityRecommendationSchema = createInsertSchema(securityRec
 export const insertUserPreferenceSchema = createInsertSchema(userPreferences)
   .omit({ id: true, createdAt: true, updatedAt: true });
 
+export const insertRoomSchema = createInsertSchema(rooms).omit({ id: true });
+export const insertCalendarEventSchema = createInsertSchema(calendarEvents)
+  .extend({
+    startTime: z.string().transform((str) => new Date(str)),
+    endTime: z.string().transform((str) => new Date(str)),
+  })
+  .omit({ id: true });
+export const insertUserAvailabilitySchema = createInsertSchema(userAvailability).omit({ id: true });
+export const insertMeetingPreferenceSchema = createInsertSchema(meetingPreferences).omit({ id: true });
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -252,3 +333,11 @@ export type SecurityRecommendation = typeof securityRecommendations.$inferSelect
 export type UpdateSecurityRecommendation = z.infer<typeof updateSecurityRecommendationSchema>;
 export type InsertUserPreference = z.infer<typeof insertUserPreferenceSchema>;
 export type UserPreference = typeof userPreferences.$inferSelect;
+export type Room = typeof rooms.$inferSelect;
+export type InsertRoom = z.infer<typeof insertRoomSchema>;
+export type CalendarEvent = typeof calendarEvents.$inferSelect;
+export type InsertCalendarEvent = z.infer<typeof insertCalendarEventSchema>;
+export type UserAvailability = typeof userAvailability.$inferSelect;
+export type InsertUserAvailability = z.infer<typeof insertUserAvailabilitySchema>;
+export type MeetingPreference = typeof meetingPreferences.$inferSelect;
+export type InsertMeetingPreference = z.infer<typeof insertMeetingPreferenceSchema>;

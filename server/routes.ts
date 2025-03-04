@@ -7,6 +7,9 @@ import { errorHandler, asyncHandler } from "./middleware/errorHandler";
 import { NotFoundError, ValidationError } from "./errors/AppError";
 import { AgendaService } from "./services/agenda";
 import { generateMeetingInsights, batchSummarize } from "./services/summarize";
+import { SchedulerService } from "./services/scheduler";
+import { broadcastMeetingUpdate } from "./websocket";
+import { authenticateJWT } from "./auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
@@ -19,6 +22,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const meetingData = insertMeetingSchema.parse(req.body);
       const meeting = await storage.createMeeting(meetingData);
+
+      // Broadcast the update to connected clients
+      broadcastMeetingUpdate('create', meeting.id);
+
       res.status(201).json(meeting);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -28,7 +35,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  // Generate meeting summary endpoint
+  // Scheduling Assistant Routes
+  app.post("/api/meetings/suggest-times", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    const { participantIds, duration, earliestStartTime, latestStartTime, requiredCapacity } = req.body;
+
+    if (!participantIds?.length || !duration || !earliestStartTime || !latestStartTime) {
+      throw new ValidationError("Missing required fields", [
+        { field: "participantIds", message: "At least one participant is required" },
+        { field: "duration", message: "Meeting duration is required" },
+        { field: "earliestStartTime", message: "Earliest start time is required" },
+        { field: "latestStartTime", message: "Latest start time is required" }
+      ]);
+    }
+
+    const suggestions = await SchedulerService.suggestMeetingTimes(
+      participantIds,
+      duration,
+      new Date(earliestStartTime),
+      new Date(latestStartTime),
+      requiredCapacity
+    );
+
+    res.json(suggestions);
+  }));
+
+  // Room Management Routes
+  app.get("/api/rooms", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    const rooms = await storage.getRooms();
+    res.json(rooms);
+  }));
+
+  app.get("/api/rooms/available", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    const { startTime, endTime, capacity } = req.query;
+
+    if (!startTime || !endTime) {
+      throw new ValidationError("Start time and end time are required");
+    }
+
+    const availableRooms = await storage.getAvailableRooms(
+      new Date(startTime as string),
+      new Date(endTime as string),
+      capacity ? Number(capacity) : undefined
+    );
+
+    res.json(availableRooms);
+  }));
+
+  // User Availability Routes
+  app.get("/api/users/:userId/availability", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    const availability = await storage.getUserAvailability(Number(req.params.userId));
+    res.json(availability);
+  }));
+
+  app.post("/api/users/:userId/availability", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    const availability = await storage.setUserAvailability({
+      userId: Number(req.params.userId),
+      ...req.body
+    });
+    res.status(201).json(availability);
+  }));
+
+  // Meeting Preferences Routes
+  app.get("/api/users/:userId/meeting-preferences", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    const preferences = await storage.getMeetingPreferences(Number(req.params.userId));
+    res.json(preferences);
+  }));
+
+  app.post("/api/users/:userId/meeting-preferences", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    const preferences = await storage.setMeetingPreferences({
+      userId: Number(req.params.userId),
+      ...req.body
+    });
+    res.status(201).json(preferences);
+  }));
+
+  // Calendar Events Routes
+  app.get("/api/users/:userId/calendar-events", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      throw new ValidationError("Start date and end date are required");
+    }
+
+    const events = await storage.getUserCalendarEvents(
+      Number(req.params.userId),
+      new Date(startDate as string),
+      new Date(endDate as string)
+    );
+
+    res.json(events);
+  }));
+
+  // Existing routes...
   app.post("/api/meetings/:id/summarize", asyncHandler(async (req: Request, res: Response) => {
     try {
       const meeting = await storage.getMeeting(Number(req.params.id));
@@ -38,10 +136,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const summary = await generateMeetingInsights(meeting);
 
-      // Update the meeting with the new summary
       const updatedMeeting = await storage.updateMeeting(meeting.id, {
         summary: summary.summary
       });
+
+      // Broadcast the update to connected clients
+      broadcastMeetingUpdate('update', meeting.id);
 
       res.json({
         meeting: updatedMeeting,
@@ -49,35 +149,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Error generating meeting summary:", error);
-      throw error;
-    }
-  }));
-
-  // Generate agenda endpoint
-  app.post("/api/meetings/generate-agenda", asyncHandler(async (req: Request, res: Response) => {
-    try {
-      const { title, userId, duration = 60 } = req.body;
-
-      if (!title || !userId) {
-        throw new ValidationError("Missing required fields", [
-          { field: "title", message: "Meeting title is required" },
-          { field: "userId", message: "User ID is required" }
-        ]);
-      }
-
-      const pastMeetings = await storage.getUserMeetings(userId);
-      const upcomingTasks = [];
-
-      const agendaSuggestion = await AgendaService.generateAgenda(
-        title,
-        pastMeetings,
-        upcomingTasks,
-        duration
-      );
-
-      res.json(agendaSuggestion);
-    } catch (error) {
-      console.error("Error generating agenda:", error);
       throw error;
     }
   }));
@@ -102,6 +173,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         Number(req.params.id),
         meetingData
       );
+
+      // Broadcast the update to connected clients
+      broadcastMeetingUpdate('update', meeting.id);
+
       res.json(updatedMeeting);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -118,6 +193,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     await storage.deleteMeeting(Number(req.params.id));
+
+    // Broadcast the update to connected clients
+    broadcastMeetingUpdate('delete', meeting.id);
+
     res.status(204).send();
   }));
 

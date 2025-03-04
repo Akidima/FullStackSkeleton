@@ -18,31 +18,66 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { useState } from 'react';
+import { useQuery } from "@tanstack/react-query";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Room } from "@shared/schema";
 
 export default function MeetingForm() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const params = useParams();
-  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().slice(0, 16));
+
+  // Query for all rooms
+  const { data: rooms = [], isLoading: isLoadingRooms } = useQuery<Room[]>({
+    queryKey: ["/api/rooms"],
+    queryFn: async () => {
+      const response = await fetch("/api/rooms");
+      if (!response.ok) throw new Error("Failed to fetch rooms");
+      return response.json();
+    },
+  });
+
+  // Query for available rooms based on selected time
+  const { data: availableRooms = [], isLoading: isLoadingAvailable } = useQuery<Room[]>({
+    queryKey: ["/api/rooms/available", selectedDate],
+    queryFn: async () => {
+      const endTime = new Date(selectedDate);
+      endTime.setHours(endTime.getHours() + 1); // Default 1 hour duration
+
+      const response = await fetch(
+        `/api/rooms/available?startTime=${selectedDate}&endTime=${endTime.toISOString()}`
+      );
+      if (!response.ok) throw new Error("Failed to fetch available rooms");
+      return response.json();
+    },
+    enabled: !!selectedDate,
+  });
 
   const form = useForm({
     resolver: zodResolver(insertMeetingSchema),
     defaultValues: {
       title: "",
-      date: new Date().toISOString().slice(0, 16), // Format for datetime-local input
+      date: new Date().toISOString().slice(0, 16),
       description: "",
       participants: [],
       agenda: "",
       notes: "",
       isCompleted: false,
       summary: "",
-      userId: 1, // Set the demo user ID
+      userId: 1,
+      roomId: undefined,
     },
   });
 
   const onSubmit = async (data: any) => {
     try {
-      // Convert the date string to a Date object before sending
       const formattedData = {
         ...data,
         date: new Date(data.date).toISOString(),
@@ -119,9 +154,48 @@ export default function MeetingForm() {
                           {...field}
                           onChange={(e) => {
                             field.onChange(e.target.value);
+                            setSelectedDate(e.target.value);
                           }}
                         />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="roomId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Meeting Room</FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange(Number(value))}
+                        value={field.value?.toString()}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a room" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {isLoadingAvailable ? (
+                            <SelectItem value="loading" disabled>
+                              Loading available rooms...
+                            </SelectItem>
+                          ) : availableRooms.length === 0 ? (
+                            <SelectItem value="none" disabled>
+                              No rooms available for selected time
+                            </SelectItem>
+                          ) : (
+                            availableRooms.map((room) => (
+                              <SelectItem key={room.id} value={room.id.toString()}>
+                                {room.name} ({room.capacity} people)
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}

@@ -154,15 +154,21 @@ export const meetings = pgTable("meetings", {
   isCompleted: boolean("is_completed").notNull().default(false),
   summary: text("summary"),
   userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  roomId: serial("room_id").references(() => rooms.id, { onDelete: 'set null' }),
 }, (table) => ({
   dateIdx: index("date_idx").on(table.date),
   userIdIdx: index("user_id_idx").on(table.userId),
+  roomIdIdx: index("room_id_idx").on(table.roomId),
 }));
 
 export const meetingsRelations = relations(meetings, ({ one }) => ({
   user: one(users, {
     fields: [meetings.userId],
     references: [users.id],
+  }),
+  room: one(rooms, {
+    fields: [meetings.roomId],
+    references: [rooms.id],
   }),
 }));
 
@@ -265,6 +271,7 @@ export const insertMeetingSchema = createInsertSchema(meetings)
     date: z.string()
       .transform((str) => new Date(str)),
     participants: z.array(z.string()).optional(),
+    roomId: z.number().optional(),
   })
   .omit({ id: true });
 export const updateMeetingSchema = createInsertSchema(meetings)

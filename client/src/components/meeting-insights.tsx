@@ -10,12 +10,23 @@ import { LoadingSpinner } from "@/components/ui/loading-skeleton";
 interface MeetingInsightsProps {
   meetingId?: number;
   isNewMeeting?: boolean;
+  currentDiscussion?: string;
+  meetingContext?: string;
 }
 
-export function MeetingInsights({ meetingId, isNewMeeting }: MeetingInsightsProps) {
+export function MeetingInsights({ 
+  meetingId, 
+  isNewMeeting,
+  currentDiscussion,
+  meetingContext 
+}: MeetingInsightsProps) {
   const { data: insights, isLoading } = useQuery<MeetingInsight[]>({
-    queryKey: meetingId ? [`/api/meetings/${meetingId}/insights`] : ['/api/insights/recommendations'],
-    enabled: isNewMeeting || !!meetingId,
+    queryKey: meetingId 
+      ? [`/api/meetings/${meetingId}/insights`] 
+      : currentDiscussion 
+        ? ['/api/insights/realtime', { currentDiscussion, meetingContext }]
+        : ['/api/insights/recommendations'],
+    enabled: isNewMeeting || !!meetingId || !!currentDiscussion,
   });
 
   const getCategoryIcon = (category: string) => {

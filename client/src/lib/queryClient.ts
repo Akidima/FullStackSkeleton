@@ -57,11 +57,12 @@ export async function apiRequest(
       credentials: 'include'
     });
 
-    // Handle rate limiting
+    // Handle rate limiting with exponential backoff
     if (response.status === 429) {
       const retryAfter = response.headers.get('Retry-After');
       const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 15000;
-      throw new Error(`Too many requests. Please wait ${Math.ceil(waitTime/1000)} seconds before trying again.`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      return apiRequest(method, url, data);
     }
 
     // Handle authentication errors
@@ -82,7 +83,7 @@ export async function apiRequest(
   }
 }
 
-export const getQueryFn: QueryFunction = async ({ queryKey }) => {
+export const getQueryFn: QueryFunction = async ({ queryKey, signal }) => {
   const headers: Record<string, string> = {
     'Accept': 'application/json',
     'Content-Type': 'application/json'
@@ -95,7 +96,8 @@ export const getQueryFn: QueryFunction = async ({ queryKey }) => {
 
   const res = await fetch(queryKey[0] as string, {
     headers,
-    credentials: 'include'
+    credentials: 'include',
+    signal
   });
 
   if (res.status === 401) {
@@ -108,20 +110,30 @@ export const getQueryFn: QueryFunction = async ({ queryKey }) => {
   }
 
   const data = await res.json();
-  return data.data;
+  return data;
 };
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn,
-      refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      retry: (failureCount, error: any) => {
+        // Don't retry on 401 or 404
+        if (error.status === 401 || error.status === 404) return false;
+        // Retry up to 3 times for other errors
+        return failureCount < 3;
+      },
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      staleTime: 30000, // Consider data fresh for 30 seconds
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
     },
     mutations: {
-      retry: false,
+      retry: (failureCount, error: any) => {
+        if (error.status === 401 || error.status === 404) return false;
+        return failureCount < 3;
+      },
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     },
   },
 });

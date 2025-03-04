@@ -5,23 +5,26 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Menu, LayoutDashboard, Calendar, Settings, ArrowLeft } from "lucide-react";
+import { Menu, LayoutDashboard, Calendar, Settings } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const showBackButton = location !== "/";
+  const isNotDashboard = location !== "/";
 
   return (
     <div className="min-h-screen bg-background">
       <div className="p-6">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-4xl font-bold">
-              {location === "/" ? "Dashboard" : ""}
-            </h1>
-            <div className="flex items-center gap-2">
+            {isNotDashboard && (
+              <h1 className="text-4xl font-bold">
+                {location.startsWith("/meetings") ? "Meetings" :
+                 location === "/calendar" ? "Calendar" :
+                 location === "/profile/settings" ? "Settings" : ""}
+              </h1>
+            )}
+            <div className={`flex items-center gap-2 ${!isNotDashboard ? "ml-auto" : ""}`}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon">
@@ -29,15 +32,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  {showBackButton && (
-                    <>
-                      <DropdownMenuItem onClick={() => window.history.back()} className="flex items-center">
-                        <ArrowLeft className="h-4 w-4 mr-2" />
-                        Back
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                    </>
-                  )}
                   <DropdownMenuItem asChild>
                     <Link href="/" className="flex items-center">
                       <LayoutDashboard className="h-4 w-4 mr-2" />

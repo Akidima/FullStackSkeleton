@@ -34,7 +34,11 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           transcriber.current = await pipeline(
             'automatic-speech-recognition',
             'Xenova/whisper-small',
-            { progress_callback: (progress: any) => console.log('Loading model:', progress) }
+            { 
+              progress_callback: (progress: any) => console.log('Loading model:', progress),
+              quantized: true, // Use quantized model for better browser performance
+              cache: true, // Enable caching
+            }
           );
         }
         if (isMounted) {
@@ -133,7 +137,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         const lowerText = result.text.toLowerCase();
         if (lowerText.includes('create task') || 
             lowerText.includes('add action item') ||
-            lowerText.includes('set reminder')) {
+            lowerText.includes('generate summary')) {
           onCommand?.(result.text);
         }
       }

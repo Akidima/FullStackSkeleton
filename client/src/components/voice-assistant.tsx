@@ -19,37 +19,59 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [transcript, setTranscript] = useState<string[]>([]);
   const [isTranscriberReady, setIsTranscriberReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+  const [initAttempts, setInitAttempts] = useState(0);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const transcriber = useRef<any>(null);
+  const MAX_INIT_ATTEMPTS = 3;
 
   useEffect(() => {
+    let isMounted = true;
     const initializeTranscriber = async () => {
       try {
-        transcriber.current = await pipeline('automatic-speech-recognition', 'Xenova/whisper-small');
-        setIsTranscriberReady(true);
-        setInitError(null);
+        if (!transcriber.current) {
+          console.log('Initializing transcriber...');
+          transcriber.current = await pipeline(
+            'automatic-speech-recognition',
+            'Xenova/whisper-small',
+            { progress_callback: (progress: any) => console.log('Loading model:', progress) }
+          );
+        }
+        if (isMounted) {
+          setIsTranscriberReady(true);
+          setInitError(null);
+          console.log('Transcriber initialized successfully');
+        }
       } catch (error) {
         console.error('Failed to initialize transcriber:', error);
-        setInitError('Failed to initialize voice assistant. Please try refreshing the page.');
-        toast({
-          title: "Error",
-          description: "Failed to initialize voice assistant. Please try again.",
-          variant: "destructive",
-        });
+        if (isMounted) {
+          setInitError('Failed to initialize voice assistant. Please try refreshing the page.');
+          if (initAttempts < MAX_INIT_ATTEMPTS) {
+            setTimeout(() => {
+              setInitAttempts(prev => prev + 1);
+            }, 2000); // Retry after 2 seconds
+          }
+          toast({
+            title: "Error",
+            description: "Failed to initialize voice assistant. Retrying...",
+            variant: "destructive",
+          });
+        }
       }
     };
 
-    initializeTranscriber();
+    if (!isTranscriberReady && initAttempts < MAX_INIT_ATTEMPTS) {
+      initializeTranscriber();
+    }
 
-    // Cleanup function
     return () => {
+      isMounted = false;
       if (mediaRecorder.current && isRecording) {
         mediaRecorder.current.stop();
         mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [initAttempts]);
 
   const startRecording = async () => {
     if (!isTranscriberReady) {
@@ -100,7 +122,6 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
     setIsProcessing(true);
     try {
-      // Convert audio blob to array buffer for processing
       const arrayBuffer = await audioBlob.arrayBuffer();
       const result = await transcriber.current(arrayBuffer);
 
@@ -130,7 +151,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
   if (!isActive) return null;
 
-  if (initError) {
+  if (initError && initAttempts >= MAX_INIT_ATTEMPTS) {
     return (
       <Card>
         <CardHeader>
@@ -141,6 +162,13 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         </CardHeader>
         <CardContent>
           <p className="text-destructive">{initError}</p>
+          <Button 
+            onClick={() => setInitAttempts(0)} 
+            variant="outline" 
+            className="mt-4"
+          >
+            Retry Initialization
+          </Button>
         </CardContent>
       </Card>
     );
@@ -156,7 +184,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">Please wait while we set up the voice assistant...</p>
+          <p className="text-muted-foreground">
+            Please wait while we set up the voice assistant... 
+            {initAttempts > 0 && ` (Attempt ${initAttempts + 1}/${MAX_INIT_ATTEMPTS})`}
+          </p>
         </CardContent>
       </Card>
     );

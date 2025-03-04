@@ -40,7 +40,8 @@ export default function Dashboard() {
   if (isLoading) {
     return (
       <div className="space-y-8">
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between">
+          <h1 className="text-4xl font-bold">Dashboard</h1>
           <Button disabled>
             <Plus className="h-4 w-4 mr-2" />
             Schedule Meeting
@@ -57,7 +58,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <h1 className="text-4xl font-bold">Dashboard</h1>
         <Link href="/meetings/new">
           <Button>
             <Plus className="h-4 w-4 mr-2" />

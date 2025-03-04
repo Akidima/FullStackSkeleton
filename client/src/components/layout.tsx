@@ -24,7 +24,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                  location === "/profile/settings" ? "Settings" : ""}
               </h1>
             )}
-            <div className={`flex items-center gap-2 ${!isNotDashboard ? "ml-auto" : ""}`}>
+            <div className={`flex items-center gap-2 ${!isNotDashboard ? "" : ""}`}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon">

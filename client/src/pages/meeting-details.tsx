@@ -13,6 +13,10 @@ import { LoadingSpinner, MeetingCardSkeleton } from "@/components/ui/loading-ske
 import { MeetingInsights } from "@/components/meeting-insights";
 import { useWebSocket } from "@/hooks/use-websocket";
 
+// Rate limiting configuration
+const RETRY_DELAY = 1000; // Start with 1 second
+const MAX_RETRIES = 3;
+
 export default function MeetingDetails() {
   const [, params] = useRoute("/meetings/:id");
   const meetingId = params?.id;
@@ -21,35 +25,68 @@ export default function MeetingDetails() {
   const [notes, setNotes] = useState("");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
 
-  // Fetch meeting details
+  // Fetch meeting details with retry logic
   const { data: meeting, isLoading, error } = useQuery<Meeting>({
     queryKey: [`/api/meetings/${meetingId}`],
-    queryFn: async () => {
-      const response = await fetch(`/api/meetings/${meetingId}`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+    queryFn: async ({ signal }) => {
+      let retries = 0;
+      while (retries < MAX_RETRIES) {
+        try {
+          const response = await fetch(`/api/meetings/${meetingId}`, { signal });
+          if (response.status === 429) { // Too Many Requests
+            const delay = RETRY_DELAY * Math.pow(2, retries);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            retries++;
+            continue;
+          }
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const data = await response.json();
+          setNotes(data.notes || "");
+          return data;
+        } catch (error) {
+          if (error.name === 'AbortError') throw error;
+          if (retries === MAX_RETRIES - 1) throw error;
+          retries++;
+        }
       }
-      const data = await response.json();
-      setNotes(data.notes || "");
-      return data;
+      throw new Error('Failed to fetch meeting details after retries');
     },
     enabled: !!meetingId,
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000),
   });
 
-  // Save notes mutation
+  // Save notes mutation with retry logic
   const saveNotes = useMutation({
     mutationFn: async (newNotes: string) => {
-      const response = await fetch(`/api/meetings/${meetingId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ notes: newNotes }),
-      });
-      if (!response.ok) {
-        throw new Error('Failed to save notes');
+      let retries = 0;
+      while (retries < MAX_RETRIES) {
+        try {
+          const response = await fetch(`/api/meetings/${meetingId}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ notes: newNotes }),
+          });
+          if (response.status === 429) {
+            const delay = RETRY_DELAY * Math.pow(2, retries);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            retries++;
+            continue;
+          }
+          if (!response.ok) {
+            throw new Error('Failed to save notes');
+          }
+          return response.json();
+        } catch (error) {
+          if (retries === MAX_RETRIES - 1) throw error;
+          retries++;
+        }
       }
-      return response.json();
+      throw new Error('Failed to save notes after retries');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/meetings/${meetingId}`] });
@@ -59,25 +96,42 @@ export default function MeetingDetails() {
       });
       setIsEditingNotes(false);
     },
-    onError: () => {
+    onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to save notes. Please try again.",
+        description: error.message === 'Failed to save notes after retries'
+          ? "Too many requests. Please try again in a moment."
+          : "Failed to save notes. Please try again.",
         variant: "destructive",
       });
     },
   });
 
-  // Generate summary mutation
+  // Generate summary mutation with retry logic
   const generateSummary = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`/api/meetings/${meetingId}/summarize`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        throw new Error('Failed to generate summary');
+      let retries = 0;
+      while (retries < MAX_RETRIES) {
+        try {
+          const response = await fetch(`/api/meetings/${meetingId}/summarize`, {
+            method: 'POST',
+          });
+          if (response.status === 429) {
+            const delay = RETRY_DELAY * Math.pow(2, retries);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            retries++;
+            continue;
+          }
+          if (!response.ok) {
+            throw new Error('Failed to generate summary');
+          }
+          return response.json();
+        } catch (error) {
+          if (retries === MAX_RETRIES - 1) throw error;
+          retries++;
+        }
       }
-      return response.json();
+      throw new Error('Failed to generate summary after retries');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/meetings/${meetingId}`] });
@@ -86,10 +140,12 @@ export default function MeetingDetails() {
         description: "Meeting summary has been generated successfully.",
       });
     },
-    onError: () => {
+    onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to generate meeting summary.",
+        description: error.message === 'Failed to generate summary after retries'
+          ? "Too many requests. Please try again in a moment."
+          : "Failed to generate meeting summary.",
         variant: "destructive",
       });
     },
@@ -131,7 +187,31 @@ export default function MeetingDetails() {
     );
   }
 
-  if (error || !meeting) {
+  if (error) {
+    const errorMessage = error instanceof Error && error.message.includes('Too many requests')
+      ? "Too many requests. Please try again in a moment."
+      : "The meeting you're looking for doesn't exist or has been deleted.";
+
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center py-12">
+            <h2 className="text-lg font-semibold mb-2">Error loading meeting</h2>
+            <p className="text-muted-foreground mb-4">
+              {errorMessage}
+            </p>
+            <Link href="/">
+              <Button variant="outline" className="gap-2">
+                <ArrowLeft className="h-4 w-4" /> Back to Meetings
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!meeting) {
     return (
       <div className="min-h-screen bg-background p-6">
         <div className="max-w-4xl mx-auto">
@@ -258,7 +338,7 @@ export default function MeetingDetails() {
                 </div>
               )}
 
-              <MeetingInsights meetingId={parseInt(meetingId)} />
+              <MeetingInsights meetingId={parseInt(meetingId!)} />
 
               <div className="flex justify-end gap-2">
                 <Link href={`/meetings/${meeting.id}/edit`}>

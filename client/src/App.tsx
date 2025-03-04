@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import MeetingList from "@/pages/meeting-list";
 import MeetingForm from "@/pages/meeting-form";
 import MeetingDetails from "@/pages/meeting-details";
+import Dashboard from "@/pages/dashboard";
 import Login from "@/pages/login";
 import SignUp from "@/pages/signup";
 import CalendarEvents from "@/pages/calendar-events";
@@ -17,7 +18,7 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/signup" component={SignUp} />
-      <Route path="/" component={() => <ProtectedRoute component={MeetingList} />} />
+      <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route path="/meetings" component={() => <ProtectedRoute component={MeetingList} />} />
       <Route path="/meetings/new" component={() => <ProtectedRoute component={MeetingForm} />} />
       <Route path="/meetings/:id" component={() => <ProtectedRoute component={MeetingDetails} />} />

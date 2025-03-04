@@ -60,9 +60,16 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   async getMeetings(): Promise<Meeting[]> {
     try {
-      const allMeetings = await db.select().from(meetings);
+      const allMeetings = await db
+        .select()
+        .from(meetings)
+        .leftJoin(rooms, eq(meetings.roomId, rooms.id));
+
       console.log('Fetched meetings:', allMeetings); // Add logging
-      return allMeetings;
+      return allMeetings.map(meeting => ({
+        ...meeting.meetings,
+        room: meeting.rooms
+      }));
     } catch (error) {
       console.error('Error fetching meetings:', error);
       throw error;

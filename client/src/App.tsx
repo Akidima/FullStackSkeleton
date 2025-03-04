@@ -18,6 +18,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/signup" component={SignUp} />
       <Route path="/" component={() => <ProtectedRoute component={MeetingList} />} />
+      <Route path="/meetings" component={() => <ProtectedRoute component={MeetingList} />} />
       <Route path="/meetings/new" component={() => <ProtectedRoute component={MeetingForm} />} />
       <Route path="/meetings/:id" component={() => <ProtectedRoute component={MeetingDetails} />} />
       <Route path="/meetings/:id/edit" component={() => <ProtectedRoute component={MeetingForm} />} />

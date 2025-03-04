@@ -73,7 +73,7 @@ export default function MeetingDetails() {
             <p className="text-muted-foreground mb-4">
               The meeting you're looking for doesn't exist or has been deleted.
             </p>
-            <Link href="/meetings">
+            <Link href="/">
               <Button variant="outline" className="gap-2">
                 <ArrowLeft className="h-4 w-4" /> Back to Meetings
               </Button>
@@ -88,7 +88,7 @@ export default function MeetingDetails() {
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <Link href="/meetings">
+          <Link href="/">
             <Button variant="ghost" className="gap-2">
               <ArrowLeft className="h-4 w-4" /> Back to Meetings
             </Button>

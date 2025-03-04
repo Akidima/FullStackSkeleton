@@ -10,6 +10,7 @@ export const users = pgTable("users", {
   password: text("password"), // Optional for Google OAuth users
   displayName: text("display_name").notNull(),
   profilePicture: text("profile_picture"),
+  bio: text("bio"),
   googleId: text("google_id"), // Make it nullable for email/password users
   createdAt: timestamp("created_at").notNull().defaultNow(),
   isVerified: boolean("is_verified").notNull().default(false),
@@ -20,6 +21,12 @@ export const users = pgTable("users", {
   isAdmin: boolean("is_admin").notNull().default(false),
   accessToken: text("access_token"),  // Added for Google OAuth
   refreshToken: text("refresh_token"), // Added for Google OAuth
+  // New fields for user preferences
+  dashboardLayout: text("dashboard_layout").array(), // Store widget positions and sizes
+  notificationSettings: text("notification_settings"), // JSON string of notification preferences
+  theme: text("theme").default("system"), // light, dark, or system
+  timeZone: text("time_zone"),
+  language: text("language").default("en"),
 }, (table) => ({
   emailIdx: index("email_idx").on(table.email),
   googleIdIdx: index("google_id_idx").on(table.googleId),
@@ -59,9 +66,30 @@ export const securityRecommendations = pgTable("security_recommendations", {
   priorityIdx: index("sec_rec_priority_idx").on(table.priority),
 }));
 
+// Add after user schema
+export const userPreferences = pgTable("user_preferences", {
+  id: serial("id").primaryKey(),
+  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  key: text("key").notNull(),
+  value: text("value").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  userIdIdx: index("user_prefs_user_id_idx").on(table.userId),
+  keyIdx: index("user_prefs_key_idx").on(table.key),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   meetings: many(meetings),
   securityRecommendations: many(securityRecommendations),
+  preferences: many(userPreferences),
+}));
+
+export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [userPreferences.userId],
+    references: [users.id],
+  }),
 }));
 
 export const meetings = pgTable("meetings", {
@@ -138,6 +166,13 @@ export const insertUserSchema = createInsertSchema(users)
     displayName: z.string()
       .min(2, "Display name must be at least 2 characters long")
       .max(50, "Display name cannot exceed 50 characters"),
+    bio: z.string().max(500, "Bio cannot exceed 500 characters").optional(),
+    profilePicture: z.string().url("Profile picture must be a valid URL").optional(),
+    theme: z.enum(["light", "dark", "system"]).optional(),
+    timeZone: z.string().optional(),
+    language: z.string().optional(),
+    dashboardLayout: z.array(z.string()).optional(),
+    notificationSettings: z.string().optional(),
     isVerified: z.boolean().optional(),
     verificationToken: z.string().nullable().optional(),
     verificationExpires: z.date().nullable().optional(),
@@ -197,6 +232,10 @@ export const updateSecurityRecommendationSchema = createInsertSchema(securityRec
     category: z.enum(['password', 'account', 'access', 'device', 'general']).optional(),
   });
 
+// Add new schema for user preferences
+export const insertUserPreferenceSchema = createInsertSchema(userPreferences)
+  .omit({ id: true, createdAt: true, updatedAt: true });
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -211,3 +250,5 @@ export type RegistrationAttempt = typeof registrationAttempts.$inferSelect;
 export type InsertSecurityRecommendation = z.infer<typeof insertSecurityRecommendationSchema>;
 export type SecurityRecommendation = typeof securityRecommendations.$inferSelect;
 export type UpdateSecurityRecommendation = z.infer<typeof updateSecurityRecommendationSchema>;
+export type InsertUserPreference = z.infer<typeof insertUserPreferenceSchema>;
+export type UserPreference = typeof userPreferences.$inferSelect;

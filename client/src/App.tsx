@@ -10,6 +10,7 @@ import Dashboard from "@/pages/dashboard";
 import Login from "@/pages/login";
 import SignUp from "@/pages/signup";
 import CalendarEvents from "@/pages/calendar-events";
+import ProfileSettings from "@/pages/profile-settings";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/meetings/:id" component={() => <ProtectedRoute component={MeetingDetails} />} />
       <Route path="/meetings/:id/edit" component={() => <ProtectedRoute component={MeetingForm} />} />
       <Route path="/calendar" component={() => <ProtectedRoute component={CalendarEvents} />} />
+      <Route path="/profile/settings" component={() => <ProtectedRoute component={ProfileSettings} />} />
       <Route component={NotFound} />
     </Switch>
   );

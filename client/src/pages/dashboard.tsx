@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -7,15 +7,17 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Menu, LayoutDashboard, Calendar, Settings } from "lucide-react";
+import { Plus, Menu, LayoutDashboard, Calendar, Settings, ArrowLeft } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { Progress } from "@/components/ui/progress";
 import { MeetingCardSkeleton } from "@/components/ui/loading-skeleton";
 import { toast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
+  const [location] = useLocation();
   const { data: meetings = [], isLoading, error } = useQuery<Meeting[]>({
     queryKey: ["/api/meetings"],
     queryFn: async () => {
@@ -56,6 +58,8 @@ export default function Dashboard() {
     );
   }
 
+  const showBackButton = location !== "/";
+
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-4xl mx-auto space-y-8">
@@ -69,6 +73,15 @@ export default function Dashboard() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
+                {showBackButton && (
+                  <>
+                    <DropdownMenuItem onClick={() => window.history.back()} className="flex items-center">
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Back
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem asChild>
                   <Link href="/" className="flex items-center">
                     <LayoutDashboard className="h-4 w-4 mr-2" />

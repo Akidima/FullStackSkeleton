@@ -10,7 +10,7 @@ import MeetingDetails from "@/pages/meeting-details";
 import Dashboard from "@/pages/dashboard";
 import Login from "@/pages/login";
 import SignUp from "@/pages/signup";
-import CalendarEvents from "@/pages/calendar-events";
+import CalendarView from "@/pages/calendar-view";
 import ProfileSettings from "@/pages/profile-settings";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
@@ -63,7 +63,7 @@ function Router() {
       <Route path="/calendar" component={() => (
         <ProtectedRoute>
           <Layout>
-            <CalendarEvents />
+            <CalendarView />
           </Layout>
         </ProtectedRoute>
       )} />

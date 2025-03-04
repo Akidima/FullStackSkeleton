@@ -1,8 +1,6 @@
-import { meetings, users, registrationAttempts, securityRecommendations, type Meeting, type InsertMeeting, type User, type InsertUser, type RegistrationAttempt, type InsertRegistrationAttempt, type SecurityRecommendation, type InsertSecurityRecommendation } from "@shared/schema";
+import { meetings, users, registrationAttempts, securityRecommendations, rooms, calendarEvents, userAvailability, meetingPreferences, type Meeting, type InsertMeeting, type User, type InsertUser, type RegistrationAttempt, type InsertRegistrationAttempt, type SecurityRecommendation, type InsertSecurityRecommendation, type Room, type InsertRoom, type CalendarEvent, type InsertCalendarEvent, type UserAvailability, type InsertUserAvailability, type MeetingPreference, type InsertMeetingPreference } from "@shared/schema";
 import { db, testConnection } from "./db";
 import { eq, desc, and, gte, lte } from "drizzle-orm";
-import { type Room, type InsertRoom, type CalendarEvent, type InsertCalendarEvent, type UserAvailability, type InsertUserAvailability, type MeetingPreference, type InsertMeetingPreference } from "@shared/schema";
-
 
 // Test database connection on startup
 testConnection().catch(console.error);

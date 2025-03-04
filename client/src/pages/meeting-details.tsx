@@ -151,27 +151,50 @@ export default function MeetingDetails() {
     },
   });
 
-  // Handle real-time collaboration
-  useEffect(() => {
-    if (!socket || !meetingId) return;
-
-    socket.emit('join-meeting', meetingId);
-
-    socket.on('notes-updated', (updatedNotes: string) => {
-      setNotes(updatedNotes);
-    });
-
-    return () => {
-      socket.emit('leave-meeting', meetingId);
-      socket.off('notes-updated');
-    };
-  }, [socket, meetingId]);
-
+  // Update the WebSocket usage in the component
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newNotes = e.target.value;
     setNotes(newNotes);
-    socket?.emit('update-notes', { meetingId, notes: newNotes });
+    if (socket?.socket?.readyState === WebSocket.OPEN) {
+      socket.socket.send(JSON.stringify({
+        type: 'meeting:notes',
+        meetingId,
+        notes: newNotes
+      }));
+    }
   };
+
+  // Update the WebSocket effect
+  useEffect(() => {
+    if (!socket?.socket || !meetingId) return;
+
+    const ws = socket.socket;
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'meeting:join',
+        meetingId
+      }));
+    }
+
+    const handleMessage = (event: MessageEvent) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'meeting:notes' && data.meetingId === meetingId) {
+        setNotes(data.notes);
+      }
+    };
+
+    ws.addEventListener('message', handleMessage);
+
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'meeting:leave',
+          meetingId
+        }));
+      }
+      ws.removeEventListener('message', handleMessage);
+    };
+  }, [socket?.socket, meetingId]);
 
   if (isLoading) {
     return (

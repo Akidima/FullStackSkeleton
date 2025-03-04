@@ -16,12 +16,22 @@ import { useAuth } from "@/hooks/use-auth";
 import { insertUserSchema, type InsertUser } from "@shared/schema";
 import { LoadingSpinner } from "@/components/ui/loading-skeleton";
 import { Bell, Mail, Calendar, CheckCircle } from "lucide-react";
+import { z } from "zod";
+
+// Define notification preferences schema
+const notificationPreferencesSchema = z.object({
+  emailEnabled: z.boolean(),
+  emailFrequency: z.number(),
+  meetingUpdates: z.boolean(),
+  actionItems: z.boolean(),
+});
+
+type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
 
 export default function ProfileSettings() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("profile");
-  const [emailFrequency, setEmailFrequency] = useState(1); 
   const [showPreview, setShowPreview] = useState(false);
 
   const form = useForm<InsertUser>({
@@ -34,6 +44,16 @@ export default function ProfileSettings() {
       theme: user?.theme || "system",
       language: user?.language || "en",
       timeZone: user?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+  });
+
+  const notificationForm = useForm<NotificationPreferences>({
+    resolver: zodResolver(notificationPreferencesSchema),
+    defaultValues: {
+      emailEnabled: true,
+      emailFrequency: 1,
+      meetingUpdates: true,
+      actionItems: true,
     },
   });
 
@@ -67,6 +87,14 @@ export default function ProfileSettings() {
 
   function onSubmit(data: InsertUser) {
     updateProfile.mutate(data);
+  }
+
+  function onNotificationSubmit(data: NotificationPreferences) {
+    console.log("Notification preferences:", data);
+    toast({
+      title: "Preferences Updated",
+      description: "Your notification preferences have been saved.",
+    });
   }
 
   return (
@@ -254,97 +282,140 @@ export default function ProfileSettings() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-full bg-primary/10">
-                          <Mail className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Email Notifications</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Receive meeting reminders via email
-                          </p>
-                        </div>
-                      </div>
-                      <Switch 
-                        checked={true}
-                        onCheckedChange={() => setShowPreview(prev => !prev)}
-                      />
-                    </div>
-
-                    <div className="pl-12">
-                      <FormItem>
-                        <FormLabel>Notification Frequency</FormLabel>
-                        <div className="pt-2">
-                          <Slider
-                            value={[emailFrequency]}
-                            onValueChange={(value) => setEmailFrequency(value[0])}
-                            max={3}
-                            step={1}
-                            className="w-[200px]"
-                          />
-                        </div>
-                        <div className="flex justify-between w-[200px] text-sm text-muted-foreground mt-1">
-                          <span>Daily</span>
-                          <span>Weekly</span>
-                          <span>Monthly</span>
-                        </div>
-                      </FormItem>
-                    </div>
-
-                    {showPreview && (
-                      <div className="pl-12 pt-4">
-                        <Card className="bg-muted/50">
-                          <CardHeader className="pb-2">
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4 text-primary" />
-                              <CardTitle className="text-sm">Meeting Reminder</CardTitle>
+                <Form {...notificationForm}>
+                  <form onSubmit={notificationForm.handleSubmit(onNotificationSubmit)} className="space-y-6">
+                    <div className="space-y-4">
+                      <FormField
+                        control={notificationForm.control}
+                        name="emailEnabled"
+                        render={({ field }) => (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 rounded-full bg-primary/10">
+                                <Mail className="h-5 w-5 text-primary" />
+                              </div>
+                              <div>
+                                <h3 className="font-medium">Email Notifications</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Receive meeting reminders via email
+                                </p>
+                              </div>
                             </div>
-                          </CardHeader>
-                          <CardContent className="text-sm">
-                            <p>You have a meeting "Team Sync" tomorrow at 10:00 AM</p>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    )}
-                  </div>
+                            <FormControl>
+                              <Switch 
+                                checked={field.value}
+                                onCheckedChange={(checked) => {
+                                  field.onChange(checked);
+                                  setShowPreview(checked);
+                                }}
+                              />
+                            </FormControl>
+                          </div>
+                        )}
+                      />
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-full bg-primary/10">
-                        <Calendar className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="font-medium">Meeting Updates</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Get notified when meeting details change
-                        </p>
-                      </div>
+                      <FormField
+                        control={notificationForm.control}
+                        name="emailFrequency"
+                        render={({ field }) => (
+                          <div className="pl-12">
+                            <FormItem>
+                              <FormLabel>Notification Frequency</FormLabel>
+                              <FormControl>
+                                <div className="pt-2">
+                                  <Slider
+                                    value={[field.value]}
+                                    onValueChange={(value) => field.onChange(value[0])}
+                                    max={3}
+                                    step={1}
+                                    className="w-[200px]"
+                                  />
+                                </div>
+                              </FormControl>
+                              <div className="flex justify-between w-[200px] text-sm text-muted-foreground mt-1">
+                                <span>Daily</span>
+                                <span>Weekly</span>
+                                <span>Monthly</span>
+                              </div>
+                            </FormItem>
+                          </div>
+                        )}
+                      />
+
+                      {showPreview && (
+                        <div className="pl-12 pt-4">
+                          <Card className="bg-muted/50">
+                            <CardHeader className="pb-2">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-primary" />
+                                <CardTitle className="text-sm">Meeting Reminder</CardTitle>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="text-sm">
+                              <p>You have a meeting "Team Sync" tomorrow at 10:00 AM</p>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      )}
                     </div>
-                    <Switch checked={true} />
-                  </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-full bg-primary/10">
-                        <CheckCircle className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="font-medium">Action Items</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Receive notifications about assigned action items
-                        </p>
-                      </div>
-                    </div>
-                    <Switch checked={true} />
-                  </div>
+                    <FormField
+                      control={notificationForm.control}
+                      name="meetingUpdates"
+                      render={({ field }) => (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-full bg-primary/10">
+                              <Calendar className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <h3 className="font-medium">Meeting Updates</h3>
+                              <p className="text-sm text-muted-foreground">
+                                Get notified when meeting details change
+                              </p>
+                            </div>
+                          </div>
+                          <FormControl>
+                            <Switch 
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                        </div>
+                      )}
+                    />
 
-                  <Button className="w-full mt-6">
-                    Save Notification Preferences
-                  </Button>
-                </div>
+                    <FormField
+                      control={notificationForm.control}
+                      name="actionItems"
+                      render={({ field }) => (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-full bg-primary/10">
+                              <CheckCircle className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <h3 className="font-medium">Action Items</h3>
+                              <p className="text-sm text-muted-foreground">
+                                Receive notifications about assigned action items
+                              </p>
+                            </div>
+                          </div>
+                          <FormControl>
+                            <Switch 
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                        </div>
+                      )}
+                    />
+
+                    <Button type="submit" className="w-full">
+                      Save Notification Preferences
+                    </Button>
+                  </form>
+                </Form>
               </CardContent>
             </Card>
           </TabsContent>

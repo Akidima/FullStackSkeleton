@@ -5,12 +5,12 @@ import { insertMeetingSchema, updateMeetingSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import { errorHandler, asyncHandler } from "./middleware/errorHandler";
 import { NotFoundError, ValidationError } from "./errors/AppError";
+import { AgendaService } from "./services/agenda";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
   app.get("/api/meetings", asyncHandler(async (req, res) => {
     const meetings = await storage.getMeetings();
-    // Return just the meetings array instead of wrapping it
     res.json(meetings);
   }));
 
@@ -23,6 +23,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof ZodError) {
         throw new ValidationError("Invalid meeting data", error.errors);
       }
+      throw error;
+    }
+  }));
+
+  // New endpoint for generating meeting agenda
+  app.post("/api/meetings/generate-agenda", asyncHandler(async (req, res) => {
+    try {
+      const { title, userId, duration = 60 } = req.body;
+
+      if (!title || !userId) {
+        throw new ValidationError("Missing required fields", [
+          { field: "title", message: "Meeting title is required" },
+          { field: "userId", message: "User ID is required" }
+        ]);
+      }
+
+      // Get past meetings for context
+      const pastMeetings = await storage.getUserMeetings(userId);
+
+      // For now, we'll pass an empty array for upcomingTasks since we haven't implemented task storage yet
+      const upcomingTasks = [];
+
+      const agendaSuggestion = await AgendaService.generateAgenda(
+        title,
+        pastMeetings,
+        upcomingTasks,
+        duration
+      );
+
+      res.json(agendaSuggestion);
+    } catch (error) {
+      console.error("Error generating agenda:", error);
       throw error;
     }
   }));

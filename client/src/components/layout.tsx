@@ -92,7 +92,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </SidebarContent>
         </Sidebar>
 
-        <main className="flex-1 overflow-x-hidden">{children}</main>
+        <main className="flex-1">{children}</main>
       </div>
     </SidebarProvider>
   );

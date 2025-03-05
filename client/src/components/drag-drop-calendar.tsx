@@ -32,22 +32,21 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
 
   // Convert meetings to calendar events with proper drag-and-drop configuration
   const events = useMemo(() => 
-    meetings.map(meeting => ({
-      id: meeting.id.toString(),
-      title: meeting.title || 'Untitled Meeting',
-      start: meeting.date,
-      end: new Date(new Date(meeting.date).getTime() + 60 * 60 * 1000),
-      description: meeting.description,
-      editable: true,
-      startEditable: true,
-      durationEditable: true,
-      resourceEditable: true,
-      backgroundColor: meeting.userId === user?.id ? '#3b82f6' : '#6b7280',
-      borderColor: meeting.userId === user?.id ? '#2563eb' : '#4b5563',
-      extendedProps: {
-        isOwner: meeting.userId === user?.id
-      }
-    })), [meetings, user]
+    meetings.map(meeting => {
+      const isOwner = meeting.userId === user?.id;
+      return {
+        id: meeting.id.toString(),
+        title: meeting.title || 'Untitled Meeting',
+        start: meeting.date,
+        end: new Date(new Date(meeting.date).getTime() + 60 * 60 * 1000),
+        description: meeting.description,
+        editable: isOwner,
+        startEditable: isOwner,
+        durationEditable: isOwner,
+        backgroundColor: isOwner ? '#3b82f6' : '#6b7280',
+        borderColor: isOwner ? '#2563eb' : '#4b5563',
+      };
+    }), [meetings, user]
   );
 
   // Handle event changes with rate limiting and retry logic
@@ -60,8 +59,8 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     const meetingId = parseInt(changeInfo.event.id);
     const meeting = meetings.find(m => m.id === meetingId);
 
-    // Verify ownership
-    if (!meeting?.userId || meeting.userId !== user?.id) {
+    // Check if user is the owner of the meeting
+    if (!meeting || meeting.userId !== user?.id) {
       changeInfo.revert();
       toast({
         title: "Permission Denied",
@@ -141,9 +140,6 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
           right: 'dayGridMonth,timeGridWeek,timeGridDay'
         }}
         editable={true}
-        droppable={true}
-        eventDraggable={true}
-        eventResizeable={true}
         selectable={true}
         dayMaxEvents={true}
         events={events}

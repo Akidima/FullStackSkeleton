@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Menu, LayoutDashboard, Calendar, Settings } from "lucide-react";
+import { Menu, LayoutDashboard, Calendar, Settings, BarChart } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -21,6 +21,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <h1 className="text-4xl font-bold">
                 {location.startsWith("/meetings") ? "Meetings" :
                  location === "/calendar" ? "Calendar" :
+                 location === "/analytics" ? "Analytics Dashboard" :
                  location === "/profile/settings" ? "Settings" : ""}
               </h1>
             )}
@@ -48,6 +49,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <Link href="/calendar" className="flex items-center">
                       <Calendar className="h-4 w-4 mr-2" />
                       Calendar
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/analytics" className="flex items-center">
+                      <BarChart className="h-4 w-4 mr-2" />
+                      Analytics
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>

@@ -24,6 +24,12 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     staleTime: 30000,
   });
 
+  // Query rooms
+  const { data: rooms = [] } = useQuery({
+    queryKey: ['/api/rooms'],
+    staleTime: 60000,
+  });
+
   // Convert meetings to calendar events
   const events = useMemo(() => 
     meetings.map(meeting => {
@@ -42,6 +48,25 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
       };
     }), [meetings, user]
   );
+
+  // Check room availability
+  const checkRoomAvailability = async (startTime: Date, endTime: Date): Promise<boolean> => {
+    try {
+      const response = await fetch(
+        `/api/rooms/available?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to check room availability');
+      }
+
+      const availableRooms = await response.json();
+      return availableRooms.length > 0;
+    } catch (error) {
+      console.error('Error checking room availability:', error);
+      return false;
+    }
+  };
 
   // Handle event changes
   const handleEventChange = useCallback(async (changeInfo: any) => {
@@ -66,11 +91,28 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     setIsUpdating(true);
 
     try {
+      // Check room availability first
+      const newStart = changeInfo.event.start;
+      const newEnd = new Date(newStart.getTime() + 60 * 60 * 1000);
+      const isRoomAvailable = await checkRoomAvailability(newStart, newEnd);
+
+      if (!isRoomAvailable) {
+        throw new Error('No rooms available');
+      }
+
+      // Get first available room
+      const availableRoomsResponse = await fetch(
+        `/api/rooms/available?startTime=${newStart.toISOString()}&endTime=${newEnd.toISOString()}`
+      );
+      const availableRooms = await availableRoomsResponse.json();
+
+      // Update the meeting with new time and room
       const response = await fetch(`/api/meetings/${meetingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          date: changeInfo.event.start.toISOString()
+          date: newStart.toISOString(),
+          roomId: availableRooms[0].id
         }),
       });
 
@@ -82,11 +124,14 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
         title: "Success",
         description: "Meeting rescheduled successfully",
       });
-    } catch (error) {
-      console.error('Error updating meeting:', error);
+    } catch (error: any) {
+      const errorMessage = error.message === 'No rooms available'
+        ? "No rooms available for this time slot"
+        : "Failed to reschedule meeting. Please try again.";
+
       toast({
         title: "Error",
-        description: "Failed to reschedule meeting. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
       changeInfo.revert();

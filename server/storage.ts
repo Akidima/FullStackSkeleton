@@ -6,6 +6,7 @@ import {
   meetingInsights,
   meetingMoods,
   meetingOutcomes,
+  calendarEvents,
   type Meeting,
   type InsertMeeting,
   type User,
@@ -19,7 +20,9 @@ import {
   type MeetingMood,
   type InsertMeetingMood,
   type MeetingOutcome,
-  type InsertMeetingOutcome
+  type InsertMeetingOutcome,
+  type CalendarEvent,
+  type InsertCalendarEvent,
 } from "@shared/schema";
 import { db, testConnection } from "./db";
 import { eq, desc, and, gte, lte } from "drizzle-orm";
@@ -424,7 +427,12 @@ export class DatabaseStorage implements IStorage {
           )
         );
 
-      const bookedRoomIds = new Set(conflictingEvents.map(event => event.roomId));
+      const bookedRoomIds = new Set(
+        conflictingEvents
+          .filter(event => event.roomId !== null)
+          .map(event => event.roomId)
+      );
+
       return availableRooms.filter(room => !bookedRoomIds.has(room.id));
     } catch (error) {
       console.error('Error fetching available rooms:', error);

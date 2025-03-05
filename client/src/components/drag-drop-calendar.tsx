@@ -136,9 +136,11 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
       start: meeting.date,
       end: new Date(new Date(meeting.date).getTime() + 60 * 60 * 1000), // Default 1 hour
       description: meeting.description,
-      editable: meeting.userId === user?.uid, // Use uid for Firebase auth
-      backgroundColor: meeting.userId === user?.uid ? '#3b82f6' : '#6b7280',
-      borderColor: meeting.userId === user?.uid ? '#2563eb' : '#4b5563',
+      editable: meeting.userId === user?.id,
+      backgroundColor: meeting.userId === user?.id ? '#3b82f6' : '#6b7280',
+      borderColor: meeting.userId === user?.id ? '#2563eb' : '#4b5563',
+      durationEditable: meeting.userId === user?.id,
+      startEditable: meeting.userId === user?.id,
     })), [meetings, user]
   );
 
@@ -179,7 +181,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
   const handleEventChange = useCallback(async (changeInfo: any) => {
     // Only allow if user owns the meeting
     const meeting = meetings.find(m => m.id.toString() === changeInfo.event.id);
-    if (!meeting || meeting.userId !== user?.uid) {
+    if (!meeting || meeting.userId !== user?.id) {
       changeInfo.revert();
       toast({
         title: "Permission Denied",
@@ -218,7 +220,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
       }
 
       // Update meeting
-      await fetch(`/api/meetings/${meetingId}`, {
+      const updateResponse = await fetch(`/api/meetings/${meetingId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -228,6 +230,10 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
           roomId: availableRooms[0].id,
         }),
       });
+
+      if (!updateResponse.ok) {
+        throw new Error('Failed to update meeting');
+      }
 
       // Success handling
       queryClient.invalidateQueries({ queryKey: ['/api/meetings'] });
@@ -283,8 +289,9 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
             right: 'dayGridMonth,timeGridWeek,timeGridDay'
           }}
           editable={true}
-          selectable={true}
-          selectMirror={true}
+          eventDraggable={true}
+          eventResizeable={true}
+          droppable={true}
           dayMaxEvents={true}
           weekends={true}
           events={events}

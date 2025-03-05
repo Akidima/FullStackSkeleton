@@ -20,6 +20,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [transcript, setTranscript] = useState<string[]>([]);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("");
+  const [initError, setInitError] = useState<string | null>(null);
   const recognizer = useRef<speechCommands.SpeechCommandRecognizer | null>(null);
 
   useEffect(() => {
@@ -27,51 +28,61 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
     const initializeRecognizer = async () => {
       try {
-        setLoadingStatus("Loading speech recognition model...");
+        console.log('Starting voice assistant initialization...');
+        setLoadingStatus("Initializing TensorFlow.js...");
 
-        // Create recognizer
+        // Initialize TensorFlow.js
+        await tf.setBackend('webgl');
+        await tf.ready();
+        console.log('TensorFlow.js initialized');
+
+        setLoadingStatus("Creating speech command recognizer...");
+
+        // Create recognizer with default configuration
         recognizer.current = speechCommands.create('BROWSER_FFT');
+        console.log('Speech command recognizer created');
 
-        // Load the model
+        setLoadingStatus("Loading speech recognition model...");
         await recognizer.current.ensureModelLoaded();
-
-        // Add custom commands
-        await recognizer.current.listen(
-          result => {
-            const scores = result.scores;
-            const command = scores.indexOf(Math.max(...scores));
-            const commandText = recognizer.current?.wordLabels()[command];
-
-            if (commandText) {
-              setTranscript(prev => [...prev, commandText]);
-              onTranscript?.(commandText);
-
-              // Process commands
-              if (commandText.includes('create') || 
-                  commandText.includes('add') ||
-                  commandText.includes('generate')) {
-                onCommand?.(commandText);
-              }
-            }
-          },
-          {
-            includeSpectrogram: true,
-            probabilityThreshold: 0.75
-          }
-        );
+        console.log('Model loaded successfully');
 
         if (!cleanup) {
+          await recognizer.current.listen(
+            result => {
+              const scores = result.scores as Float32Array;
+              const maxScore = Math.max(...Array.from(scores));
+              const maxScoreIndex = scores.indexOf(maxScore);
+              const command = recognizer.current?.wordLabels()[maxScoreIndex];
+
+              if (command && maxScore > 0.75) {
+                console.log('Recognized command:', command, 'with score:', maxScore);
+                setTranscript(prev => [...prev, command]);
+                onTranscript?.(command);
+
+                if (['go', 'stop', 'yes', 'no'].includes(command)) {
+                  onCommand?.(command);
+                }
+              }
+            },
+            {
+              probabilityThreshold: 0.75
+            }
+          );
+
           setIsModelLoaded(true);
           setLoadingStatus("");
+          setInitError(null);
+          console.log('Voice assistant fully initialized');
           toast({
             title: "Voice Assistant Ready",
-            description: "You can now use voice commands.",
+            description: "You can now use voice commands",
           });
         }
       } catch (error) {
-        console.error('Failed to initialize voice recognition:', error);
+        console.error('Failed to initialize voice assistant:', error);
         if (!cleanup) {
-          setLoadingStatus("Failed to load speech recognition model. Please try refreshing.");
+          setInitError('Failed to initialize voice assistant. Please try refreshing.');
+          setLoadingStatus("");
           toast({
             title: "Error",
             description: "Failed to initialize voice assistant. Please try refreshing the page.",
@@ -81,7 +92,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
       }
     };
 
-    if (isActive) {
+    if (isActive && !isModelLoaded && !initError) {
       initializeRecognizer();
     }
 
@@ -104,7 +115,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
     }
 
     try {
-      await recognizer.current.startListening();
+      await recognizer.current.startStreaming();
       setIsRecording(true);
       toast({
         title: "Recording Started",
@@ -122,7 +133,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
   const stopRecording = async () => {
     if (recognizer.current) {
-      await recognizer.current.stopListening();
+      await recognizer.current.stopStreaming();
       setIsRecording(false);
       toast({
         title: "Recording Stopped",
@@ -132,6 +143,32 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   };
 
   if (!isActive) return null;
+
+  if (initError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <Mic className="h-5 w-5" />
+            Voice Assistant Error
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-destructive">{initError}</p>
+          <Button
+            onClick={() => {
+              setInitError(null);
+              setIsModelLoaded(false);
+            }}
+            variant="outline"
+            className="mt-4"
+          >
+            Retry Initialization
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!isModelLoaded) {
     return (
@@ -143,7 +180,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">{loadingStatus}</p>
+          <p className="text-muted-foreground">{loadingStatus || "Please wait..."}</p>
         </CardContent>
       </Card>
     );

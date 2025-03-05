@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Mic, MicOff, Loader2 } from "lucide-react";
+import { Mic, MicOff, Loader2, ThumbsUp, ThumbsDown } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { pipeline } from "@xenova/transformers";
 
@@ -23,6 +23,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const transcriber = useRef<any>(null);
+  const sentimentAnalyzer = useRef<any>(null);
   const MAX_INIT_ATTEMPTS = 3;
 
   useEffect(() => {
@@ -38,6 +39,17 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
               progress_callback: (progress: any) => console.log('Loading model:', progress),
               quantized: true, // Use quantized model for better browser performance
               cache: true, // Enable caching
+            }
+          );
+        }
+        if (!sentimentAnalyzer.current) {
+          console.log('Initializing sentiment analyzer...');
+          sentimentAnalyzer.current = await pipeline(
+            'text-classification',
+            'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
+            {
+              quantized: true,
+              cache: true,
             }
           );
         }
@@ -140,6 +152,17 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             lowerText.includes('generate summary')) {
           onCommand?.(result.text);
         }
+
+        // Perform sentiment analysis
+        const sentimentResult = await sentimentAnalyzer.current(result.text);
+        const sentiment = sentimentResult[0];
+        const sentimentIcon = sentiment.label === 'POSITIVE' ? 
+          <ThumbsUp className="h-4 w-4 text-green-500" /> : 
+          <ThumbsDown className="h-4 w-4 text-red-500" />;
+
+        setTranscript(prev => [...prev, 
+          `Sentiment: ${sentiment.label} (${Math.round(sentiment.score * 100)}% confidence) ${sentimentIcon}`
+        ]);
       }
     } catch (error) {
       console.error('Transcription error:', error);

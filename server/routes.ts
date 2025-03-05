@@ -14,6 +14,7 @@ import { authenticateJWT } from "./auth";
 import {insertTaskSchema, updateTaskSchema} from "@shared/schema";
 import { format } from 'date-fns';
 import { rateLimit } from 'express-rate-limit';
+import { SlackService } from "./services/slack";
 
 // Add rate limiter before the analytics routes
 const analyticsLimiter = rateLimit({
@@ -75,6 +76,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const meetingData = insertMeetingSchema.parse(req.body);
       const meeting = await storage.createMeeting(meetingData);
 
+      // Send Slack notification for new meeting
+      await SlackService.sendMeetingNotification(meeting);
+
       // Broadcast the update to connected clients
       broadcastMeetingUpdate('create', meeting.id);
 
@@ -107,6 +111,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const meetingData = updateMeetingSchema.parse(req.body);
       const updatedMeeting = await storage.updateMeeting(meetingId, meetingData);
 
+      // Send Slack notification for updated meeting
+      await SlackService.updateMeetingStatus(updatedMeeting, 'updated');
+
       // Broadcast the update to connected clients
       broadcastMeetingUpdate('update', meeting.id);
 
@@ -125,6 +132,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!meeting) {
       throw new NotFoundError("Meeting");
     }
+
+    // Send Slack notification for cancelled meeting
+    await SlackService.updateMeetingStatus(meeting, 'cancelled');
 
     await storage.deleteMeeting(meetingId);
 
@@ -147,6 +157,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedMeeting = await storage.updateMeeting(meeting.id, {
         summary: summary.summary
       });
+
+      // Send meeting summary to Slack
+      await SlackService.sendMeetingSummary(updatedMeeting, summary.summary);
 
       // Broadcast the update to connected clients
       broadcastMeetingUpdate('update', meeting.id);

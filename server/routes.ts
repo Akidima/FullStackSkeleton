@@ -162,6 +162,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
+  // Add these routes after the existing meeting routes
+  app.get("/api/meetings/:id/moods", asyncHandler(async (req: Request, res: Response) => {
+    const meetingId = validateMeetingId(req.params.id);
+    const meeting = await storage.getMeeting(meetingId);
+    if (!meeting) {
+      throw new NotFoundError("Meeting");
+    }
+
+    const moods = await storage.getMeetingMoods(meetingId);
+    res.json(moods);
+  }));
+
+  app.post("/api/meetings/:id/moods", asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const meetingId = validateMeetingId(req.params.id);
+      const meeting = await storage.getMeeting(meetingId);
+      if (!meeting) {
+        throw new NotFoundError("Meeting");
+      }
+
+      const moodData = req.body;
+      const mood = await storage.createMeetingMood({
+        meetingId,
+        ...moodData
+      });
+
+      // Broadcast mood update to connected clients
+      broadcastMeetingUpdate('moods', meetingId);
+
+      res.status(201).json(mood);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new ValidationError("Invalid mood data", error.errors);
+      }
+      throw error;
+    }
+  }));
+
   // Scheduling Assistant Routes
   app.post("/api/meetings/suggest-times", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
     const { participantIds, duration, earliestStartTime, latestStartTime, requiredCapacity } = req.body;

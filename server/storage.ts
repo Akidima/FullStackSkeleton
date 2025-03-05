@@ -1,4 +1,23 @@
-import { meetings, users, registrationAttempts, securityRecommendations, rooms, calendarEvents, userAvailability, meetingPreferences, meetingMoods, type Meeting, type InsertMeeting, type User, type InsertUser, type RegistrationAttempt, type InsertRegistrationAttempt, type SecurityRecommendation, type InsertSecurityRecommendation, type Room, type InsertRoom, type CalendarEvent, type InsertCalendarEvent, type UserAvailability, type InsertUserAvailability, type MeetingPreference, type InsertMeetingPreference, type MeetingInsight, type InsertMeetingInsight, type MeetingOutcome, type InsertMeetingOutcome, type MeetingMood, type InsertMeetingMood } from "@shared/schema";
+import {
+  meetings,
+  users,
+  tasks,
+  meetingInsights,
+  meetingMoods,
+  meetingOutcomes,
+  type Meeting,
+  type InsertMeeting,
+  type User,
+  type InsertUser,
+  type Task,
+  type InsertTask,
+  type MeetingInsight,
+  type InsertMeetingInsight,
+  type MeetingMood,
+  type InsertMeetingMood,
+  type MeetingOutcome,
+  type InsertMeetingOutcome
+} from "@shared/schema";
 import { db, testConnection } from "./db";
 import { eq, desc, and, gte, lte } from "drizzle-orm";
 
@@ -71,6 +90,13 @@ export interface IStorage {
     dominantMoods: string[];
     confidenceAvg: number;
   }>;
+
+  // Task operations
+  getTasks(filters?: { meetingId?: number; userId?: number }): Promise<Task[]>;
+  getTask(id: number): Promise<Task | undefined>;
+  createTask(task: InsertTask): Promise<Task>;
+  updateTask(id: number, task: Partial<InsertTask>): Promise<Task>;
+  deleteTask(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -665,6 +691,77 @@ export class DatabaseStorage implements IStorage {
       };
     } catch (error) {
       console.error(`Error getting mood summary for meeting ${meetingId}:`, error);
+      throw error;
+    }
+  }
+
+  async getTasks(filters: { meetingId?: number; userId?: number } = {}): Promise<Task[]> {
+    try {
+      let query = db.select().from(tasks);
+
+      if (filters.meetingId) {
+        query = query.where(eq(tasks.meetingId, filters.meetingId));
+      }
+
+      if (filters.userId) {
+        query = query.where(eq(tasks.assigneeId, filters.userId));
+      }
+
+      return await query.orderBy(desc(tasks.createdAt));
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      throw error;
+    }
+  }
+
+  async getTask(id: number): Promise<Task | undefined> {
+    try {
+      const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+      return task;
+    } catch (error) {
+      console.error(`Error fetching task ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async createTask(task: InsertTask): Promise<Task> {
+    try {
+      const [createdTask] = await db.insert(tasks).values(task).returning();
+      return createdTask;
+    } catch (error) {
+      console.error('Error creating task:', error);
+      throw error;
+    }
+  }
+
+  async updateTask(id: number, update: Partial<InsertTask>): Promise<Task> {
+    try {
+      const [updatedTask] = await db
+        .update(tasks)
+        .set(update)
+        .where(eq(tasks.id, id))
+        .returning();
+
+      if (!updatedTask) {
+        throw new Error('Task not found');
+      }
+
+      return updatedTask;
+    } catch (error) {
+      console.error(`Error updating task ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async deleteTask(id: number): Promise<boolean> {
+    try {
+      const [deletedTask] = await db
+        .delete(tasks)
+        .where(eq(tasks.id, id))
+        .returning();
+      return !!deletedTask;
+    } catch (error) {
+      console.error(`Error deleting task ${id}:`, error);
       throw error;
     }
   }

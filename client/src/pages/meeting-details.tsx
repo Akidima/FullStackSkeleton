@@ -15,6 +15,8 @@ import { useWebSocket } from "@/hooks/use-websocket";
 import { TaskManager } from "@/components/task-manager";
 import { VoiceAssistant } from "@/components/voice-assistant";
 import { ShareButtons } from "@/components/share-buttons";
+import { MoodTracker } from "@/components/mood-tracker"; // Assuming MoodTracker is imported
+
 
 // Rate limiting configuration
 const RETRY_DELAY = 1000; // Start with 1 second
@@ -465,12 +467,18 @@ export default function MeetingDetails() {
                 </div>
               )}
 
-              <MeetingInsights meetingId={parseInt(meetingId!)} />
+              {/* Add MoodTracker component here */}
+              <div className="space-y-2">
+                <h3 className="font-semibold">Meeting Mood Analysis</h3>
+                <MoodTracker meetingId={meetingId!} />
+              </div>
 
               <div className="space-y-2">
                 <h3 className="font-semibold">Action Items</h3>
                 <TaskManager meetingId={parseInt(meetingId!)} />
               </div>
+
+              <MeetingInsights meetingId={parseInt(meetingId!)} />
 
               <div className="flex justify-end gap-2">
                 <Link href={`/meetings/${meeting.id}/edit`}>

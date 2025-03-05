@@ -11,20 +11,18 @@ import { generateMeetingInsights, batchSummarize } from "./services/summarize";
 import { SchedulerService } from "./services/scheduler";
 import { broadcastMeetingUpdate } from "./websocket";
 import { authenticateJWT } from "./auth";
-import {insertTaskSchema, updateTaskSchema} from "@shared/schema"; // Assuming these are defined elsewhere
-import { format } from 'date-fns'; //Import date-fns
+import {insertTaskSchema, updateTaskSchema} from "@shared/schema";
+import { format } from 'date-fns';
+import { rateLimit } from 'express-rate-limit';
 
-
-// Utility function to validate meeting ID
-function validateMeetingId(id: string): number {
-  const meetingId = Number(id);
-  if (isNaN(meetingId)) {
-    throw new ValidationError("Invalid meeting ID", [
-      { field: "id", message: "Meeting ID must be a valid number" }
-    ]);
-  }
-  return meetingId;
-}
+// Add rate limiter before the analytics routes
+const analyticsLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
@@ -406,6 +404,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // Add these routes after existing routes but before error handler
+  app.use('/api/analytics', analyticsLimiter); // Apply rate limiter
+
   app.get("/api/analytics/meetings", asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetings = await storage.getMeetings();
@@ -421,6 +421,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return acc;
       }, []);
+
+      // Cache headers
+      res.set('Cache-Control', 'public, max-age=300'); // 5 minutes cache
 
       res.json({
         weeklyMeetings: weeklyMeetings.slice(-7), // Last 7 weeks
@@ -445,6 +448,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { name: "Rescheduled", value: Math.round(totalParticipants * 0.05) }, // Example: 5% reschedule rate
       ];
 
+      // Cache headers
+      res.set('Cache-Control', 'public, max-age=300');
+
       res.json({ participation });
     } catch (error) {
       console.error('Error generating participation analytics:', error);
@@ -467,6 +473,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
+      // Cache headers
+      res.set('Cache-Control', 'public, max-age=300');
+
       res.json({ rooms: roomUtilization });
     } catch (error) {
       console.error('Error generating room analytics:', error);
@@ -478,4 +487,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(errorHandler);
 
   return createServer(app);
+}
+
+function validateMeetingId(id: string): number {
+  const meetingId = Number(id);
+  if (isNaN(meetingId)) {
+    throw new ValidationError("Invalid meeting ID", [
+      { field: "id", message: "Meeting ID must be a valid number" }
+    ]);
+  }
+  return meetingId;
 }

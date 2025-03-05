@@ -9,30 +9,40 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
-const RETRY_DELAY = 1000;
+
+// Query configuration
+const STALE_TIME = 5 * 60 * 1000; // 5 minutes
+const CACHE_TIME = 30 * 60 * 1000; // 30 minutes
+const RETRY_DELAY = 5000; // 5 seconds between retries
 const MAX_RETRIES = 3;
 
 export default function AnalyticsDashboard() {
-  // Configure queries with retry logic and error handling
+  // Configure queries with caching and retry logic
   const { data: meetingStats, isLoading: isLoadingStats, error: statsError } = useQuery({
     queryKey: ['/api/analytics/meetings'],
-    staleTime: 60000, // Cache for 1 minute
+    staleTime: STALE_TIME,
+    cacheTime: CACHE_TIME,
     retry: MAX_RETRIES,
     retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
+    refetchOnWindowFocus: false,
   });
 
   const { data: participationData, isLoading: isLoadingParticipation, error: participationError } = useQuery({
     queryKey: ['/api/analytics/participation'],
-    staleTime: 60000,
+    staleTime: STALE_TIME,
+    cacheTime: CACHE_TIME,
     retry: MAX_RETRIES,
     retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
+    refetchOnWindowFocus: false,
   });
 
   const { data: roomUtilization, isLoading: isLoadingRooms, error: roomsError } = useQuery({
     queryKey: ['/api/analytics/rooms'],
-    staleTime: 60000,
+    staleTime: STALE_TIME,
+    cacheTime: CACHE_TIME,
     retry: MAX_RETRIES,
     retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
+    refetchOnWindowFocus: false,
   });
 
   const isLoading = isLoadingStats || isLoadingParticipation || isLoadingRooms;
@@ -51,6 +61,10 @@ export default function AnalyticsDashboard() {
   }
 
   if (hasError) {
+    const errorMessage = hasError instanceof Error && hasError.message === "Too many requests"
+      ? "Too many requests. Please wait a moment and try again."
+      : "Failed to load analytics data. Please try again later.";
+
     return (
       <div className="min-h-screen bg-background p-6">
         <div className="max-w-7xl mx-auto">
@@ -58,7 +72,7 @@ export default function AnalyticsDashboard() {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>
-              Failed to load analytics data. Please try again later.
+              {errorMessage}
             </AlertDescription>
           </Alert>
         </div>

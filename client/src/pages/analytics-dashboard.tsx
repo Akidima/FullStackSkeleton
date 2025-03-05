@@ -12,7 +12,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 
 // Query configuration
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
-const CACHE_TIME = 30 * 60 * 1000; // 30 minutes
+const GC_TIME = 30 * 60 * 1000; // 30 minutes
 const RETRY_DELAY = 5000; // 5 seconds between retries
 const MAX_RETRIES = 3;
 
@@ -21,7 +21,7 @@ export default function AnalyticsDashboard() {
   const { data: meetingStats, isLoading: isLoadingStats, error: statsError } = useQuery({
     queryKey: ['/api/analytics/meetings'],
     staleTime: STALE_TIME,
-    cacheTime: CACHE_TIME,
+    gcTime: GC_TIME,
     retry: MAX_RETRIES,
     retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
     refetchOnWindowFocus: false,
@@ -30,7 +30,7 @@ export default function AnalyticsDashboard() {
   const { data: participationData, isLoading: isLoadingParticipation, error: participationError } = useQuery({
     queryKey: ['/api/analytics/participation'],
     staleTime: STALE_TIME,
-    cacheTime: CACHE_TIME,
+    gcTime: GC_TIME,
     retry: MAX_RETRIES,
     retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
     refetchOnWindowFocus: false,
@@ -39,7 +39,7 @@ export default function AnalyticsDashboard() {
   const { data: roomUtilization, isLoading: isLoadingRooms, error: roomsError } = useQuery({
     queryKey: ['/api/analytics/rooms'],
     staleTime: STALE_TIME,
-    cacheTime: CACHE_TIME,
+    gcTime: GC_TIME,
     retry: MAX_RETRIES,
     retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
     refetchOnWindowFocus: false,
@@ -94,7 +94,7 @@ export default function AnalyticsDashboard() {
             <CardContent>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={meetingStats?.weeklyMeetings || []}>
+                  <BarChart data={meetingStats?.weeklyMeetings}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="week" />
                     <YAxis />
@@ -116,7 +116,7 @@ export default function AnalyticsDashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={participationData?.participation || []}
+                      data={participationData?.participation}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
@@ -144,7 +144,7 @@ export default function AnalyticsDashboard() {
             <CardContent>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={roomUtilization?.rooms || []}>
+                  <BarChart data={roomUtilization?.rooms}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis />

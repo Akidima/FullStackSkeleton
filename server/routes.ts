@@ -20,9 +20,26 @@ import { OutlookCalendarService } from "./services/outlook-calendar";
 
 // Add rate limiter before the analytics routes
 const analyticsLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300, // limit each IP to 300 requests per windowMs
+  message: {
+    status: 'error',
+    message: 'Too many requests. Please try again later.',
+    retryAfter: 'windowMs'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS', // Skip preflight requests
+});
+
+// Separate limiter for auth routes with more lenient limits
+const authLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 100, // 100 requests per hour
+  message: {
+    status: 'error',
+    message: 'Too many authentication attempts. Please try again later.'
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -485,6 +502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // Add these routes after existing routes but before error handler
+  app.use('/auth', authLimiter); // Apply auth rate limiter
   app.use('/api/analytics', analyticsLimiter); // Apply rate limiter
 
   app.get("/api/analytics/meetings", asyncHandler(async (req: Request, res: Response) => {

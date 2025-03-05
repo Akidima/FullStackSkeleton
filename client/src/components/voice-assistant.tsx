@@ -27,9 +27,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [initError, setInitError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const lastRequestTime = useRef<number>(0);
-  const MIN_REQUEST_INTERVAL = 2000; // Increase to 2 seconds between requests
+  const MIN_REQUEST_INTERVAL = 5000; // Increase to 5 seconds between requests
   const MAX_RETRIES = 3;
-  const INITIAL_RETRY_DELAY = 5000; // Increase initial retry delay to 5 seconds
+  const INITIAL_RETRY_DELAY = 10000; // Increase initial retry delay to 10 seconds
+  const MAX_RETRY_DELAY = 60000; // Maximum delay of 1 minute
 
   useEffect(() => {
     let cleanup = false;
@@ -118,7 +119,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             {
               probabilityThreshold: 0.75,
               invokeCallbackOnNoiseAndUnknown: false,
-              overlapFactor: 0.75 // Increase overlap factor to reduce processing frequency
+              overlapFactor: 0.9 // Increase overlap factor to reduce processing frequency even more
             }
           );
 
@@ -144,28 +145,33 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           const isRateLimitError = error.toString().includes('429') || 
                                  error.toString().includes('Too Many Requests');
 
+          // Calculate exponential backoff with maximum delay
+          const backoffDelay = Math.min(
+            INITIAL_RETRY_DELAY * Math.pow(2, retryCount),
+            MAX_RETRY_DELAY
+          );
+
           setInitError(
             isRateLimitError
-              ? 'Too many requests. Please wait a moment before trying again.'
+              ? `Too many requests. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
               : shouldRetry 
-                ? `Initialization failed. Retrying in ${INITIAL_RETRY_DELAY / 1000} seconds...` 
+                ? `Initialization failed. Retrying in ${Math.round(backoffDelay / 1000)} seconds...` 
                 : 'Failed to initialize voice assistant. Please try again later.'
           );
           setLoadingStatus("");
 
-          if (shouldRetry && !isRateLimitError) {
-            const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
+          if (shouldRetry) {
             retryTimeout = setTimeout(() => {
               setRetryCount(prev => prev + 1);
               setInitError(null);
               setIsModelLoaded(false);
-            }, delay);
+            }, backoffDelay);
           }
 
           toast({
             title: "Error",
             description: isRateLimitError
-              ? "Too many requests. Please wait a moment before trying again."
+              ? `Too many requests. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
               : shouldRetry 
                 ? "Failed to initialize voice assistant. Retrying..." 
                 : "Too many requests. Please try again later.",

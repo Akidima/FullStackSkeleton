@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Mic, MicOff, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import * as tf from '@tensorflow/tfjs';
+import * as speechCommands from '@tensorflow-models/speech-commands';
 
 interface VoiceAssistantProps {
   onCommand?: (command: string) => void;
@@ -16,92 +18,112 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState<string[]>([]);
-  const recognition = useRef<SpeechRecognition | null>(null);
+  const [isModelLoaded, setIsModelLoaded] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState("");
+  const recognizer = useRef<speechCommands.SpeechCommandRecognizer | null>(null);
 
   useEffect(() => {
-    // Check if browser supports speech recognition
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    let cleanup = false;
+
+    const initializeRecognizer = async () => {
+      try {
+        setLoadingStatus("Loading speech recognition model...");
+
+        // Create recognizer
+        recognizer.current = speechCommands.create('BROWSER_FFT');
+
+        // Load the model
+        await recognizer.current.ensureModelLoaded();
+
+        // Add custom commands
+        await recognizer.current.listen(
+          result => {
+            const scores = result.scores;
+            const command = scores.indexOf(Math.max(...scores));
+            const commandText = recognizer.current?.wordLabels()[command];
+
+            if (commandText) {
+              setTranscript(prev => [...prev, commandText]);
+              onTranscript?.(commandText);
+
+              // Process commands
+              if (commandText.includes('create') || 
+                  commandText.includes('add') ||
+                  commandText.includes('generate')) {
+                onCommand?.(commandText);
+              }
+            }
+          },
+          {
+            includeSpectrogram: true,
+            probabilityThreshold: 0.75
+          }
+        );
+
+        if (!cleanup) {
+          setIsModelLoaded(true);
+          setLoadingStatus("");
+          toast({
+            title: "Voice Assistant Ready",
+            description: "You can now use voice commands.",
+          });
+        }
+      } catch (error) {
+        console.error('Failed to initialize voice recognition:', error);
+        if (!cleanup) {
+          setLoadingStatus("Failed to load speech recognition model. Please try refreshing.");
+          toast({
+            title: "Error",
+            description: "Failed to initialize voice assistant. Please try refreshing the page.",
+            variant: "destructive",
+          });
+        }
+      }
+    };
+
+    if (isActive) {
+      initializeRecognizer();
+    }
+
+    return () => {
+      cleanup = true;
+      if (recognizer.current) {
+        recognizer.current.stopListening();
+      }
+    };
+  }, [isActive, onCommand, onTranscript]);
+
+  const startRecording = async () => {
+    if (!isModelLoaded || !recognizer.current) {
       toast({
         title: "Error",
-        description: "Speech recognition is not supported in your browser.",
+        description: "Voice assistant is not ready yet. Please wait.",
         variant: "destructive",
       });
       return;
     }
 
-    // Initialize speech recognition
-    const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-    recognition.current = new SpeechRecognition();
-    recognition.current.continuous = true;
-    recognition.current.interimResults = true;
-
-    recognition.current.onstart = () => {
+    try {
+      await recognizer.current.startListening();
       setIsRecording(true);
       toast({
         title: "Recording Started",
         description: "Listening for voice commands...",
       });
-    };
-
-    recognition.current.onend = () => {
-      setIsRecording(false);
-      setIsProcessing(false);
-    };
-
-    recognition.current.onerror = (event) => {
-      console.error('Speech recognition error:', event.error);
+    } catch (error) {
+      console.error('Failed to start recording:', error);
       toast({
         title: "Error",
-        description: `Speech recognition error: ${event.error}`,
+        description: "Failed to access microphone. Please check your permissions.",
         variant: "destructive",
       });
-      setIsRecording(false);
-      setIsProcessing(false);
-    };
-
-    recognition.current.onresult = (event) => {
-      const result = event.results[event.results.length - 1];
-      const transcript = result[0].transcript;
-
-      if (result.isFinal) {
-        setTranscript(prev => [...prev, transcript]);
-        onTranscript?.(transcript);
-
-        // Simple command detection
-        const lowerText = transcript.toLowerCase();
-        if (lowerText.includes('create task') || 
-            lowerText.includes('add action item') ||
-            lowerText.includes('generate summary')) {
-          onCommand?.(transcript);
-        }
-      }
-    };
-
-    return () => {
-      if (recognition.current) {
-        recognition.current.stop();
-      }
-    };
-  }, [onCommand, onTranscript]);
-
-  const startRecording = () => {
-    if (recognition.current) {
-      try {
-        recognition.current.start();
-      } catch (error) {
-        console.error('Failed to start recording:', error);
-        toast({
-          title: "Error",
-          description: "Failed to start recording. Please try again.",
-          variant: "destructive",
-        });
-      }
     }
   };
 
-  const stopRecording = () => {
-    if (recognition.current) {
-      recognition.current.stop();
+  const stopRecording = async () => {
+    if (recognizer.current) {
+      await recognizer.current.stopListening();
+      setIsRecording(false);
       toast({
         title: "Recording Stopped",
         description: "Processing complete.",
@@ -111,11 +133,31 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
   if (!isActive) return null;
 
+  if (!isModelLoaded) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Initializing Voice Assistant
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">{loadingStatus}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          {isRecording ? <Mic className="h-5 w-5 text-red-500 animate-pulse" /> : <Mic className="h-5 w-5" />}
+          {isRecording ? (
+            <Mic className="h-5 w-5 text-red-500 animate-pulse" />
+          ) : (
+            <Mic className="h-5 w-5" />
+          )}
           Voice Assistant
           {isProcessing && (
             <Badge variant="secondary" className="ml-2">
@@ -160,12 +202,4 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
       </CardContent>
     </Card>
   );
-}
-
-// Add TypeScript declarations for the Web Speech API
-declare global {
-  interface Window {
-    webkitSpeechRecognition: any;
-    SpeechRecognition: any;
-  }
 }

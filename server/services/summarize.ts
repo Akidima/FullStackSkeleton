@@ -13,9 +13,9 @@ async function initializeModel() {
 
 interface MeetingSummaryDetails {
   summary: string;
-  keyDecisions: string[];
+  keyPoints: string[];
   actionItems: string[];
-  followUpTasks: string[];
+  decisions: string[];
   sentiment: {
     overall: 'positive' | 'neutral' | 'negative';
     score: number;
@@ -36,9 +36,9 @@ export async function generateMeetingInsights(meeting: Meeting): Promise<Meeting
     if (!textToSummarize) {
       return {
         summary: "No content available for summarization.",
-        keyDecisions: [],
+        keyPoints: [],
         actionItems: [],
-        followUpTasks: [],
+        decisions: [],
         sentiment: {
           overall: 'neutral',
           score: 0.5
@@ -57,22 +57,22 @@ export async function generateMeetingInsights(meeting: Meeting): Promise<Meeting
     const notes = meeting.notes || '';
 
     // Enhanced key points extraction with better pattern matching
+    const keyPoints = notes.split('\n')
+      .filter(line => /^[•\-\*]\s/.test(line))
+      .map(line => line.replace(/^[•\-\*]\s/, '').trim());
+
     const decisions = notes.split('\n')
       .filter(line => /^(?:decision|decided|agreed):?/i.test(line))
       .map(line => line.replace(/^(?:decision|decided|agreed):?/i, '').trim());
 
-    const actions = notes.split('\n')
+    const actionItems = notes.split('\n')
       .filter(line => /^(?:action|task|todo):?/i.test(line))
       .map(line => line.replace(/^(?:action|task|todo):?/i, '').trim());
 
-    const followUps = notes.split('\n')
-      .filter(line => /^(?:follow[ -]?up|next[ -]?steps?):?/i.test(line))
-      .map(line => line.replace(/^(?:follow[ -]?up|next[ -]?steps?):?/i, '').trim());
-
-    // Simple sentiment analysis based on keywords
+    // Enhanced sentiment analysis based on keywords
     const sentimentKeywords = {
-      positive: ['agree', 'good', 'great', 'success', 'achieve', 'improve', 'resolved', 'completed'],
-      negative: ['disagree', 'bad', 'fail', 'issue', 'problem', 'concern', 'delayed', 'blocked']
+      positive: ['agree', 'good', 'great', 'success', 'achieve', 'improve', 'resolved', 'completed', 'progress'],
+      negative: ['disagree', 'bad', 'fail', 'issue', 'problem', 'concern', 'delayed', 'blocked', 'risk']
     };
 
     const words = notes.toLowerCase().split(/\W+/);
@@ -84,9 +84,9 @@ export async function generateMeetingInsights(meeting: Meeting): Promise<Meeting
 
     return {
       summary: summaryResult[0].summary_text,
-      keyDecisions: decisions,
-      actionItems: actions,
-      followUpTasks: followUps,
+      keyPoints,
+      actionItems,
+      decisions,
       sentiment: {
         overall: sentimentScore > 0.6 ? 'positive' : sentimentScore < 0.4 ? 'negative' : 'neutral',
         score: sentimentScore
@@ -98,24 +98,37 @@ export async function generateMeetingInsights(meeting: Meeting): Promise<Meeting
   }
 }
 
+// Rate limiting configuration
+const RETRY_DELAY = 1000; // Start with 1 second
+const MAX_RETRIES = 3;
+
 export async function batchSummarize(meetings: Meeting[]): Promise<Record<number, MeetingSummaryDetails>> {
   const summaries: Record<number, MeetingSummaryDetails> = {};
 
   for (const meeting of meetings) {
-    try {
-      summaries[meeting.id] = await generateMeetingInsights(meeting);
-    } catch (error) {
-      console.error(`Failed to summarize meeting ${meeting.id}:`, error);
-      summaries[meeting.id] = {
-        summary: "Failed to generate summary.",
-        keyDecisions: [],
-        actionItems: [],
-        followUpTasks: [],
-        sentiment: {
-          overall: 'neutral',
-          score: 0.5
+    let retries = 0;
+    while (retries < MAX_RETRIES) {
+      try {
+        summaries[meeting.id] = await generateMeetingInsights(meeting);
+        break;
+      } catch (error) {
+        console.error(`Failed to summarize meeting ${meeting.id}:`, error);
+        if (retries === MAX_RETRIES - 1) {
+          summaries[meeting.id] = {
+            summary: "Failed to generate summary.",
+            keyPoints: [],
+            actionItems: [],
+            decisions: [],
+            sentiment: {
+              overall: 'neutral',
+              score: 0.5
+            }
+          };
         }
-      };
+        const delay = RETRY_DELAY * Math.pow(2, retries);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        retries++;
+      }
     }
   }
 

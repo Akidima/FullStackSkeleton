@@ -4,15 +4,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, Clock, Users, ArrowLeft, FileText, CheckCircle2, Mic, Share2 } from "lucide-react";
+import { Clock, Users, ArrowLeft, FileText, CheckCircle2, Share2 } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from "@/components/ui/loading-skeleton";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { TaskManager } from "@/components/task-manager";
-import { VoiceAssistant } from "@/components/voice-assistant";
 import { ShareButtons } from "@/components/share-buttons";
 
 // Rate limiting configuration
@@ -27,15 +25,15 @@ export default function MeetingDetails() {
   const { toast } = useToast();
   const [notes, setNotes] = useState("");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [isVoiceAssistantActive, setIsVoiceAssistantActive] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isCollaborating, setIsCollaborating] = useState(false);
 
-  // Query for meeting details
+  // Query for meeting details with retry logic
   const { data: meeting, isLoading } = useQuery<Meeting>({
     queryKey: [`/api/meetings/${meetingId}`],
     enabled: !!meetingId && !isNaN(meetingId),
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000),
+    retry: MAX_RETRIES,
+    retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
   });
 
   // Save notes mutation with retry logic
@@ -143,10 +141,13 @@ export default function MeetingDetails() {
     }
   });
 
-  // Handle real-time note changes
+  // Handle real-time collaborative note changes
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newNotes = e.target.value;
     setNotes(newNotes);
+    setIsCollaborating(true);
+
+    // Broadcast note changes to other participants
     if (socket?.socket?.readyState === WebSocket.OPEN) {
       socket.socket.send(JSON.stringify({
         type: 'meeting:notes',
@@ -172,7 +173,9 @@ export default function MeetingDetails() {
     const handleMessage = (event: MessageEvent) => {
       const data = JSON.parse(event.data);
       if (data.type === 'meeting:notes' && data.meetingId === meetingId) {
-        setNotes(data.notes);
+        if (!isCollaborating) {
+          setNotes(data.notes);
+        }
       } else if (data.type === 'meeting:summary' && data.meetingId === meetingId) {
         queryClient.invalidateQueries({ queryKey: [`/api/meetings/${meetingId}`] });
       }
@@ -189,7 +192,7 @@ export default function MeetingDetails() {
       }
       ws.removeEventListener('message', handleMessage);
     };
-  }, [socket?.socket, meetingId, queryClient]);
+  }, [socket?.socket, meetingId, queryClient, isCollaborating]);
 
   if (isLoading || !meeting) {
     return (
@@ -213,14 +216,6 @@ export default function MeetingDetails() {
             </Button>
           </Link>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsVoiceAssistantActive(!isVoiceAssistantActive)}
-              className="gap-2"
-            >
-              <Mic className="h-4 w-4" />
-              {isVoiceAssistantActive ? "Disable" : "Enable"} Voice Assistant
-            </Button>
             {isEditingNotes ? (
               <Button
                 onClick={() => saveNotes.mutate(notes)}

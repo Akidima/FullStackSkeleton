@@ -136,7 +136,9 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
       start: meeting.date,
       end: new Date(new Date(meeting.date).getTime() + 60 * 60 * 1000), // Default 1 hour
       description: meeting.description,
-      editable: meeting.userId === user?.id, // Only allow editing if user is the owner
+      editable: meeting.userId === user?.uid, // Use uid for Firebase auth
+      backgroundColor: meeting.userId === user?.uid ? '#3b82f6' : '#6b7280',
+      borderColor: meeting.userId === user?.uid ? '#2563eb' : '#4b5563',
     })), [meetings, user]
   );
 
@@ -175,9 +177,21 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
 
   // Handle event change (drag/resize)
   const handleEventChange = useCallback(async (changeInfo: any) => {
+    // Only allow if user owns the meeting
+    const meeting = meetings.find(m => m.id.toString() === changeInfo.event.id);
+    if (!meeting || meeting.userId !== user?.uid) {
+      changeInfo.revert();
+      toast({
+        title: "Permission Denied",
+        description: "You can only reschedule meetings you created.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setPendingChange(changeInfo);
     setIsConfirmOpen(true);
-  }, []);
+  }, [meetings, user, toast]);
 
   // Handle confirmation of event change
   const handleConfirmChange = useCallback(async () => {
@@ -186,34 +200,62 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     const meetingId = parseInt(pendingChange.event.id);
     const newStart = pendingChange.event.start;
 
-    // Check room availability for new time
-    const endTime = new Date(newStart.getTime() + 60 * 60 * 1000);
-    const response = await fetch(
-      `/api/rooms/available?startTime=${newStart.toISOString()}&endTime=${endTime.toISOString()}`
-    );
-    const availableRooms = await response.json();
+    try {
+      // Check room availability for new time
+      const endTime = new Date(newStart.getTime() + 60 * 60 * 1000);
+      const response = await fetch(
+        `/api/rooms/available?startTime=${newStart.toISOString()}&endTime=${endTime.toISOString()}`
+      );
 
-    if (availableRooms.length === 0) {
+      if (response.status === 429) {
+        throw new Error('Rate limit exceeded');
+      }
+
+      const availableRooms = await response.json();
+
+      if (availableRooms.length === 0) {
+        throw new Error('No rooms available');
+      }
+
+      // Update meeting
+      await fetch(`/api/meetings/${meetingId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          date: newStart,
+          roomId: availableRooms[0].id,
+        }),
+      });
+
+      // Success handling
+      queryClient.invalidateQueries({ queryKey: ['/api/meetings'] });
       toast({
-        title: "No Rooms Available",
-        description: "Cannot reschedule - no rooms available for this time slot.",
+        title: "Success",
+        description: "Meeting rescheduled successfully",
+      });
+    } catch (error: any) {
+      // Error handling
+      const errorMessage = error.message === 'No rooms available'
+        ? "No rooms available for this time slot"
+        : error.message === 'Rate limit exceeded'
+        ? "Too many requests. Please try again later."
+        : "Failed to reschedule meeting. Please try again.";
+
+      toast({
+        title: "Error",
+        description: errorMessage,
         variant: "destructive",
       });
+
+      // Revert the calendar event
       pendingChange.revert();
-      return;
+    } finally {
+      setIsConfirmOpen(false);
+      setPendingChange(null);
     }
-
-    updateMeeting.mutate({
-      id: meetingId,
-      updates: {
-        date: newStart,
-        roomId: availableRooms[0].id,
-      },
-    });
-
-    setIsConfirmOpen(false);
-    setPendingChange(null);
-  }, [pendingChange, updateMeeting, toast]);
+  }, [pendingChange, queryClient, toast]);
 
   const handleCancelChange = useCallback(() => {
     if (pendingChange) {
@@ -246,7 +288,6 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
           dayMaxEvents={true}
           weekends={true}
           events={events}
-          select={handleDateSelect}
           eventDrop={handleEventChange}
           eventResize={handleEventChange}
           slotMinTime="06:00:00"

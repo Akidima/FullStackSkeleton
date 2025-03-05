@@ -4,19 +4,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, Clock, Users, ArrowLeft, FileText, CheckCircle2, Mic } from "lucide-react";
+import { Calendar, Clock, Users, ArrowLeft, FileText, CheckCircle2, Mic, Share2 } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { toast } from "@/hooks/use-toast";
-import { LoadingSpinner, MeetingCardSkeleton } from "@/components/ui/loading-skeleton";
-import { MeetingInsights } from "@/components/meeting-insights";
+import { useToast } from "@/hooks/use-toast";
+import { LoadingSpinner } from "@/components/ui/loading-skeleton";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { TaskManager } from "@/components/task-manager";
 import { VoiceAssistant } from "@/components/voice-assistant";
 import { ShareButtons } from "@/components/share-buttons";
-import { MoodTracker } from "@/components/mood-tracker"; // Assuming MoodTracker is imported
-
 
 // Rate limiting configuration
 const RETRY_DELAY = 1000; // Start with 1 second
@@ -27,42 +24,15 @@ export default function MeetingDetails() {
   const meetingId = params?.id ? parseInt(params.id, 10) : null;
   const queryClient = useQueryClient();
   const socket = useWebSocket();
+  const { toast } = useToast();
   const [notes, setNotes] = useState("");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [isVoiceAssistantActive, setIsVoiceAssistantActive] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
 
-  // Only fetch if we have a valid meetingId
-  const { data: meeting, isLoading, error } = useQuery<Meeting>({
+  // Query for meeting details
+  const { data: meeting, isLoading } = useQuery<Meeting>({
     queryKey: [`/api/meetings/${meetingId}`],
-    queryFn: async ({ signal }) => {
-      if (!meetingId || isNaN(meetingId)) {
-        throw new Error('Invalid meeting ID');
-      }
-
-      let retries = 0;
-      while (retries < MAX_RETRIES) {
-        try {
-          const response = await fetch(`/api/meetings/${meetingId}`, { signal });
-          if (response.status === 429) { // Too Many Requests
-            const delay = RETRY_DELAY * Math.pow(2, retries);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            retries++;
-            continue;
-          }
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          const data = await response.json();
-          setNotes(data.notes || "");
-          return data;
-        } catch (error) {
-          if (error.name === 'AbortError') throw error;
-          if (retries === MAX_RETRIES - 1) throw error;
-          retries++;
-        }
-      }
-      throw new Error('Failed to fetch meeting details after retries');
-    },
     enabled: !!meetingId && !isNaN(meetingId),
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000),
@@ -76,20 +46,18 @@ export default function MeetingDetails() {
         try {
           const response = await fetch(`/api/meetings/${meetingId}`, {
             method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ notes: newNotes }),
           });
+
           if (response.status === 429) {
             const delay = RETRY_DELAY * Math.pow(2, retries);
             await new Promise(resolve => setTimeout(resolve, delay));
             retries++;
             continue;
           }
-          if (!response.ok) {
-            throw new Error('Failed to save notes');
-          }
+
+          if (!response.ok) throw new Error('Failed to save notes');
           return response.json();
         } catch (error) {
           if (retries === MAX_RETRIES - 1) throw error;
@@ -120,21 +88,24 @@ export default function MeetingDetails() {
   // Generate summary mutation with retry logic
   const generateSummary = useMutation({
     mutationFn: async () => {
+      setIsSummarizing(true);
       let retries = 0;
       while (retries < MAX_RETRIES) {
         try {
           const response = await fetch(`/api/meetings/${meetingId}/summarize`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes }),
           });
+
           if (response.status === 429) {
             const delay = RETRY_DELAY * Math.pow(2, retries);
             await new Promise(resolve => setTimeout(resolve, delay));
             retries++;
             continue;
           }
-          if (!response.ok) {
-            throw new Error('Failed to generate summary');
-          }
+
+          if (!response.ok) throw new Error('Failed to generate summary');
           return response.json();
         } catch (error) {
           if (retries === MAX_RETRIES - 1) throw error;
@@ -143,12 +114,20 @@ export default function MeetingDetails() {
       }
       throw new Error('Failed to generate summary after retries');
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/meetings/${meetingId}`] });
       toast({
         title: "Summary Generated",
         description: "Meeting summary has been generated successfully.",
       });
+      // Broadcast summary update to other participants
+      if (socket?.socket?.readyState === WebSocket.OPEN) {
+        socket.socket.send(JSON.stringify({
+          type: 'meeting:summary',
+          meetingId,
+          summary: data.summary
+        }));
+      }
     },
     onError: (error) => {
       toast({
@@ -159,9 +138,12 @@ export default function MeetingDetails() {
         variant: "destructive",
       });
     },
+    onSettled: () => {
+      setIsSummarizing(false);
+    }
   });
 
-  // Update the WebSocket usage in the component
+  // Handle real-time note changes
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newNotes = e.target.value;
     setNotes(newNotes);
@@ -174,63 +156,12 @@ export default function MeetingDetails() {
     }
   };
 
-  const handleVoiceCommand = async (command: string) => {
-    const lowerCommand = command.toLowerCase();
-
-    if (lowerCommand.includes('create task') || lowerCommand.includes('add action item')) {
-      // Extract task details from voice command
-      const taskTitle = command.replace(/create task|add action item/i, '').trim();
-      if (taskTitle) {
-        try {
-          const response = await fetch('/api/tasks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              title: taskTitle,
-              meetingId: parseInt(meetingId!),
-              status: 'pending',
-              priority: 'medium',
-            }),
-          });
-
-          if (!response.ok) throw new Error('Failed to create task');
-
-          queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
-          toast({
-            title: "Task Created",
-            description: `New task added: ${taskTitle}`,
-          });
-        } catch (error) {
-          toast({
-            title: "Error",
-            description: "Failed to create task. Please try again.",
-            variant: "destructive",
-          });
-        }
-      }
-    } else if (lowerCommand.includes('generate summary')) {
-      generateSummary.mutate();
-    }
-  };
-
-  const handleVoiceTranscript = (transcript: string) => {
-    if (!isEditingNotes) setIsEditingNotes(true);
-    setNotes(prev => prev + (prev ? '\n' : '') + transcript);
-
-    if (socket?.socket?.readyState === WebSocket.OPEN) {
-      socket.socket.send(JSON.stringify({
-        type: 'meeting:notes',
-        meetingId,
-        notes: notes + (notes ? '\n' : '') + transcript
-      }));
-    }
-  };
-
-  // Update the WebSocket effect
+  // WebSocket effect for real-time collaboration
   useEffect(() => {
     if (!socket?.socket || !meetingId) return;
 
     const ws = socket.socket;
+
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
         type: 'meeting:join',
@@ -242,6 +173,8 @@ export default function MeetingDetails() {
       const data = JSON.parse(event.data);
       if (data.type === 'meeting:notes' && data.meetingId === meetingId) {
         setNotes(data.notes);
+      } else if (data.type === 'meeting:summary' && data.meetingId === meetingId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/meetings/${meetingId}`] });
       }
     };
 
@@ -256,80 +189,14 @@ export default function MeetingDetails() {
       }
       ws.removeEventListener('message', handleMessage);
     };
-  }, [socket?.socket, meetingId]);
+  }, [socket?.socket, meetingId, queryClient]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="h-10 w-32 bg-muted animate-pulse rounded" />
-            <div className="h-10 w-40 bg-muted animate-pulse rounded" />
-          </div>
-          <MeetingCardSkeleton />
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    const errorMessage = error instanceof Error && error.message.includes('Too many requests')
-      ? "Too many requests. Please try again in a moment."
-      : error.message === 'Invalid meeting ID' ? "Invalid Meeting ID" : "The meeting you're looking for doesn't exist or has been deleted.";
-
+  if (isLoading || !meeting) {
     return (
       <div className="min-h-screen bg-background p-6">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center py-12">
-            <h2 className="text-lg font-semibold mb-2">Error loading meeting</h2>
-            <p className="text-muted-foreground mb-4">
-              {errorMessage}
-            </p>
-            <Link href="/">
-              <Button variant="outline" className="gap-2">
-                <ArrowLeft className="h-4 w-4" /> Back to Meetings
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!meeting) {
-    return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center py-12">
-            <h2 className="text-lg font-semibold mb-2">Meeting not found</h2>
-            <p className="text-muted-foreground mb-4">
-              The meeting you're looking for doesn't exist or has been deleted.
-            </p>
-            <Link href="/">
-              <Button variant="outline" className="gap-2">
-                <ArrowLeft className="h-4 w-4" /> Back to Meetings
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!meetingId || isNaN(meetingId)) {
-    return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center py-12">
-            <h2 className="text-lg font-semibold mb-2">Invalid Meeting ID</h2>
-            <p className="text-muted-foreground mb-4">
-              The meeting ID provided is invalid.
-            </p>
-            <Link href="/">
-              <Button variant="outline" className="gap-2">
-                <ArrowLeft className="h-4 w-4" /> Back to Meetings
-              </Button>
-            </Link>
+          <div className="flex justify-center items-center h-64">
+            <LoadingSpinner size="large" />
           </div>
         </div>
       </div>
@@ -358,7 +225,6 @@ export default function MeetingDetails() {
               <Button
                 onClick={() => saveNotes.mutate(notes)}
                 disabled={saveNotes.isPending}
-                variant="default"
               >
                 {saveNotes.isPending ? (
                   <LoadingSpinner size="small" className="text-white" />
@@ -369,44 +235,43 @@ export default function MeetingDetails() {
             ) : notes && !meeting.summary && (
               <Button
                 onClick={() => generateSummary.mutate()}
-                disabled={generateSummary.isPending}
+                disabled={generateSummary.isPending || isSummarizing}
                 className="gap-2"
               >
-                {generateSummary.isPending ? (
+                {isSummarizing ? (
                   <LoadingSpinner size="small" className="text-white" />
                 ) : (
                   <FileText className="h-4 w-4" />
                 )}
-                {generateSummary.isPending ? "Generating..." : "Generate Summary"}
+                {isSummarizing ? "Generating..." : "Generate Summary"}
               </Button>
             )}
           </div>
         </div>
 
-        {isVoiceAssistantActive && (
-          <VoiceAssistant
-            isActive={true}
-            onCommand={handleVoiceCommand}
-            onTranscript={handleVoiceTranscript}
-          />
-        )}
-
         <Card>
           <CardHeader>
             <div className="flex justify-between items-start">
               <div>
-                <CardTitle className="text-2xl">{meeting.title || "Untitled Meeting"}</CardTitle>
+                <CardTitle className="text-2xl">
+                  {meeting.title || "Untitled Meeting"}
+                </CardTitle>
                 {meeting.description && (
-                  <CardDescription className="mt-2">{meeting.description}</CardDescription>
+                  <CardDescription className="mt-2">
+                    {meeting.description}
+                  </CardDescription>
                 )}
               </div>
-              {meeting.isCompleted && (
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              )}
+              <div className="flex items-center gap-2">
+                {meeting.isCompleted && (
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
+              {/* Meeting Details */}
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
@@ -420,13 +285,17 @@ export default function MeetingDetails() {
                 )}
               </div>
 
+              {/* Agenda Section */}
               {meeting.agenda && (
                 <div className="space-y-2">
                   <h3 className="font-semibold">Agenda</h3>
-                  <p className="text-muted-foreground whitespace-pre-wrap">{meeting.agenda}</p>
+                  <p className="text-muted-foreground whitespace-pre-wrap">
+                    {meeting.agenda}
+                  </p>
                 </div>
               )}
 
+              {/* Collaborative Notes Section */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <h3 className="font-semibold">Notes</h3>
@@ -452,6 +321,7 @@ export default function MeetingDetails() {
                 )}
               </div>
 
+              {/* Summary Section */}
               {meeting.summary && (
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
@@ -459,7 +329,7 @@ export default function MeetingDetails() {
                     <ShareButtons
                       title={meeting.title}
                       summary={meeting.summary}
-                      notes={meeting.notes}
+                      notes={notes}
                       url={window.location.href}
                     />
                   </div>
@@ -467,19 +337,13 @@ export default function MeetingDetails() {
                 </div>
               )}
 
-              {/* Add MoodTracker component here */}
-              <div className="space-y-2">
-                <h3 className="font-semibold">Meeting Mood Analysis</h3>
-                <MoodTracker meetingId={meetingId!} />
-              </div>
-
+              {/* Action Items */}
               <div className="space-y-2">
                 <h3 className="font-semibold">Action Items</h3>
-                <TaskManager meetingId={parseInt(meetingId!)} />
+                <TaskManager meetingId={meetingId} />
               </div>
 
-              <MeetingInsights meetingId={parseInt(meetingId!)} />
-
+              {/* Meeting Controls */}
               <div className="flex justify-end gap-2">
                 <Link href={`/meetings/${meeting.id}/edit`}>
                   <Button variant="outline">Edit Meeting</Button>

@@ -71,8 +71,8 @@ export async function generateMeetingInsights(meeting: Meeting): Promise<Meeting
 
     // Simple sentiment analysis based on keywords
     const sentimentKeywords = {
-      positive: ['agree', 'good', 'great', 'success', 'achieve', 'improve'],
-      negative: ['disagree', 'bad', 'fail', 'issue', 'problem', 'concern']
+      positive: ['agree', 'good', 'great', 'success', 'achieve', 'improve', 'resolved', 'completed'],
+      negative: ['disagree', 'bad', 'fail', 'issue', 'problem', 'concern', 'delayed', 'blocked']
     };
 
     const words = notes.toLowerCase().split(/\W+/);

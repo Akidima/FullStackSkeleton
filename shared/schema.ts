@@ -127,6 +127,7 @@ export const meetingPreferences = pgTable("meeting_preferences", {
   userIdIdx: index("meeting_preferences_user_id_idx").on(table.userId),
 }));
 
+// Update meetings table definition to include calendar integration fields
 export const meetings = pgTable("meetings", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -139,10 +140,14 @@ export const meetings = pgTable("meetings", {
   summary: text("summary"),
   userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
   roomId: serial("room_id").references(() => rooms.id, { onDelete: 'set null' }),
+  calendarEventId: text("calendar_event_id"), // Google Calendar event ID
+  calendarSynced: boolean("calendar_synced").default(false), // Tracks if meeting is synced with calendar
+  lastSyncedAt: timestamp("last_synced_at"), // Last successful calendar sync
 }, (table) => ({
   dateIdx: index("date_idx").on(table.date),
   userIdIdx: index("user_id_idx").on(table.userId),
   roomIdIdx: index("room_id_idx").on(table.roomId),
+  calendarEventIdIdx: index("calendar_event_id_idx").on(table.calendarEventId),
 }));
 
 // Add after the meetings table definition
@@ -419,6 +424,8 @@ export const insertTaskSchema = createInsertSchema(tasks)
   });
 
 export const updateTaskSchema = createInsertSchema(tasks).partial();
+
+// Update meeting schemas
 export const insertMeetingSchema = createInsertSchema(meetings)
   .extend({
     date: z.string()
@@ -426,7 +433,13 @@ export const insertMeetingSchema = createInsertSchema(meetings)
     participants: z.array(z.string()).optional(),
     roomId: z.number().optional(),
   })
-  .omit({ id: true });
+  .omit({ 
+    id: true,
+    calendarEventId: true,
+    calendarSynced: true,
+    lastSyncedAt: true,
+  });
+
 export const updateMeetingSchema = createInsertSchema(meetings)
   .partial()
   .extend({
@@ -434,6 +447,9 @@ export const updateMeetingSchema = createInsertSchema(meetings)
       .transform((str) => new Date(str))
       .optional(),
     participants: z.array(z.string()).optional(),
+    calendarEventId: z.string().optional(),
+    calendarSynced: z.boolean().optional(),
+    lastSyncedAt: z.date().optional(),
   });
 
 // Add new schema for registration attempts

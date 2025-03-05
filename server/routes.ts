@@ -15,6 +15,8 @@ import {insertTaskSchema, updateTaskSchema} from "@shared/schema";
 import { format } from 'date-fns';
 import { rateLimit } from 'express-rate-limit';
 import { SlackService } from "./services/slack";
+import { GoogleCalendarService } from "./services/google-calendar";
+import { OutlookCalendarService } from "./services/outlook-calendar";
 
 // Add rate limiter before the analytics routes
 const analyticsLimiter = rateLimit({
@@ -76,10 +78,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const meetingData = insertMeetingSchema.parse(req.body);
       const meeting = await storage.createMeeting(meetingData);
 
-      // Send Slack notification for new meeting
+      // Send Slack notification
       await SlackService.sendMeetingNotification(meeting);
 
-      // Broadcast the update to connected clients
+      // Handle calendar integration if user has provided token
+      if (req.headers.authorization) {
+        const token = req.headers.authorization.split(' ')[1];
+        const calendarType = req.headers['x-calendar-type'] || 'google'; // Default to Google Calendar
+        let eventId;
+
+        try {
+          if (calendarType === 'outlook') {
+            eventId = await OutlookCalendarService.createCalendarEvent(meeting, token);
+          } else {
+            eventId = await GoogleCalendarService.createCalendarEvent(meeting, token);
+          }
+
+          // Store the calendar event ID with the meeting
+          await storage.updateMeeting(meeting.id, {
+            ...meeting,
+            calendarEventId: eventId,
+            calendarSynced: true,
+            lastSyncedAt: new Date()
+          });
+        } catch (error) {
+          console.error('Failed to create calendar event:', error);
+          // Don't fail the whole request if calendar sync fails
+        }
+      }
+
+      // Broadcast the update
       broadcastMeetingUpdate('create', meeting.id);
 
       res.status(201).json(meeting);
@@ -111,10 +139,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const meetingData = updateMeetingSchema.parse(req.body);
       const updatedMeeting = await storage.updateMeeting(meetingId, meetingData);
 
-      // Send Slack notification for updated meeting
+      // Send Slack notification
       await SlackService.updateMeetingStatus(updatedMeeting, 'updated');
 
-      // Broadcast the update to connected clients
+      // Update calendar event if exists and user has token
+      if (meeting.calendarEventId && req.headers.authorization) {
+        const token = req.headers.authorization.split(' ')[1];
+        const calendarType = req.headers['x-calendar-type'] || 'google';
+
+        try {
+          if (calendarType === 'outlook') {
+            await OutlookCalendarService.updateCalendarEvent(updatedMeeting, meeting.calendarEventId, token);
+          } else {
+            await GoogleCalendarService.updateCalendarEvent(updatedMeeting, meeting.calendarEventId, token);
+          }
+
+          // Update sync status
+          await storage.updateMeeting(meetingId, {
+            calendarSynced: true,
+            lastSyncedAt: new Date()
+          });
+        } catch (error) {
+          console.error('Failed to update calendar event:', error);
+          // Don't fail the whole request if calendar sync fails
+        }
+      }
+
+      // Broadcast the update
       broadcastMeetingUpdate('update', meeting.id);
 
       res.json(updatedMeeting);
@@ -133,12 +184,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       throw new NotFoundError("Meeting");
     }
 
-    // Send Slack notification for cancelled meeting
+    // Send Slack notification
     await SlackService.updateMeetingStatus(meeting, 'cancelled');
+
+    // Delete calendar event if exists and user has token
+    if (meeting.calendarEventId && req.headers.authorization) {
+      const token = req.headers.authorization.split(' ')[1];
+      const calendarType = req.headers['x-calendar-type'] || 'google';
+
+      try {
+        if (calendarType === 'outlook') {
+          await OutlookCalendarService.deleteCalendarEvent(meeting.calendarEventId, token);
+        } else {
+          await GoogleCalendarService.deleteCalendarEvent(meeting.calendarEventId, token);
+        }
+      } catch (error) {
+        console.error('Failed to delete calendar event:', error);
+        // Don't fail the whole request if calendar sync fails
+      }
+    }
 
     await storage.deleteMeeting(meetingId);
 
-    // Broadcast the update to connected clients
+    // Broadcast the update
     broadcastMeetingUpdate('delete', meeting.id);
 
     res.status(204).send();

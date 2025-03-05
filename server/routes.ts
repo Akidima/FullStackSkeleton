@@ -52,7 +52,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Store and return the generated insights
       const storedInsights = await Promise.all(
-        generatedInsights.map(insight => 
+        generatedInsights.map(insight =>
           storage.createMeetingInsight({
             meetingId: meeting.id,
             insight: insight.insight,
@@ -233,6 +233,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
     res.status(201).json(preferences);
   }));
+
+  // User Preferences Routes with Validation
+  app.post("/api/users/preferences", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    const { theme, dashboardLayout, preferredDuration, notifications } = req.body;
+
+    // Validate required fields
+    if (!theme || !dashboardLayout || !preferredDuration || !notifications) {
+      throw new ValidationError("Missing required preferences", [
+        { field: "theme", message: "Theme preference is required" },
+        { field: "dashboardLayout", message: "Dashboard layout preference is required" },
+        { field: "preferredDuration", message: "Preferred meeting duration is required" },
+        { field: "notifications", message: "Notification preference is required" }
+      ]);
+    }
+
+    // Validate theme values
+    if (!["light", "dark", "system"].includes(theme)) {
+      throw new ValidationError("Invalid theme value", [
+        { field: "theme", message: "Theme must be one of: light, dark, system" }
+      ]);
+    }
+
+    // Validate layout values
+    if (!["compact", "comfortable", "spacious"].includes(dashboardLayout)) {
+      throw new ValidationError("Invalid layout value", [
+        { field: "dashboardLayout", message: "Layout must be one of: compact, comfortable, spacious" }
+      ]);
+    }
+
+    // Validate notification values
+    if (!["all", "important", "minimal"].includes(notifications)) {
+      throw new ValidationError("Invalid notifications value", [
+        { field: "notifications", message: "Notifications must be one of: all, important, minimal" }
+      ]);
+    }
+
+    // Create or update preferences
+    const preferences = await storage.setMeetingPreferences({
+      userId: req.user.id,
+      theme,
+      dashboardLayout,
+      preferredDuration: parseInt(preferredDuration),
+      notifications
+    });
+
+    res.status(201).json(preferences);
+  }));
+
 
   // Calendar Events Routes
   app.get("/api/users/:userId/calendar-events", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {

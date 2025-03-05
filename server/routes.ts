@@ -12,6 +12,17 @@ import { SchedulerService } from "./services/scheduler";
 import { broadcastMeetingUpdate } from "./websocket";
 import { authenticateJWT } from "./auth";
 
+// Utility function to validate meeting ID
+function validateMeetingId(id: string): number {
+  const meetingId = Number(id);
+  if (isNaN(meetingId)) {
+    throw new ValidationError("Invalid meeting ID", [
+      { field: "id", message: "Meeting ID must be a valid number" }
+    ]);
+  }
+  return meetingId;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
   app.get("/api/meetings", asyncHandler(async (req: Request, res: Response) => {
@@ -21,7 +32,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add AI Insights Routes
   app.get("/api/meetings/:id/insights", asyncHandler(async (req: Request, res: Response) => {
-    const meeting = await storage.getMeeting(Number(req.params.id));
+    const meetingId = validateMeetingId(req.params.id);
+    const meeting = await storage.getMeeting(meetingId);
     if (!meeting) {
       throw new NotFoundError("Meeting");
     }
@@ -57,36 +69,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  app.get("/api/insights/recommendations", asyncHandler(async (req: Request, res: Response) => {
-    const insights = await storage.getRecommendations();
-    res.json(insights);
-  }));
-
-  app.post("/api/insights/realtime", asyncHandler(async (req: Request, res: Response) => {
-    const { currentDiscussion, meetingContext } = req.body;
-
-    if (!currentDiscussion || !meetingContext) {
-      throw new ValidationError("Missing required fields", [
-        { field: "currentDiscussion", message: "Current discussion is required" },
-        { field: "meetingContext", message: "Meeting context is required" }
-      ]);
-    }
-
-    const aiService = await getAIInsights();
-    const recommendations = await aiService.getRealtimeRecommendations(
-      currentDiscussion,
-      meetingContext
-    );
-
-    res.json(recommendations.map((recommendation, index) => ({
-      id: Date.now() + index, // Temporary ID for frontend rendering
-      insight: recommendation,
-      category: 'best_practice',
-      relevanceScore: 8,
-      source: 'realtime-ai'
-    })));
-  }));
-
   app.post("/api/meetings", asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetingData = insertMeetingSchema.parse(req.body);
@@ -105,7 +87,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   app.get("/api/meetings/:id", asyncHandler(async (req: Request, res: Response) => {
-    const meeting = await storage.getMeeting(Number(req.params.id));
+    const meetingId = validateMeetingId(req.params.id);
+    const meeting = await storage.getMeeting(meetingId);
     if (!meeting) {
       throw new NotFoundError("Meeting");
     }
@@ -114,16 +97,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/meetings/:id", asyncHandler(async (req: Request, res: Response) => {
     try {
-      const meeting = await storage.getMeeting(Number(req.params.id));
+      const meetingId = validateMeetingId(req.params.id);
+      const meeting = await storage.getMeeting(meetingId);
       if (!meeting) {
         throw new NotFoundError("Meeting");
       }
 
       const meetingData = updateMeetingSchema.parse(req.body);
-      const updatedMeeting = await storage.updateMeeting(
-        Number(req.params.id),
-        meetingData
-      );
+      const updatedMeeting = await storage.updateMeeting(meetingId, meetingData);
 
       // Broadcast the update to connected clients
       broadcastMeetingUpdate('update', meeting.id);
@@ -138,21 +119,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   app.delete("/api/meetings/:id", asyncHandler(async (req: Request, res: Response) => {
-    const meeting = await storage.getMeeting(Number(req.params.id));
+    const meetingId = validateMeetingId(req.params.id);
+    const meeting = await storage.getMeeting(meetingId);
     if (!meeting) {
       throw new NotFoundError("Meeting");
     }
 
-    await storage.deleteMeeting(Number(req.params.id));
+    await storage.deleteMeeting(meetingId);
 
     // Broadcast the update to connected clients
     broadcastMeetingUpdate('delete', meeting.id);
 
     res.status(204).send();
   }));
-    app.post("/api/meetings/:id/summarize", asyncHandler(async (req: Request, res: Response) => {
+
+  app.post("/api/meetings/:id/summarize", asyncHandler(async (req: Request, res: Response) => {
     try {
-      const meeting = await storage.getMeeting(Number(req.params.id));
+      const meetingId = validateMeetingId(req.params.id);
+      const meeting = await storage.getMeeting(meetingId);
       if (!meeting) {
         throw new NotFoundError("Meeting");
       }
@@ -175,6 +159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       throw error;
     }
   }));
+
   // Scheduling Assistant Routes
   app.post("/api/meetings/suggest-times", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
     const { participantIds, duration, earliestStartTime, latestStartTime, requiredCapacity } = req.body;

@@ -3,9 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Mic, MicOff, Loader2, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Mic, MicOff, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { pipeline } from "@xenova/transformers";
 
 interface VoiceAssistantProps {
   onCommand?: (command: string) => void;
@@ -17,238 +16,100 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState<string[]>([]);
-  const [isTranscriberReady, setIsTranscriberReady] = useState(false);
-  const [initError, setInitError] = useState<string | null>(null);
-  const [initAttempts, setInitAttempts] = useState(0);
-  const [loadingProgress, setLoadingProgress] = useState<string>("");
-  const mediaRecorder = useRef<MediaRecorder | null>(null);
-  const audioChunks = useRef<Blob[]>([]);
-  const transcriber = useRef<any>(null);
-  const sentimentAnalyzer = useRef<any>(null);
-  const MAX_INIT_ATTEMPTS = 3;
+  const recognition = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
-    let retryTimeout: NodeJS.Timeout;
-
-    const initializeTranscriber = async () => {
-      try {
-        if (!transcriber.current) {
-          console.log('Initializing transcriber...');
-          setLoadingProgress("Loading speech recognition model...");
-          transcriber.current = await pipeline(
-            'automatic-speech-recognition',
-            'Xenova/whisper-small',
-            { 
-              progress_callback: (progress: any) => {
-                console.log('Loading whisper model:', progress);
-                if (isMounted) {
-                  setLoadingProgress(`Loading speech recognition model: ${Math.round(progress.progress * 100)}%`);
-                }
-              },
-              quantized: true
-            }
-          );
-        }
-
-        if (!sentimentAnalyzer.current) {
-          console.log('Initializing sentiment analyzer...');
-          setLoadingProgress("Loading sentiment analysis model...");
-          sentimentAnalyzer.current = await pipeline(
-            'text-classification',
-            'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
-            {
-              progress_callback: (progress: any) => {
-                console.log('Loading sentiment model:', progress);
-                if (isMounted) {
-                  setLoadingProgress(`Loading sentiment analysis model: ${Math.round(progress.progress * 100)}%`);
-                }
-              },
-              quantized: true
-            }
-          );
-        }
-
-        if (isMounted) {
-          setIsTranscriberReady(true);
-          setInitError(null);
-          setLoadingProgress("");
-          console.log('Voice assistant initialized successfully');
-          toast({
-            title: "Voice Assistant Ready",
-            description: "You can now start using voice commands.",
-          });
-        }
-      } catch (error) {
-        console.error('Failed to initialize voice assistant:', error);
-        if (isMounted) {
-          setInitError('Failed to initialize voice assistant. Please try refreshing the page.');
-          if (initAttempts < MAX_INIT_ATTEMPTS) {
-            retryTimeout = setTimeout(() => {
-              setInitAttempts(prev => prev + 1);
-            }, 2000);
-          }
-          toast({
-            title: "Error",
-            description: `Failed to initialize voice assistant. ${initAttempts < MAX_INIT_ATTEMPTS ? "Retrying..." : ""}`,
-            variant: "destructive",
-          });
-        }
-      }
-    };
-
-    if (!isTranscriberReady && initAttempts < MAX_INIT_ATTEMPTS) {
-      initializeTranscriber();
-    }
-
-    return () => {
-      isMounted = false;
-      clearTimeout(retryTimeout);
-      if (mediaRecorder.current && isRecording) {
-        mediaRecorder.current.stop();
-        mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [initAttempts]);
-
-  const startRecording = async () => {
-    if (!isTranscriberReady) {
+    // Check if browser supports speech recognition
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       toast({
         title: "Error",
-        description: "Voice assistant is not ready yet. Please wait.",
+        description: "Speech recognition is not supported in your browser.",
         variant: "destructive",
       });
       return;
     }
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder.current = new MediaRecorder(stream);
-      audioChunks.current = [];
+    // Initialize speech recognition
+    const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+    recognition.current = new SpeechRecognition();
+    recognition.current.continuous = true;
+    recognition.current.interimResults = true;
 
-      mediaRecorder.current.ondataavailable = (event) => {
-        audioChunks.current.push(event.data);
-      };
-
-      mediaRecorder.current.onstop = async () => {
-        const audioBlob = new Blob(audioChunks.current, { type: 'audio/wav' });
-        await processAudio(audioBlob);
-      };
-
-      mediaRecorder.current.start(1000);
+    recognition.current.onstart = () => {
       setIsRecording(true);
       toast({
         title: "Recording Started",
         description: "Listening for voice commands...",
       });
-    } catch (error) {
-      console.error('Failed to start recording:', error);
+    };
+
+    recognition.current.onend = () => {
+      setIsRecording(false);
+      setIsProcessing(false);
+    };
+
+    recognition.current.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
       toast({
         title: "Error",
-        description: "Failed to access microphone. Please check your permissions.",
+        description: `Speech recognition error: ${event.error}`,
         variant: "destructive",
       });
+      setIsRecording(false);
+      setIsProcessing(false);
+    };
+
+    recognition.current.onresult = (event) => {
+      const result = event.results[event.results.length - 1];
+      const transcript = result[0].transcript;
+
+      if (result.isFinal) {
+        setTranscript(prev => [...prev, transcript]);
+        onTranscript?.(transcript);
+
+        // Simple command detection
+        const lowerText = transcript.toLowerCase();
+        if (lowerText.includes('create task') || 
+            lowerText.includes('add action item') ||
+            lowerText.includes('generate summary')) {
+          onCommand?.(transcript);
+        }
+      }
+    };
+
+    return () => {
+      if (recognition.current) {
+        recognition.current.stop();
+      }
+    };
+  }, [onCommand, onTranscript]);
+
+  const startRecording = () => {
+    if (recognition.current) {
+      try {
+        recognition.current.start();
+      } catch (error) {
+        console.error('Failed to start recording:', error);
+        toast({
+          title: "Error",
+          description: "Failed to start recording. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorder.current && isRecording) {
-      mediaRecorder.current.stop();
-      mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
-      setIsRecording(false);
+    if (recognition.current) {
+      recognition.current.stop();
       toast({
         title: "Recording Stopped",
-        description: "Processing your command...",
+        description: "Processing complete.",
       });
-    }
-  };
-
-  const processAudio = async (audioBlob: Blob) => {
-    if (!transcriber.current) return;
-
-    setIsProcessing(true);
-    try {
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const result = await transcriber.current(arrayBuffer);
-
-      if (result.text) {
-        setTranscript(prev => [...prev, result.text]);
-        onTranscript?.(result.text);
-
-        // Simple command detection
-        const lowerText = result.text.toLowerCase();
-        if (lowerText.includes('create task') || 
-            lowerText.includes('add action item') ||
-            lowerText.includes('generate summary')) {
-          onCommand?.(result.text);
-        }
-
-        // Perform sentiment analysis
-        const sentimentResult = await sentimentAnalyzer.current(result.text);
-        const sentiment = sentimentResult[0];
-        const sentimentIcon = sentiment.label === 'POSITIVE' ? 
-          <ThumbsUp className="h-4 w-4 text-green-500" /> : 
-          <ThumbsDown className="h-4 w-4 text-red-500" />;
-
-        setTranscript(prev => [...prev, 
-          `Sentiment: ${sentiment.label} (${Math.round(sentiment.score * 100)}% confidence) ${sentimentIcon}`
-        ]);
-      }
-    } catch (error) {
-      console.error('Transcription error:', error);
-      toast({
-        title: "Error",
-        description: "Failed to process voice input. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
     }
   };
 
   if (!isActive) return null;
-
-  if (initError && initAttempts >= MAX_INIT_ATTEMPTS) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Mic className="h-5 w-5" />
-            Voice Assistant Error
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-destructive">{initError}</p>
-          <Button 
-            onClick={() => setInitAttempts(0)} 
-            variant="outline" 
-            className="mt-4"
-          >
-            Retry Initialization
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!isTranscriberReady) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Initializing Voice Assistant
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">
-            {loadingProgress || "Please wait while we set up the voice assistant..."}
-            {initAttempts > 0 && ` (Attempt ${initAttempts + 1}/${MAX_INIT_ATTEMPTS})`}
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <Card>
@@ -299,4 +160,12 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
       </CardContent>
     </Card>
   );
+}
+
+// Add TypeScript declarations for the Web Speech API
+declare global {
+  interface Window {
+    webkitSpeechRecognition: any;
+    SpeechRecognition: any;
+  }
 }

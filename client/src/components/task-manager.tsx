@@ -104,6 +104,9 @@ export function TaskManager({ meetingId, userId }: TaskManagerProps) {
     })
     .sort((a, b) => {
       if (sort === "dueDate") {
+        // Handle null due dates by putting them at the end
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
         return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
       }
       if (sort === "priority") {

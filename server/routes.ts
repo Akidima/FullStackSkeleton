@@ -11,6 +11,8 @@ import { generateMeetingInsights, batchSummarize } from "./services/summarize";
 import { SchedulerService } from "./services/scheduler";
 import { broadcastMeetingUpdate } from "./websocket";
 import { authenticateJWT } from "./auth";
+import {insertTaskSchema, updateTaskSchema} from "@shared/schema"; // Assuming these are defined elsewhere
+
 
 // Utility function to validate meeting ID
 function validateMeetingId(id: string): number {
@@ -297,6 +299,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     );
 
     res.json(events);
+  }));
+
+  // Add task routes after meeting routes
+  app.get("/api/tasks", asyncHandler(async (req: Request, res: Response) => {
+    const { meetingId, userId } = req.query;
+    const tasks = await storage.getTasks({
+      meetingId: meetingId ? Number(meetingId) : undefined,
+      userId: userId ? Number(userId) : undefined
+    });
+    res.json(tasks);
+  }));
+
+  app.post("/api/tasks", asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const taskData = insertTaskSchema.parse(req.body);
+      const task = await storage.createTask(taskData);
+      res.status(201).json(task);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new ValidationError("Invalid task data", error.errors);
+      }
+      throw error;
+    }
+  }));
+
+  app.patch("/api/tasks/:id", asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const taskId = Number(req.params.id);
+      if (isNaN(taskId)) {
+        throw new ValidationError("Invalid task ID", [
+          { field: "id", message: "Task ID must be a valid number" }
+        ]);
+      }
+
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        throw new NotFoundError("Task");
+      }
+
+      const taskData = updateTaskSchema.parse(req.body);
+      const updatedTask = await storage.updateTask(taskId, taskData);
+      res.json(updatedTask);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new ValidationError("Invalid task data", error.errors);
+      }
+      throw error;
+    }
+  }));
+
+  app.delete("/api/tasks/:id", asyncHandler(async (req: Request, res: Response) => {
+    const taskId = Number(req.params.id);
+    if (isNaN(taskId)) {
+      throw new ValidationError("Invalid task ID", [
+        { field: "id", message: "Task ID must be a valid number" }
+      ]);
+    }
+
+    const task = await storage.getTask(taskId);
+    if (!task) {
+      throw new NotFoundError("Task");
+    }
+
+    await storage.deleteTask(taskId);
+    res.status(204).send();
   }));
 
   // Register error handler last

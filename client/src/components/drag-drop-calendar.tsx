@@ -13,24 +13,18 @@ interface DragDropCalendarProps {
   onEventCreate?: (meeting: Meeting) => void;
 }
 
-// Rate limiting configuration
-const INITIAL_RETRY_DELAY = 1000; // Start with 1 second
-const MAX_RETRIES = 3;
-
 export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Query meetings with optimized caching and retry logic
+  // Query meetings
   const { data: meetings = [], isLoading } = useQuery<Meeting[]>({
     queryKey: ['/api/meetings'],
     staleTime: 30000,
-    retry: MAX_RETRIES,
-    retryDelay: (attemptIndex) => Math.min(INITIAL_RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
   });
 
-  // Convert meetings to calendar events with proper drag-and-drop configuration
+  // Convert meetings to calendar events
   const events = useMemo(() => 
     meetings.map(meeting => {
       const isOwner = meeting.userId === user?.id;
@@ -41,15 +35,15 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
         end: new Date(new Date(meeting.date).getTime() + 60 * 60 * 1000),
         description: meeting.description,
         editable: isOwner,
-        startEditable: isOwner,
         durationEditable: isOwner,
+        startEditable: isOwner,
         backgroundColor: isOwner ? '#3b82f6' : '#6b7280',
         borderColor: isOwner ? '#2563eb' : '#4b5563',
       };
     }), [meetings, user]
   );
 
-  // Handle event changes with rate limiting and retry logic
+  // Handle event changes
   const handleEventChange = useCallback(async (changeInfo: any) => {
     if (isUpdating) {
       changeInfo.revert();
@@ -59,7 +53,6 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     const meetingId = parseInt(changeInfo.event.id);
     const meeting = meetings.find(m => m.id === meetingId);
 
-    // Check if user is the owner of the meeting
     if (!meeting || meeting.userId !== user?.id) {
       changeInfo.revert();
       toast({
@@ -71,54 +64,35 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     }
 
     setIsUpdating(true);
-    let retries = 0;
-    let success = false;
 
-    while (retries < MAX_RETRIES && !success) {
-      try {
-        // Update the event with retry logic
-        const response = await fetch(`/api/meetings/${meetingId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            date: changeInfo.event.start
-          }),
-        });
+    try {
+      const response = await fetch(`/api/meetings/${meetingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: changeInfo.event.start.toISOString()
+        }),
+      });
 
-        if (response.status === 429) {
-          const delay = INITIAL_RETRY_DELAY * Math.pow(2, retries);
-          toast({
-            title: "Rate Limited",
-            description: `Too many requests. Retrying in ${delay/1000} seconds...`,
-          });
-          await new Promise(resolve => setTimeout(resolve, delay));
-          retries++;
-          continue;
-        }
-
-        if (!response.ok) {
-          throw new Error('Failed to update meeting');
-        }
-
-        success = true;
-        toast({
-          title: "Success",
-          description: "Meeting rescheduled successfully",
-        });
-      } catch (error) {
-        if (retries === MAX_RETRIES - 1) {
-          toast({
-            title: "Error",
-            description: "Failed to reschedule meeting. Please try again later.",
-            variant: "destructive",
-          });
-          changeInfo.revert();
-        }
-        retries++;
+      if (!response.ok) {
+        throw new Error('Failed to update meeting');
       }
-    }
 
-    setIsUpdating(false);
+      toast({
+        title: "Success",
+        description: "Meeting rescheduled successfully",
+      });
+    } catch (error) {
+      console.error('Error updating meeting:', error);
+      toast({
+        title: "Error",
+        description: "Failed to reschedule meeting. Please try again.",
+        variant: "destructive",
+      });
+      changeInfo.revert();
+    } finally {
+      setIsUpdating(false);
+    }
   }, [meetings, user, toast, isUpdating]);
 
   if (isLoading) {

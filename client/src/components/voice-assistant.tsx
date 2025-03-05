@@ -14,6 +14,10 @@ interface VoiceAssistantProps {
   isActive?: boolean;
 }
 
+// Cache for the speech command recognizer
+let globalRecognizer: speechCommands.SpeechCommandRecognizer | null = null;
+let modelLoadPromise: Promise<void> | null = null;
+
 export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: VoiceAssistantProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -22,11 +26,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [loadingStatus, setLoadingStatus] = useState("");
   const [initError, setInitError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const recognizer = useRef<speechCommands.SpeechCommandRecognizer | null>(null);
   const lastRequestTime = useRef<number>(0);
-  const MIN_REQUEST_INTERVAL = 1000; // Minimum 1 second between requests
+  const MIN_REQUEST_INTERVAL = 2000; // Increase to 2 seconds between requests
   const MAX_RETRIES = 3;
-  const INITIAL_RETRY_DELAY = 2000;
+  const INITIAL_RETRY_DELAY = 5000; // Increase initial retry delay to 5 seconds
 
   useEffect(() => {
     let cleanup = false;
@@ -42,23 +45,50 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         }
         lastRequestTime.current = Date.now();
 
+        // Use cached recognizer if available
+        if (globalRecognizer) {
+          console.log('Using cached speech command recognizer');
+          setIsModelLoaded(true);
+          setLoadingStatus("");
+          setInitError(null);
+          return;
+        }
+
+        // Use cached loading promise if one is in progress
+        if (modelLoadPromise) {
+          console.log('Waiting for existing model load to complete');
+          await modelLoadPromise;
+          if (globalRecognizer) {
+            setIsModelLoaded(true);
+            setLoadingStatus("");
+            setInitError(null);
+            return;
+          }
+        }
+
         console.log('Starting voice assistant initialization...');
         setLoadingStatus("Initializing TensorFlow.js...");
 
-        // Initialize TensorFlow.js with WebGL backend for better performance
-        await tf.setBackend('webgl');
-        await tf.ready();
-        console.log('TensorFlow.js initialized');
+        modelLoadPromise = (async () => {
+          // Initialize TensorFlow.js with WebGL backend for better performance
+          await tf.setBackend('webgl');
+          await tf.ready();
+          console.log('TensorFlow.js initialized');
 
-        if (!recognizer.current) {
           setLoadingStatus("Creating speech command recognizer...");
-          recognizer.current = speechCommands.create('BROWSER_FFT');
+          const recognizer = speechCommands.create('BROWSER_FFT');
           console.log('Speech command recognizer created');
-        }
 
-        setLoadingStatus("Loading speech recognition model...");
-        await recognizer.current.ensureModelLoaded();
-        console.log('Model loaded successfully');
+          setLoadingStatus("Loading speech recognition model...");
+          await recognizer.ensureModelLoaded();
+          console.log('Model loaded successfully');
+
+          // Store in global cache
+          globalRecognizer = recognizer;
+        })();
+
+        await modelLoadPromise;
+        modelLoadPromise = null;
 
         if (!cleanup) {
           // Configure the recognizer with rate limiting
@@ -70,7 +100,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             const scores = result.scores as Float32Array;
             const maxScore = Math.max(...Array.from(scores));
             const maxScoreIndex = scores.indexOf(maxScore);
-            const command = recognizer.current?.wordLabels()[maxScoreIndex];
+            const command = globalRecognizer?.wordLabels()[maxScoreIndex];
 
             if (command && maxScore > 0.75) {
               console.log('Recognized command:', command, 'with score:', maxScore);
@@ -83,12 +113,12 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             }
           };
 
-          await recognizer.current.listen(
+          await globalRecognizer?.listen(
             processResult,
             {
               probabilityThreshold: 0.75,
               invokeCallbackOnNoiseAndUnknown: false,
-              overlapFactor: 0.5 // Reduce processing frequency
+              overlapFactor: 0.75 // Increase overlap factor to reduce processing frequency
             }
           );
 
@@ -105,16 +135,25 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
       } catch (error) {
         console.error('Failed to initialize voice assistant:', error);
 
+        // Clear caches on error
+        globalRecognizer = null;
+        modelLoadPromise = null;
+
         if (!cleanup) {
           const shouldRetry = retryCount < MAX_RETRIES;
+          const isRateLimitError = error.toString().includes('429') || 
+                                 error.toString().includes('Too Many Requests');
+
           setInitError(
-            shouldRetry 
-              ? `Initialization failed. Retrying in ${INITIAL_RETRY_DELAY / 1000} seconds...` 
-              : 'Failed to initialize voice assistant. Please try again later.'
+            isRateLimitError
+              ? 'Too many requests. Please wait a moment before trying again.'
+              : shouldRetry 
+                ? `Initialization failed. Retrying in ${INITIAL_RETRY_DELAY / 1000} seconds...` 
+                : 'Failed to initialize voice assistant. Please try again later.'
           );
           setLoadingStatus("");
 
-          if (shouldRetry) {
+          if (shouldRetry && !isRateLimitError) {
             const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
             retryTimeout = setTimeout(() => {
               setRetryCount(prev => prev + 1);
@@ -125,9 +164,11 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
           toast({
             title: "Error",
-            description: shouldRetry 
-              ? "Failed to initialize voice assistant. Retrying..." 
-              : "Too many requests. Please try again later.",
+            description: isRateLimitError
+              ? "Too many requests. Please wait a moment before trying again."
+              : shouldRetry 
+                ? "Failed to initialize voice assistant. Retrying..." 
+                : "Too many requests. Please try again later.",
             variant: "destructive",
           });
         }
@@ -141,14 +182,14 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
     return () => {
       cleanup = true;
       clearTimeout(retryTimeout);
-      if (recognizer.current) {
-        recognizer.current.stopListening();
+      if (isRecording && globalRecognizer) {
+        globalRecognizer.stopListening();
       }
     };
   }, [isActive, isModelLoaded, initError, retryCount, onCommand, onTranscript]);
 
   const startRecording = async () => {
-    if (!isModelLoaded || !recognizer.current) {
+    if (!isModelLoaded || !globalRecognizer) {
       toast({
         title: "Error",
         description: "Voice assistant is not ready yet. Please wait.",
@@ -175,7 +216,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   };
 
   const stopRecording = async () => {
-    if (recognizer.current) {
+    if (globalRecognizer) {
       setIsRecording(false);
       toast({
         title: "Recording Stopped",
@@ -197,7 +238,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         </CardHeader>
         <CardContent>
           <p className="text-destructive">{initError}</p>
-          {retryCount >= MAX_RETRIES && (
+          {(retryCount >= MAX_RETRIES || initError.includes('Too many requests')) && (
             <Button
               onClick={() => {
                 setRetryCount(0);

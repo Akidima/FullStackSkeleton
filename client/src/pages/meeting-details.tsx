@@ -14,6 +14,7 @@ import { MeetingInsights } from "@/components/meeting-insights";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { TaskManager } from "@/components/task-manager";
 import { VoiceAssistant } from "@/components/voice-assistant";
+import { ShareButtons } from "@/components/share-buttons";
 
 // Rate limiting configuration
 const RETRY_DELAY = 1000; // Start with 1 second
@@ -427,7 +428,15 @@ export default function MeetingDetails() {
 
               {meeting.summary && (
                 <div className="space-y-2">
-                  <h3 className="font-semibold">Summary</h3>
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-semibold">Summary</h3>
+                    <ShareButtons
+                      title={meeting.title}
+                      summary={meeting.summary}
+                      notes={meeting.notes}
+                      url={window.location.href}
+                    />
+                  </div>
                   <p className="text-muted-foreground">{meeting.summary}</p>
                 </div>
               )}

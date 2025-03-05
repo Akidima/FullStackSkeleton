@@ -3,6 +3,8 @@ import { PreferenceWizard } from "@/components/preference-wizard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import { Star, Sparkles } from "lucide-react";
 
 export default function Welcome() {
   const [, navigate] = useLocation();
@@ -23,20 +25,56 @@ export default function Welcome() {
 
   return (
     <div className="min-h-screen bg-background p-6">
-      <div className="max-w-4xl mx-auto">
-        <Card className="mb-6">
+      <motion.div 
+        className="max-w-4xl mx-auto"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+      >
+        <Card className="mb-6 overflow-hidden relative">
+          <motion.div
+            className="absolute top-0 right-0 p-4"
+            initial={{ scale: 0, rotate: -180 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ delay: 0.3, duration: 0.5, type: "spring" }}
+          >
+            <Sparkles className="h-6 w-6 text-primary" />
+          </motion.div>
+
           <CardHeader>
-            <CardTitle className="text-center">Welcome to Smart Meeting Assistant</CardTitle>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.5 }}
+            >
+              <CardTitle className="text-center flex items-center justify-center gap-2">
+                <Star className="h-6 w-6 text-primary" />
+                <span>Welcome to Smart Meeting Assistant</span>
+                <Star className="h-6 w-6 text-primary" />
+              </CardTitle>
+            </motion.div>
           </CardHeader>
+
           <CardContent>
-            <p className="text-center text-muted-foreground mb-6">
+            <motion.p 
+              className="text-center text-muted-foreground mb-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.5 }}
+            >
               Let's personalize your experience and earn some points along the way!
-            </p>
+            </motion.p>
           </CardContent>
         </Card>
 
-        <PreferenceWizard />
-      </div>
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6, duration: 0.5 }}
+        >
+          <PreferenceWizard />
+        </motion.div>
+      </motion.div>
     </div>
   );
 }

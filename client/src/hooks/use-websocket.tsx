@@ -37,6 +37,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           setIsConnected(true);
           setSocket(ws);
           setRetryCount(0); // Reset retry count on successful connection
+          toast({
+            title: "Connected",
+            description: "Real-time updates enabled",
+          });
         });
 
         ws.addEventListener('message', (event) => {
@@ -75,6 +79,16 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
               MAX_RETRY_DELAY
             );
             console.log(`Attempting reconnection in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+
+            // Show a toast for the first disconnection
+            if (retryCount === 0) {
+              toast({
+                title: "Connection Lost",
+                description: "Attempting to reconnect...",
+                variant: "destructive",
+              });
+            }
+
             reconnectTimeout = setTimeout(() => {
               setRetryCount(prev => prev + 1);
               connect();
@@ -100,7 +114,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    connect();
+    // Only attempt to connect if we haven't reached max retries
+    if (retryCount < MAX_RETRIES) {
+      connect();
+    }
 
     return () => {
       clearTimeout(reconnectTimeout);

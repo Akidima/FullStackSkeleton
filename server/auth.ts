@@ -75,16 +75,23 @@ const authLimiter = rateLimit({
 });
 
 export function registerAuthEndpoints(app: Express) {
-  // Google OAuth routes
-  const appDomain = `${process.env.REPL_SLUG?.toLowerCase()}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`;
+  // Get the Replit domain
+  const appDomain = process.env.REPL_SLUG && process.env.REPL_OWNER
+    ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+    : 'localhost:3000';
   const appUrl = `https://${appDomain}`;
 
-  // Configure Google OAuth Strategy with Calendar scope
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    console.error('Missing Google OAuth credentials. Authentication will not work properly.');
+    return;
+  }
+
+  // Configure Google OAuth Strategy with proper scopes
   passport.use(
     new GoogleStrategy(
       {
-        clientID: process.env.GOOGLE_CLIENT_ID!,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         callbackURL: `${appUrl}/auth/google/callback`,
       },
       async (accessToken, refreshToken, profile, done) => {
@@ -98,6 +105,7 @@ export function registerAuthEndpoints(app: Express) {
               return done(null, false, { message: "Email already registered with different method" });
             }
 
+            // Create new user
             user = await storage.createUser({
               googleId: profile.id,
               email: profile.emails?.[0]?.value ?? "",
@@ -108,7 +116,7 @@ export function registerAuthEndpoints(app: Express) {
               password: null,
             });
           } else {
-            // Update the access token
+            // Update existing user's tokens
             await storage.updateUser(user.id, {
               accessToken,
               refreshToken,
@@ -117,35 +125,52 @@ export function registerAuthEndpoints(app: Express) {
 
           return done(null, user);
         } catch (err) {
+          console.error('Google authentication error:', err);
           return done(err as Error);
         }
       }
     )
   );
 
-  app.get("/auth/google", (req, res, next) => {
-    passport.authenticate("google", {
-      scope: [
-        "profile",
-        "email",
-        "https://www.googleapis.com/auth/calendar.readonly"
-      ],
-      prompt: "consent",
-      accessType: 'offline',
-      session: false
-    })(req, res, next);
-  });
+  // Google OAuth routes with improved error handling
+  app.get("/auth/google",
+    (req, res, next) => {
+      passport.authenticate("google", {
+        scope: [
+          "profile",
+          "email",
+          "https://www.googleapis.com/auth/calendar",
+          "https://www.googleapis.com/auth/calendar.events"
+        ],
+        accessType: 'offline',
+        prompt: 'consent',
+        session: false
+      })(req, res, next);
+    }
+  );
 
-  app.get("/auth/google/callback", (req, res, next) => {
-    passport.authenticate("google", { session: false }, (err, user, info) => {
-      if (err || !user) {
-        return res.redirect('/login?error=google-auth-failed');
-      }
+  app.get("/auth/google/callback",
+    (req, res, next) => {
+      passport.authenticate("google", { session: false }, (err, user, info) => {
+        if (err) {
+          console.error('Google callback error:', err);
+          return res.redirect('/login?error=google-auth-error');
+        }
 
-      const token = generateToken(user);
-      res.redirect(`/?token=${token}`);
-    })(req, res, next);
-  });
+        if (!user) {
+          return res.redirect(`/login?error=${encodeURIComponent(info?.message || 'google-auth-failed')}`);
+        }
+
+        try {
+          const token = generateToken(user);
+          res.redirect(`/?token=${token}`);
+        } catch (error) {
+          console.error('Token generation error:', error);
+          res.redirect('/login?error=token-generation-failed');
+        }
+      })(req, res, next);
+    }
+  );
 
   // Calendar events endpoint
   app.get("/api/calendar/events", authenticateJWT, asyncHandler(async (req, res) => {

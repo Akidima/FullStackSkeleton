@@ -20,6 +20,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [isTranscriberReady, setIsTranscriberReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [initAttempts, setInitAttempts] = useState(0);
+  const [loadingProgress, setLoadingProgress] = useState<string>("");
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const transcriber = useRef<any>(null);
@@ -28,48 +29,68 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
   useEffect(() => {
     let isMounted = true;
+    let retryTimeout: NodeJS.Timeout;
+
     const initializeTranscriber = async () => {
       try {
         if (!transcriber.current) {
           console.log('Initializing transcriber...');
+          setLoadingProgress("Loading speech recognition model...");
           transcriber.current = await pipeline(
             'automatic-speech-recognition',
             'Xenova/whisper-small',
             { 
-              progress_callback: (progress: any) => console.log('Loading model:', progress),
-              quantized: true, // Use quantized model for better browser performance
-              cache: true, // Enable caching
+              progress_callback: (progress: any) => {
+                console.log('Loading whisper model:', progress);
+                if (isMounted) {
+                  setLoadingProgress(`Loading speech recognition model: ${Math.round(progress.progress * 100)}%`);
+                }
+              },
+              quantized: true
             }
           );
         }
+
         if (!sentimentAnalyzer.current) {
           console.log('Initializing sentiment analyzer...');
+          setLoadingProgress("Loading sentiment analysis model...");
           sentimentAnalyzer.current = await pipeline(
             'text-classification',
             'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
             {
-              quantized: true,
-              cache: true,
+              progress_callback: (progress: any) => {
+                console.log('Loading sentiment model:', progress);
+                if (isMounted) {
+                  setLoadingProgress(`Loading sentiment analysis model: ${Math.round(progress.progress * 100)}%`);
+                }
+              },
+              quantized: true
             }
           );
         }
+
         if (isMounted) {
           setIsTranscriberReady(true);
           setInitError(null);
-          console.log('Transcriber initialized successfully');
+          setLoadingProgress("");
+          console.log('Voice assistant initialized successfully');
+          toast({
+            title: "Voice Assistant Ready",
+            description: "You can now start using voice commands.",
+          });
         }
       } catch (error) {
-        console.error('Failed to initialize transcriber:', error);
+        console.error('Failed to initialize voice assistant:', error);
         if (isMounted) {
           setInitError('Failed to initialize voice assistant. Please try refreshing the page.');
           if (initAttempts < MAX_INIT_ATTEMPTS) {
-            setTimeout(() => {
+            retryTimeout = setTimeout(() => {
               setInitAttempts(prev => prev + 1);
-            }, 2000); // Retry after 2 seconds
+            }, 2000);
           }
           toast({
             title: "Error",
-            description: "Failed to initialize voice assistant. Retrying...",
+            description: `Failed to initialize voice assistant. ${initAttempts < MAX_INIT_ATTEMPTS ? "Retrying..." : ""}`,
             variant: "destructive",
           });
         }
@@ -82,6 +103,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
     return () => {
       isMounted = false;
+      clearTimeout(retryTimeout);
       if (mediaRecorder.current && isRecording) {
         mediaRecorder.current.stop();
         mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
@@ -113,8 +135,12 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         await processAudio(audioBlob);
       };
 
-      mediaRecorder.current.start(1000); // Collect data every second
+      mediaRecorder.current.start(1000);
       setIsRecording(true);
+      toast({
+        title: "Recording Started",
+        description: "Listening for voice commands...",
+      });
     } catch (error) {
       console.error('Failed to start recording:', error);
       toast({
@@ -130,6 +156,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
       mediaRecorder.current.stop();
       mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
       setIsRecording(false);
+      toast({
+        title: "Recording Stopped",
+        description: "Processing your command...",
+      });
     }
   };
 
@@ -212,7 +242,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">
-            Please wait while we set up the voice assistant... 
+            {loadingProgress || "Please wait while we set up the voice assistant..."}
             {initAttempts > 0 && ` (Attempt ${initAttempts + 1}/${MAX_INIT_ATTEMPTS})`}
           </p>
         </CardContent>

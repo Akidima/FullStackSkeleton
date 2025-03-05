@@ -2,6 +2,7 @@ import {
   meetings,
   users,
   tasks,
+  rooms,
   meetingInsights,
   meetingMoods,
   meetingOutcomes,
@@ -11,6 +12,8 @@ import {
   type InsertUser,
   type Task,
   type InsertTask,
+  type Room,
+  type InsertRoom,
   type MeetingInsight,
   type InsertMeetingInsight,
   type MeetingMood,
@@ -102,16 +105,30 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   async getMeetings(): Promise<Meeting[]> {
     try {
-      const allMeetings = await db
-        .select()
-        .from(meetings)
-        .leftJoin(rooms, eq(meetings.roomId, rooms.id));
+      // First get all meetings
+      const allMeetings = await db.select().from(meetings);
 
-      console.log('Fetched meetings:', allMeetings); // Add logging
-      return allMeetings.map(meeting => ({
-        ...meeting.meetings,
-        room: meeting.rooms
-      }));
+      // Then get room info for each meeting
+      const meetingsWithRooms = await Promise.all(
+        allMeetings.map(async (meeting) => {
+          if (meeting.roomId) {
+            const [room] = await db
+              .select()
+              .from(rooms)
+              .where(eq(rooms.id, meeting.roomId));
+            return {
+              ...meeting,
+              room: room || null
+            };
+          }
+          return {
+            ...meeting,
+            room: null
+          };
+        })
+      );
+
+      return meetingsWithRooms;
     } catch (error) {
       console.error('Error fetching meetings:', error);
       throw error;

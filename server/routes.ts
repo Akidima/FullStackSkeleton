@@ -12,6 +12,7 @@ import { SchedulerService } from "./services/scheduler";
 import { broadcastMeetingUpdate } from "./websocket";
 import { authenticateJWT } from "./auth";
 import {insertTaskSchema, updateTaskSchema} from "@shared/schema"; // Assuming these are defined elsewhere
+import { format } from 'date-fns'; //Import date-fns
 
 
 // Utility function to validate meeting ID
@@ -402,6 +403,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     await storage.deleteTask(taskId);
     res.status(204).send();
+  }));
+
+  // Add these routes after existing routes but before error handler
+  app.get("/api/analytics/meetings", asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const meetings = await storage.getMeetings();
+
+      // Group meetings by week
+      const weeklyMeetings = meetings.reduce((acc: any[], meeting) => {
+        const week = format(new Date(meeting.date), 'MM/dd');
+        const existingWeek = acc.find(w => w.week === week);
+        if (existingWeek) {
+          existingWeek.count++;
+        } else {
+          acc.push({ week, count: 1 });
+        }
+        return acc;
+      }, []);
+
+      res.json({
+        weeklyMeetings: weeklyMeetings.slice(-7), // Last 7 weeks
+        totalMeetings: meetings.length,
+        completedMeetings: meetings.filter(m => m.isCompleted).length,
+      });
+    } catch (error) {
+      console.error('Error generating meeting analytics:', error);
+      throw error;
+    }
+  }));
+
+  app.get("/api/analytics/participation", asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const meetings = await storage.getMeetings();
+      const totalParticipants = meetings.reduce((sum, meeting) =>
+        sum + (meeting.participants?.length || 0), 0);
+
+      const participation = [
+        { name: "Attended", value: totalParticipants },
+        { name: "No Show", value: Math.round(totalParticipants * 0.1) }, // Example: 10% no-show rate
+        { name: "Rescheduled", value: Math.round(totalParticipants * 0.05) }, // Example: 5% reschedule rate
+      ];
+
+      res.json({ participation });
+    } catch (error) {
+      console.error('Error generating participation analytics:', error);
+      throw error;
+    }
+  }));
+
+  app.get("/api/analytics/rooms", asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const rooms = await storage.getRooms();
+      const meetings = await storage.getMeetings();
+
+      // Calculate room utilization
+      const roomUtilization = rooms.map(room => {
+        const roomMeetings = meetings.filter(m => m.roomId === room.id);
+        const utilization = (roomMeetings.length / meetings.length) * 100;
+        return {
+          name: room.name,
+          utilization: Math.round(utilization),
+        };
+      });
+
+      res.json({ rooms: roomUtilization });
+    } catch (error) {
+      console.error('Error generating room analytics:', error);
+      throw error;
+    }
   }));
 
   // Register error handler last

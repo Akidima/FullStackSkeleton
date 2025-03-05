@@ -13,6 +13,7 @@ import Login from "@/pages/login";
 import SignUp from "@/pages/signup";
 import CalendarView from "@/pages/calendar-view";
 import ProfileSettings from "@/pages/profile-settings";
+import AnalyticsDashboard from "@/pages/analytics-dashboard";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { Layout } from "@/components/layout";
@@ -66,6 +67,13 @@ function Router() {
         <ProtectedRoute>
           <Layout>
             <CalendarView />
+          </Layout>
+        </ProtectedRoute>
+      )} />
+      <Route path="/analytics" component={() => (
+        <ProtectedRoute>
+          <Layout>
+            <AnalyticsDashboard />
           </Layout>
         </ProtectedRoute>
       )} />

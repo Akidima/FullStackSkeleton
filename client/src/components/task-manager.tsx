@@ -36,12 +36,25 @@ interface TaskManagerProps {
 }
 
 export function TaskManager({ meetingId, userId }: TaskManagerProps) {
-  const [filter, setFilter] = useState("all"); // all, pending, completed
-  const [sort, setSort] = useState("dueDate"); // dueDate, priority, status
+  const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState("dueDate");
   const queryClient = useQueryClient();
+  const RETRY_DELAY = 5000; // 5 seconds base delay
+  const MAX_RETRY_DELAY = 60000; // 1 minute maximum delay
+  const STALE_TIME = 30000; // Cache data for 30 seconds
 
   const { data: tasks = [], isLoading } = useQuery<Task[]>({
     queryKey: ["/api/tasks", { meetingId, userId }],
+    staleTime: STALE_TIME,
+    retry: (failureCount, error: any) => {
+      // Don't retry on 429 (rate limit) errors
+      if (error?.response?.status === 429) return false;
+      return failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => Math.min(
+      RETRY_DELAY * Math.pow(2, attemptIndex),
+      MAX_RETRY_DELAY
+    )
   });
 
   const updateTask = useMutation({
@@ -51,6 +64,11 @@ export function TaskManager({ meetingId, userId }: TaskManagerProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
+
+      if (response.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
+
       if (!response.ok) throw new Error("Failed to update task");
       return response.json();
     },
@@ -61,13 +79,25 @@ export function TaskManager({ meetingId, userId }: TaskManagerProps) {
         description: "The task has been updated successfully.",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      const isRateLimit = error.message.includes('Rate limit exceeded');
       toast({
         title: "Error",
-        description: "Failed to update task. Please try again.",
+        description: isRateLimit 
+          ? "Too many requests. Please wait a moment before trying again." 
+          : "Failed to update task. Please try again.",
         variant: "destructive",
       });
     },
+    retry: (failureCount, error: Error) => {
+      // Don't retry on rate limit errors
+      if (error.message.includes('Rate limit exceeded')) return false;
+      return failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => Math.min(
+      RETRY_DELAY * Math.pow(2, attemptIndex),
+      MAX_RETRY_DELAY
+    )
   });
 
   const getPriorityColor = (priority: string) => {
@@ -114,6 +144,13 @@ export function TaskManager({ meetingId, userId }: TaskManagerProps) {
         return (
           priorityWeight[b.priority as keyof typeof priorityWeight] -
           priorityWeight[a.priority as keyof typeof priorityWeight]
+        );
+      }
+      if (sort === "status") {
+        const statusWeight = { blocked: 3, in_progress: 2, pending: 1, completed: 0 };
+        return (
+          statusWeight[b.status as keyof typeof statusWeight] -
+          statusWeight[a.status as keyof typeof statusWeight]
         );
       }
       return 0;
@@ -218,7 +255,7 @@ export function TaskManager({ meetingId, userId }: TaskManagerProps) {
                         id: task.id,
                         completed: !task.completed,
                         status: task.completed ? "pending" : "completed",
-                        completedAt: task.completed ? null : new Date().toISOString(),
+                        completedAt: task.completed ? null : new Date().toISOString()
                       })
                     }
                   >

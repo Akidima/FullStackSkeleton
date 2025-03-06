@@ -15,11 +15,11 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { insertUserSchema, type InsertUser } from "@shared/schema";
 import { LoadingSpinner } from "@/components/ui/loading-skeleton";
-import { Bell, Mail, Calendar, CheckCircle } from "lucide-react";
+import { Bell, Mail, Calendar, CheckCircle, Calendar as CalendarIcon, MessageSquare, Trello } from "lucide-react";
 import { z } from "zod";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 
-// Define notification preferences schema
+// Define schemas for different sections
 const notificationPreferencesSchema = z.object({
   emailEnabled: z.boolean(),
   emailFrequency: z.number(),
@@ -27,7 +27,21 @@ const notificationPreferencesSchema = z.object({
   actionItems: z.boolean(),
 });
 
+const integrationSettingsSchema = z.object({
+  googleCalendar: z.boolean(),
+  outlookCalendar: z.boolean(),
+  asanaEnabled: z.boolean(),
+  jiraEnabled: z.boolean(),
+  slackEnabled: z.boolean(),
+  teamsEnabled: z.boolean(),
+  asanaWorkspace: z.string().optional(),
+  jiraProject: z.string().optional(),
+  slackChannel: z.string().optional(),
+  teamsChannel: z.string().optional(),
+});
+
 type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
+type IntegrationSettings = z.infer<typeof integrationSettingsSchema>;
 
 export default function ProfileSettings() {
   const { user } = useAuth();
@@ -35,6 +49,7 @@ export default function ProfileSettings() {
   const [activeTab, setActiveTab] = useState("profile");
   const [showPreview, setShowPreview] = useState(false);
 
+  // Existing form setup
   const form = useForm<InsertUser>({
     resolver: zodResolver(insertUserSchema),
     defaultValues: {
@@ -48,13 +63,16 @@ export default function ProfileSettings() {
     },
   });
 
-  const notificationForm = useForm<NotificationPreferences>({
-    resolver: zodResolver(notificationPreferencesSchema),
+  // Add integrations form
+  const integrationsForm = useForm<IntegrationSettings>({
+    resolver: zodResolver(integrationSettingsSchema),
     defaultValues: {
-      emailEnabled: true,
-      emailFrequency: 1,
-      meetingUpdates: true,
-      actionItems: true,
+      googleCalendar: false,
+      outlookCalendar: false,
+      asanaEnabled: false,
+      jiraEnabled: false,
+      slackEnabled: false,
+      teamsEnabled: false,
     },
   });
 
@@ -86,6 +104,44 @@ export default function ProfileSettings() {
     },
   });
 
+  const notificationForm = useForm<NotificationPreferences>({
+    resolver: zodResolver(notificationPreferencesSchema),
+    defaultValues: {
+      emailEnabled: true,
+      emailFrequency: 1,
+      meetingUpdates: true,
+      actionItems: true,
+    },
+  });
+
+  const updateIntegrations = useMutation({
+    mutationFn: async (data: IntegrationSettings) => {
+      const response = await fetch("/api/users/integrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to update integration settings");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users/integrations"] });
+      toast({
+        title: "Integration Settings Updated",
+        description: "Your integration preferences have been saved.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update integration settings. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   function onSubmit(data: InsertUser) {
     updateProfile.mutate(data);
   }
@@ -98,6 +154,10 @@ export default function ProfileSettings() {
     });
   }
 
+  function onIntegrationsSubmit(data: IntegrationSettings) {
+    updateIntegrations.mutate(data);
+  }
+
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -106,10 +166,11 @@ export default function ProfileSettings() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="preferences">Preferences</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="integrations">Integrations</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="space-y-4">
@@ -175,8 +236,8 @@ export default function ProfileSettings() {
                       )}
                     />
 
-                    <Button 
-                      type="submit" 
+                    <Button
+                      type="submit"
                       disabled={updateProfile.isPending}
                       className="w-full"
                     >
@@ -214,8 +275,8 @@ export default function ProfileSettings() {
                           <HelpTooltip context="profile.theme">
                             <FormLabel>Theme</FormLabel>
                           </HelpTooltip>
-                          <Select 
-                            onValueChange={field.onChange} 
+                          <Select
+                            onValueChange={field.onChange}
                             defaultValue={field.value}
                           >
                             <FormControl>
@@ -242,8 +303,8 @@ export default function ProfileSettings() {
                           <HelpTooltip context="profile.language">
                             <FormLabel>Language</FormLabel>
                           </HelpTooltip>
-                          <Select 
-                            onValueChange={field.onChange} 
+                          <Select
+                            onValueChange={field.onChange}
                             defaultValue={field.value}
                           >
                             <FormControl>
@@ -262,8 +323,8 @@ export default function ProfileSettings() {
                       )}
                     />
 
-                    <Button 
-                      type="submit" 
+                    <Button
+                      type="submit"
                       disabled={updateProfile.isPending}
                       className="w-full"
                     >
@@ -311,7 +372,7 @@ export default function ProfileSettings() {
                               </div>
                             </div>
                             <FormControl>
-                              <Switch 
+                              <Switch
                                 checked={field.value}
                                 onCheckedChange={(checked) => {
                                   field.onChange(checked);
@@ -385,7 +446,7 @@ export default function ProfileSettings() {
                             </div>
                           </div>
                           <FormControl>
-                            <Switch 
+                            <Switch
                               checked={field.value}
                               onCheckedChange={field.onChange}
                             />
@@ -411,7 +472,7 @@ export default function ProfileSettings() {
                             </div>
                           </div>
                           <FormControl>
-                            <Switch 
+                            <Switch
                               checked={field.value}
                               onCheckedChange={field.onChange}
                             />
@@ -422,6 +483,211 @@ export default function ProfileSettings() {
 
                     <Button type="submit" className="w-full">
                       Save Notification Preferences
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="integrations" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Integration Settings</CardTitle>
+                <CardDescription>
+                  Connect your favorite tools to streamline your workflow.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...integrationsForm}>
+                  <form onSubmit={integrationsForm.handleSubmit(onIntegrationsSubmit)} className="space-y-6">
+                    {/* Calendar Integrations */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Calendar Services</h3>
+                      <div className="space-y-4">
+                        <FormField
+                          control={integrationsForm.control}
+                          name="googleCalendar"
+                          render={({ field }) => (
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-full bg-primary/10">
+                                  <CalendarIcon className="h-5 w-5 text-primary" />
+                                </div>
+                                <div>
+                                  <h3 className="font-medium">Google Calendar</h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    Sync your meetings with Google Calendar
+                                  </p>
+                                </div>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </div>
+                          )}
+                        />
+
+                        <FormField
+                          control={integrationsForm.control}
+                          name="outlookCalendar"
+                          render={({ field }) => (
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-full bg-primary/10">
+                                  <CalendarIcon className="h-5 w-5 text-primary" />
+                                </div>
+                                <div>
+                                  <h3 className="font-medium">Outlook Calendar</h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    Sync your meetings with Outlook Calendar
+                                  </p>
+                                </div>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </div>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Task Management Integrations */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Task Management</h3>
+                      <div className="space-y-4">
+                        <FormField
+                          control={integrationsForm.control}
+                          name="asanaEnabled"
+                          render={({ field }) => (
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-full bg-primary/10">
+                                  <Trello className="h-5 w-5 text-primary" />
+                                </div>
+                                <div>
+                                  <h3 className="font-medium">Asana</h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    Sync tasks with Asana
+                                  </p>
+                                </div>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </div>
+                          )}
+                        />
+
+                        <FormField
+                          control={integrationsForm.control}
+                          name="jiraEnabled"
+                          render={({ field }) => (
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-full bg-primary/10">
+                                  <Trello className="h-5 w-5 text-primary" />
+                                </div>
+                                <div>
+                                  <h3 className="font-medium">Jira</h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    Sync tasks with Jira
+                                  </p>
+                                </div>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </div>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Communication Integrations */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Communication</h3>
+                      <div className="space-y-4">
+                        <FormField
+                          control={integrationsForm.control}
+                          name="slackEnabled"
+                          render={({ field }) => (
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-full bg-primary/10">
+                                  <MessageSquare className="h-5 w-5 text-primary" />
+                                </div>
+                                <div>
+                                  <h3 className="font-medium">Slack</h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    Send notifications to Slack
+                                  </p>
+                                </div>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </div>
+                          )}
+                        />
+
+                        <FormField
+                          control={integrationsForm.control}
+                          name="teamsEnabled"
+                          render={({ field }) => (
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-full bg-primary/10">
+                                  <MessageSquare className="h-5 w-5 text-primary" />
+                                </div>
+                                <div>
+                                  <h3 className="font-medium">Microsoft Teams</h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    Send notifications to Teams
+                                  </p>
+                                </div>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </div>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      disabled={updateIntegrations.isPending}
+                      className="w-full"
+                    >
+                      {updateIntegrations.isPending ? (
+                        <>
+                          <LoadingSpinner size="small" className="mr-2" />
+                          Saving...
+                        </>
+                      ) : (
+                        "Save Integration Settings"
+                      )}
                     </Button>
                   </form>
                 </Form>

@@ -1,11 +1,3 @@
-The edited code adds new form fields (dueDate, priority, status) and a query invalidation step after successful task creation.  It also replaces the simple Input for `dueDate` with a `datetime-local` input type and uses a Select component for priority and status. The import statements are also updated to include the necessary components for these additions.  The core structure of the component remains largely the same. The combination will involve replacing the original form elements with the enhanced versions from the edited code, adding the new form fields, and incorporating the query invalidation.
-```
-
-```reasoning
-The imports need updating to include the new `Select` components and to correct the import of `apiRequest`. The `defaultValues` in `useForm` need to be updated to include the new fields. The `onSubmit` function needs to include the query invalidation.  Finally, the new form fields (dueDate, priority, status) need to be added to the form.
-```
-
-```replit_final_file
 import { useParams, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -32,11 +24,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { ArrowLeft } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { useQuery } from "@tanstack/react-query";
 
 export default function TaskForm() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const params = useParams();
+
+  // Query user's integration settings
+  const { data: integrationSettings } = useQuery({
+    queryKey: ["/api/users/integrations"],
+    staleTime: 30000,
+  });
 
   const form = useForm({
     resolver: zodResolver(insertTaskSchema),
@@ -48,12 +48,39 @@ export default function TaskForm() {
       status: "pending",
       progress: 0,
       completed: false,
+      integrations: {
+        asana: {
+          enabled: false,
+          projectId: "",
+        },
+        jira: {
+          enabled: false,
+          projectKey: "",
+        },
+        teams: {
+          enabled: false,
+        },
+        slack: {
+          enabled: false,
+        },
+      },
     },
   });
 
   const onSubmit = async (data: any) => {
     try {
-      await apiRequest("POST", "/api/tasks", data);
+      const response = await apiRequest("POST", "/api/tasks", data);
+
+      // Handle integration errors if any
+      if (response.integrationErrors?.length > 0) {
+        response.integrationErrors.forEach((error: any) => {
+          toast({
+            title: `${error.service} Integration Warning`,
+            description: error.error,
+            variant: "warning",
+          });
+        });
+      }
 
       // Invalidate tasks query to trigger a refetch
       queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
@@ -64,6 +91,7 @@ export default function TaskForm() {
       });
       setLocation("/");
     } catch (error) {
+      console.error('Form submission error:', error);
       toast({
         title: "Error",
         description: "Failed to create task",
@@ -193,6 +221,109 @@ export default function TaskForm() {
                   )}
                 />
 
+                {/* Integration Settings */}
+                {integrationSettings && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Integrations</h3>
+
+                    {/* Asana Integration */}
+                    {integrationSettings.asanaEnabled && (
+                      <FormField
+                        control={form.control}
+                        name="integrations.asana.enabled"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                            <div className="space-y-0.5">
+                              <FormLabel>Sync with Asana</FormLabel>
+                              <p className="text-sm text-muted-foreground">
+                                Create a task in Asana
+                              </p>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    )}
+
+                    {/* Jira Integration */}
+                    {integrationSettings.jiraEnabled && (
+                      <FormField
+                        control={form.control}
+                        name="integrations.jira.enabled"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                            <div className="space-y-0.5">
+                              <FormLabel>Sync with Jira</FormLabel>
+                              <p className="text-sm text-muted-foreground">
+                                Create an issue in Jira
+                              </p>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    )}
+
+                    {/* Microsoft Teams Integration */}
+                    {integrationSettings.teamsEnabled && (
+                      <FormField
+                        control={form.control}
+                        name="integrations.teams.enabled"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                            <div className="space-y-0.5">
+                              <FormLabel>Notify Microsoft Teams</FormLabel>
+                              <p className="text-sm text-muted-foreground">
+                                Send task updates to Teams
+                              </p>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    )}
+
+                    {/* Slack Integration */}
+                    {integrationSettings.slackEnabled && (
+                      <FormField
+                        control={form.control}
+                        name="integrations.slack.enabled"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                            <div className="space-y-0.5">
+                              <FormLabel>Notify Slack</FormLabel>
+                              <p className="text-sm text-muted-foreground">
+                                Send task updates to Slack
+                              </p>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    )}
+                  </div>
+                )}
+
                 <Button type="submit" className="w-full">
                   {params.id ? "Update Task" : "Create Task"}
                 </Button>
@@ -204,3 +335,5 @@ export default function TaskForm() {
     </div>
   );
 }
+
+</replit_final_file>

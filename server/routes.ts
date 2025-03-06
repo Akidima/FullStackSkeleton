@@ -17,6 +17,9 @@ import { rateLimit } from 'express-rate-limit';
 import { SlackService } from "./services/slack";
 import { GoogleCalendarService } from "./services/google-calendar";
 import { OutlookCalendarService } from "./services/outlook-calendar";
+import { AsanaService } from "./services/asana";
+import { JiraService } from "./services/jira";
+import { MicrosoftTeamsService } from "./services/microsoft-teams";
 
 // Update the rate limiters for better usability
 const analyticsLimiter = rateLimit({
@@ -454,7 +457,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const taskData = insertTaskSchema.parse(req.body);
       const task = await storage.createTask(taskData);
-      res.status(201).json(task);
+
+      // Handle external integrations
+      const integrations = req.body.integrations || {};
+      const errors: any[] = [];
+
+      // Distribute task to Asana if enabled
+      if (integrations.asana?.enabled && integrations.asana?.accessToken) {
+        try {
+          const asanaTaskId = await AsanaService.createTask(task, integrations.asana.accessToken);
+          await storage.updateTask(task.id, {
+            ...task,
+            asanaId: asanaTaskId
+          });
+        } catch (error) {
+          console.error('Asana integration error:', error);
+          errors.push({ service: 'Asana', error: error.message });
+        }
+      }
+
+      // Create Jira issue if enabled
+      if (integrations.jira?.enabled && integrations.jira?.credentials) {
+        try {
+          const jiraTaskId = await JiraService.createTask(task, integrations.jira.credentials);
+          await storage.updateTask(task.id, {
+            ...task,
+            jiraId: jiraTaskId
+          });
+        } catch (error) {
+          console.error('Jira integration error:', error);
+          errors.push({ service: 'Jira', error: error.message });
+        }
+      }
+
+      // Send Teams notification if enabled
+      if (integrations.teams?.enabled && integrations.teams?.webhookUrl) {
+        try {
+          await MicrosoftTeamsService.sendMeetingNotification({
+            ...task,
+            date: new Date(),
+            title: `New Task: ${task.title}`
+          }, integrations.teams.webhookUrl);
+        } catch (error) {
+          console.error('Teams integration error:', error);
+          errors.push({ service: 'Microsoft Teams', error: error.message });
+        }
+      }
+
+      // Return created task along with any integration errors
+      res.status(201).json({
+        task,
+        integrationErrors: errors.length > 0 ? errors : undefined
+      });
     } catch (error) {
       if (error instanceof ZodError) {
         throw new ValidationError("Invalid task data", error.errors);
@@ -467,9 +521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const taskId = Number(req.params.id);
       if (isNaN(taskId)) {
-        throw new ValidationError("Invalid task ID", [
-          { field: "id", message: "Task ID must be a valid number" }
-        ]);
+        throw new ValidationError("Invalid task ID");
       }
 
       const task = await storage.getTask(taskId);
@@ -479,7 +531,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const taskData = updateTaskSchema.parse(req.body);
       const updatedTask = await storage.updateTask(taskId, taskData);
-      res.json(updatedTask);
+
+      // Handle external integrations updates
+      const integrations = req.body.integrations || {};
+      const errors: any[] = [];
+
+      // Update Asana task if connected
+      if (task.asanaId && integrations.asana?.accessToken) {
+        try {
+          await AsanaService.updateTask(task.asanaId, updatedTask, integrations.asana.accessToken);
+        } catch (error) {
+          console.error('Asana update error:', error);
+          errors.push({ service: 'Asana', error: error.message });
+        }
+      }
+
+      // Update Jira issue if connected
+      if (task.jiraId && integrations.jira?.credentials) {
+        try {
+          await JiraService.updateTask(task.jiraId, updatedTask, integrations.jira.credentials);
+        } catch (error) {
+          console.error('Jira update error:', error);
+          errors.push({ service: 'Jira', error: error.message });
+        }
+      }
+
+      // Send Teams update if enabled
+      if (integrations.teams?.webhookUrl) {
+        try {
+          await MicrosoftTeamsService.updateMeetingStatus({
+            ...updatedTask,
+            date: new Date(),
+            title: `Task Update: ${updatedTask.title}`
+          }, 'updated', integrations.teams.webhookUrl);
+        } catch (error) {
+          console.error('Teams update error:', error);
+          errors.push({ service: 'Microsoft Teams', error: error.message });
+        }
+      }
+
+      res.json({
+        task: updatedTask,
+        integrationErrors: errors.length > 0 ? errors : undefined
+      });
     } catch (error) {
       if (error instanceof ZodError) {
         throw new ValidationError("Invalid task data", error.errors);

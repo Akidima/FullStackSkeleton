@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Meeting } from '@shared/schema';
+import type { Meeting, Task } from '@shared/schema';
 
 export class MicrosoftTeamsService {
   static async sendMeetingNotification(meeting: Meeting, webhookUrl: string): Promise<void> {

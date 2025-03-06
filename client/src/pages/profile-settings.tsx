@@ -18,6 +18,7 @@ import { LoadingSpinner } from "@/components/ui/loading-skeleton";
 import { Bell, Mail, Calendar, CheckCircle, Calendar as CalendarIcon, MessageSquare, Trello } from "lucide-react";
 import { z } from "zod";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { apiRequest } from "@/lib/queryClient";
 
 // Define schemas for different sections
 const notificationPreferencesSchema = z.object({
@@ -49,6 +50,12 @@ export default function ProfileSettings() {
   const [activeTab, setActiveTab] = useState("profile");
   const [showPreview, setShowPreview] = useState(false);
 
+  // Query user's current integration settings
+  const { data: currentIntegrationSettings } = useQuery({
+    queryKey: ["/api/users/integrations"],
+    staleTime: 30000,
+  });
+
   // Existing form setup
   const form = useForm<InsertUser>({
     resolver: zodResolver(insertUserSchema),
@@ -67,26 +74,22 @@ export default function ProfileSettings() {
   const integrationsForm = useForm<IntegrationSettings>({
     resolver: zodResolver(integrationSettingsSchema),
     defaultValues: {
-      googleCalendar: false,
-      outlookCalendar: false,
-      asanaEnabled: false,
-      jiraEnabled: false,
-      slackEnabled: false,
-      teamsEnabled: false,
+      googleCalendar: currentIntegrationSettings?.googleCalendar || false,
+      outlookCalendar: currentIntegrationSettings?.outlookCalendar || false,
+      asanaEnabled: currentIntegrationSettings?.asanaEnabled || false,
+      jiraEnabled: currentIntegrationSettings?.jiraEnabled || false,
+      slackEnabled: currentIntegrationSettings?.slackEnabled || false,
+      teamsEnabled: currentIntegrationSettings?.teamsEnabled || false,
+      asanaWorkspace: currentIntegrationSettings?.asanaWorkspace || "",
+      jiraProject: currentIntegrationSettings?.jiraProject || "",
+      slackChannel: currentIntegrationSettings?.slackChannel || "",
+      teamsChannel: currentIntegrationSettings?.teamsChannel || "",
     },
   });
 
   const updateProfile = useMutation({
     mutationFn: async (data: Partial<InsertUser>) => {
-      const response = await fetch("/api/users/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        throw new Error("Failed to update profile");
-      }
-      return response.json();
+      return await apiRequest("PATCH", "/api/users/profile", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/profile"] });
@@ -95,10 +98,11 @@ export default function ProfileSettings() {
         description: "Your profile has been updated successfully.",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error('Profile update error:', error);
       toast({
         title: "Error",
-        description: "Failed to update profile. Please try again.",
+        description: error.message || "Failed to update profile. Please try again.",
         variant: "destructive",
       });
     },
@@ -116,15 +120,7 @@ export default function ProfileSettings() {
 
   const updateIntegrations = useMutation({
     mutationFn: async (data: IntegrationSettings) => {
-      const response = await fetch("/api/users/integrations", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        throw new Error("Failed to update integration settings");
-      }
-      return response.json();
+      return await apiRequest("PATCH", "/api/users/integrations", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/integrations"] });
@@ -133,10 +129,11 @@ export default function ProfileSettings() {
         description: "Your integration preferences have been saved.",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error('Integration update error:', error);
       toast({
         title: "Error",
-        description: "Failed to update integration settings. Please try again.",
+        description: error.message || "Failed to update integration settings. Please try again.",
         variant: "destructive",
       });
     },

@@ -426,23 +426,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
 
-  // Add these routes after existing user routes but before error handler
+  // Update the integration settings endpoints
   app.get("/api/users/integrations", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
     try {
-      const userId = req.user?.id;
-      if (!userId) {
-        throw new ValidationError("User not authenticated");
+      if (!req.user) {
+        throw new ValidationError("Authentication required");
       }
 
-      const integrationSettings = await storage.getUserIntegrationSettings(userId);
-      res.json(integrationSettings || {
-        asanaEnabled: false,
-        jiraEnabled: false,
-        teamsEnabled: false,
-        slackEnabled: false,
-        googleCalendarEnabled: false,
-        outlookCalendarEnabled: false
-      });
+      const integrationSettings = await storage.getUserIntegrationSettings(req.user.id);
+      if (!integrationSettings) {
+        // Return default settings if none exist
+        return res.json({
+          asanaEnabled: false,
+          jiraEnabled: false,
+          teamsEnabled: false,
+          slackEnabled: false,
+          googleCalendarEnabled: false,
+          outlookCalendarEnabled: false,
+          asanaWorkspace: null,
+          jiraProject: null,
+          slackChannel: null,
+          teamsChannel: null
+        });
+      }
+      res.json(integrationSettings);
     } catch (error) {
       console.error('Error fetching integration settings:', error);
       throw error;
@@ -451,36 +458,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/users/integrations", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
     try {
-      const userId = req.user?.id;
-      if (!userId) {
-        throw new ValidationError("User not authenticated");
+      if (!req.user) {
+        throw new ValidationError("Authentication required");
       }
 
+      const userId = req.user.id;
       const settings = req.body;
 
-      // Validate settings
-      if (typeof settings !== 'object') {
-        throw new ValidationError("Invalid integration settings format");
+      // Validate request body
+      if (!settings || typeof settings !== 'object') {
+        throw new ValidationError("Invalid request body");
       }
 
-      // Update integration settings
-      const updatedSettings = await storage.updateUserIntegrationSettings(userId, {
+      // Type check and sanitize boolean fields
+      const sanitizedSettings = {
         asanaEnabled: Boolean(settings.asanaEnabled),
         jiraEnabled: Boolean(settings.jiraEnabled),
         teamsEnabled: Boolean(settings.teamsEnabled),
         slackEnabled: Boolean(settings.slackEnabled),
-        googleCalendarEnabled: Boolean(settings.googleCalendar),
-        outlookCalendarEnabled: Boolean(settings.outlookCalendar),
+        googleCalendarEnabled: Boolean(settings.googleCalendarEnabled),
+        outlookCalendarEnabled: Boolean(settings.outlookCalendarEnabled),
+        // Optional string fields
         asanaWorkspace: settings.asanaWorkspace || null,
         jiraProject: settings.jiraProject || null,
         slackChannel: settings.slackChannel || null,
         teamsChannel: settings.teamsChannel || null
-      });
+      };
 
+      // Update settings in database
+      const updatedSettings = await storage.updateUserIntegrationSettings(userId, sanitizedSettings);
+
+      // Send response
       res.json(updatedSettings);
     } catch (error) {
       console.error('Error updating integration settings:', error);
-      throw error;
+      if (error instanceof ValidationError) {
+        res.status(400).json({
+          status: 'error',
+          message: error.message,
+          details: error.details
+        });
+      } else {
+        throw error;
+      }
     }
   }));
 

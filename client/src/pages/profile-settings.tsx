@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect as ReactuseEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,66 +20,59 @@ import { z } from "zod";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { apiRequest } from "@/lib/queryClient";
 
-// Define schemas for different sections
-const notificationPreferencesSchema = z.object({
-  emailEnabled: z.boolean(),
-  emailFrequency: z.number(),
-  meetingUpdates: z.boolean(),
-  actionItems: z.boolean(),
-});
-
 const integrationSettingsSchema = z.object({
-  googleCalendarEnabled: z.boolean(),
-  outlookCalendarEnabled: z.boolean(),
   asanaEnabled: z.boolean(),
   jiraEnabled: z.boolean(),
-  slackEnabled: z.boolean(),
   teamsEnabled: z.boolean(),
+  slackEnabled: z.boolean(),
+  googleCalendarEnabled: z.boolean(),
+  outlookCalendarEnabled: z.boolean(),
   asanaWorkspace: z.string().optional(),
   jiraProject: z.string().optional(),
   slackChannel: z.string().optional(),
   teamsChannel: z.string().optional(),
 });
 
-type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
 type IntegrationSettings = z.infer<typeof integrationSettingsSchema>;
 
 export default function ProfileSettings() {
   const { user, getAuthHeader } = useAuth();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("profile");
-  const [showPreview, setShowPreview] = useState(false);
+  const [activeTab, setActiveTab] = useState("integrations");
 
   // Query user's current integration settings
   const { data: currentIntegrationSettings, isLoading: isLoadingSettings } = useQuery({
     queryKey: ["/api/users/integrations"],
-    enabled: !!user, // Only run query if user is authenticated
+    enabled: !!user,
   });
 
-  // Add integrations form
   const integrationsForm = useForm<IntegrationSettings>({
     resolver: zodResolver(integrationSettingsSchema),
     defaultValues: {
-      googleCalendarEnabled: currentIntegrationSettings?.googleCalendarEnabled || false,
-      outlookCalendarEnabled: currentIntegrationSettings?.outlookCalendarEnabled || false,
-      asanaEnabled: currentIntegrationSettings?.asanaEnabled || false,
-      jiraEnabled: currentIntegrationSettings?.jiraEnabled || false,
-      slackEnabled: currentIntegrationSettings?.slackEnabled || false,
-      teamsEnabled: currentIntegrationSettings?.teamsEnabled || false,
-      asanaWorkspace: currentIntegrationSettings?.asanaWorkspace || "",
-      jiraProject: currentIntegrationSettings?.jiraProject || "",
-      slackChannel: currentIntegrationSettings?.slackChannel || "",
-      teamsChannel: currentIntegrationSettings?.teamsChannel || "",
+      asanaEnabled: false,
+      jiraEnabled: false,
+      teamsEnabled: false,
+      slackEnabled: false,
+      googleCalendarEnabled: false,
+      outlookCalendarEnabled: false,
+      asanaWorkspace: "",
+      jiraProject: "",
+      slackChannel: "",
+      teamsChannel: "",
     },
   });
+
+  // Update form when settings are loaded
+  ReactuseEffect(() => {
+    if (currentIntegrationSettings) {
+      integrationsForm.reset(currentIntegrationSettings);
+    }
+  }, [currentIntegrationSettings, integrationsForm]);
 
   const updateIntegrations = useMutation({
     mutationFn: async (data: IntegrationSettings) => {
       const headers = await getAuthHeader();
-      if (!headers.Authorization) {
-        throw new Error("Authentication required");
-      }
-      return await apiRequest("PATCH", "/api/users/integrations", data);
+      return await apiRequest("PATCH", "/api/users/integrations", data, headers);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/integrations"] });
@@ -110,10 +103,203 @@ export default function ProfileSettings() {
     updateIntegrations.mutate(data);
   }
 
-  // Rest of the component implementation remains the same...
+  if (isLoadingSettings) {
+    return (
+      <div className="min-h-screen bg-background p-6 flex items-center justify-center">
+        <LoadingSpinner size="large" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background p-6">
-      {/* Rest of the JSX implementation remains the same... */}
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="space-y-0.5">
+          <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
+          <p className="text-muted-foreground">Manage your account settings and integrations.</p>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-1">
+            <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="integrations" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Integration Settings</CardTitle>
+                <CardDescription>
+                  Connect your favorite tools to streamline your workflow.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...integrationsForm}>
+                  <form onSubmit={integrationsForm.handleSubmit(onIntegrationsSubmit)} className="space-y-6">
+                    {/* Calendar Integrations */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Calendar Services</h3>
+                      <div className="space-y-4">
+                        <FormField
+                          control={integrationsForm.control}
+                          name="googleCalendarEnabled"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                              <div className="space-y-0.5">
+                                <FormLabel>Google Calendar</FormLabel>
+                                <FormDescription>
+                                  Sync your meetings with Google Calendar
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={integrationsForm.control}
+                          name="outlookCalendarEnabled"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                              <div className="space-y-0.5">
+                                <FormLabel>Outlook Calendar</FormLabel>
+                                <FormDescription>
+                                  Sync your meetings with Outlook Calendar
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Task Management Integrations */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Task Management</h3>
+                      <div className="space-y-4">
+                        <FormField
+                          control={integrationsForm.control}
+                          name="asanaEnabled"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                              <div className="space-y-0.5">
+                                <FormLabel>Asana</FormLabel>
+                                <FormDescription>
+                                  Sync tasks with Asana
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={integrationsForm.control}
+                          name="jiraEnabled"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                              <div className="space-y-0.5">
+                                <FormLabel>Jira</FormLabel>
+                                <FormDescription>
+                                  Sync tasks with Jira
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Communication Integrations */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Communication</h3>
+                      <div className="space-y-4">
+                        <FormField
+                          control={integrationsForm.control}
+                          name="slackEnabled"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                              <div className="space-y-0.5">
+                                <FormLabel>Slack</FormLabel>
+                                <FormDescription>
+                                  Send notifications to Slack
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={integrationsForm.control}
+                          name="teamsEnabled"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                              <div className="space-y-0.5">
+                                <FormLabel>Microsoft Teams</FormLabel>
+                                <FormDescription>
+                                  Send notifications to Teams
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      disabled={updateIntegrations.isPending}
+                      className="w-full"
+                    >
+                      {updateIntegrations.isPending ? (
+                        <>
+                          <LoadingSpinner size="small" className="mr-2" />
+                          Saving...
+                        </>
+                      ) : (
+                        "Save Integration Settings"
+                      )}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }

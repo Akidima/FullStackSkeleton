@@ -96,7 +96,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const meeting = await storage.createMeeting(meetingData);
 
       // Send Slack notification
-      await SlackService.sendMeetingNotification(meeting);
+      try {
+        await SlackService.sendMeetingNotification(meeting);
+      } catch (error) {
+        console.error('Error sending Slack notification:', error);
+        // Don't fail the whole request if Slack notification fails
+      }
 
       // Handle calendar integration if user has provided token
       if (req.headers.authorization) {
@@ -113,7 +118,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Store the calendar event ID with the meeting
           await storage.updateMeeting(meeting.id, {
-            ...meeting,
             calendarEventId: eventId,
             calendarSynced: true,
             lastSyncedAt: new Date()

@@ -5,19 +5,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Slider } from "@/components/ui/slider";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { insertUserSchema, type InsertUser } from "@shared/schema";
 import { LoadingSpinner } from "@/components/ui/loading-skeleton";
 import { Bell, Mail, Calendar, CheckCircle, Calendar as CalendarIcon, MessageSquare, Trello } from "lucide-react";
 import { z } from "zod";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { apiRequest } from "@/lib/queryClient";
 
 const integrationSettingsSchema = z.object({
@@ -36,7 +30,7 @@ const integrationSettingsSchema = z.object({
 type IntegrationSettings = z.infer<typeof integrationSettingsSchema>;
 
 export default function ProfileSettings() {
-  const { user, getAuthHeader } = useAuth();
+  const { user, getAuthToken } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("integrations");
 
@@ -71,13 +65,20 @@ export default function ProfileSettings() {
 
   const updateIntegrations = useMutation({
     mutationFn: async (data: IntegrationSettings) => {
-      const headers = await getAuthHeader();
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error("Authentication required");
+      }
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
       return await apiRequest("PATCH", "/api/users/integrations", data, headers);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/integrations"] });
       toast({
-        title: "Integration Settings Updated",
+        title: "Success",
         description: "Your integration preferences have been saved.",
       });
     },
@@ -92,14 +93,6 @@ export default function ProfileSettings() {
   });
 
   function onIntegrationsSubmit(data: IntegrationSettings) {
-    if (!user) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to update integration settings.",
-        variant: "destructive",
-      });
-      return;
-    }
     updateIntegrations.mutate(data);
   }
 

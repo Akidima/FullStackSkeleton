@@ -10,6 +10,7 @@ type AuthContextType = {
   error: Error | null;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  getAuthToken: () => Promise<string | null>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -70,6 +71,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const getAuthToken = async () => {
+    try {
+      if (!user) return null;
+      const token = await user.getIdToken();
+      return token;
+    } catch (error) {
+      console.error('Error getting auth token:', error);
+      return null;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -78,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         loginWithGoogle,
         logout,
+        getAuthToken,
       }}
     >
       {children}

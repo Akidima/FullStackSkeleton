@@ -79,6 +79,25 @@ export const userPreferences = pgTable("user_preferences", {
   keyIdx: index("user_prefs_key_idx").on(table.key),
 }));
 
+export const userIntegrationSettings = pgTable("user_integration_settings", {
+  id: serial("id").primaryKey(),
+  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  asanaEnabled: boolean("asana_enabled").default(false),
+  jiraEnabled: boolean("jira_enabled").default(false),
+  teamsEnabled: boolean("teams_enabled").default(false),
+  slackEnabled: boolean("slack_enabled").default(false),
+  googleCalendarEnabled: boolean("google_calendar_enabled").default(false),
+  outlookCalendarEnabled: boolean("outlook_calendar_enabled").default(false),
+  asanaWorkspace: text("asana_workspace"),
+  jiraProject: text("jira_project"),
+  slackChannel: text("slack_channel"),
+  teamsChannel: text("teams_channel"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  userIdIdx: index("user_integration_settings_user_id_idx").on(table.userId),
+}));
+
 export const rooms = pgTable("rooms", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -252,6 +271,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   calendarEvents: many(calendarEvents),
   userAvailability: many(userAvailability),
   meetingPreferences: many(meetingPreferences),
+  integrationSettings: many(userIntegrationSettings),
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
@@ -356,6 +376,13 @@ export const taskNotificationsRelations = relations(taskNotifications, ({ one })
   }),
   user: one(users, {
     fields: [taskNotifications.userId],
+    references: [users.id],
+  }),
+}));
+
+export const userIntegrationSettingsRelations = relations(userIntegrationSettings, ({ one }) => ({
+  user: one(users, {
+    fields: [userIntegrationSettings.userId],
     references: [users.id],
   }),
 }));
@@ -522,6 +549,13 @@ export const insertTaskNotificationSchema = createInsertSchema(taskNotifications
   })
   .omit({ id: true, createdAt: true });
 
+// Add the insert schema for user integration settings
+export const insertUserIntegrationSettingsSchema = createInsertSchema(userIntegrationSettings)
+  .omit({ 
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
@@ -559,3 +593,5 @@ export type TaskComment = typeof taskComments.$inferSelect;
 export type InsertTaskComment = z.infer<typeof insertTaskCommentSchema>;
 export type TaskNotification = typeof taskNotifications.$inferSelect;
 export type InsertTaskNotification = z.infer<typeof insertTaskNotificationSchema>;
+export type UserIntegrationSettings = typeof userIntegrationSettings.$inferSelect;
+export type InsertUserIntegrationSettings = z.infer<typeof insertUserIntegrationSettingsSchema>;

@@ -426,6 +426,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
 
+  // Add these routes after existing user routes but before error handler
+  app.get("/api/users/integrations", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new ValidationError("User not authenticated");
+      }
+
+      const integrationSettings = await storage.getUserIntegrationSettings(userId);
+      res.json(integrationSettings || {
+        asanaEnabled: false,
+        jiraEnabled: false,
+        teamsEnabled: false,
+        slackEnabled: false,
+        googleCalendarEnabled: false,
+        outlookCalendarEnabled: false
+      });
+    } catch (error) {
+      console.error('Error fetching integration settings:', error);
+      throw error;
+    }
+  }));
+
+  app.patch("/api/users/integrations", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new ValidationError("User not authenticated");
+      }
+
+      const settings = req.body;
+
+      // Validate settings
+      if (typeof settings !== 'object') {
+        throw new ValidationError("Invalid integration settings format");
+      }
+
+      // Update integration settings
+      const updatedSettings = await storage.updateUserIntegrationSettings(userId, {
+        asanaEnabled: Boolean(settings.asanaEnabled),
+        jiraEnabled: Boolean(settings.jiraEnabled),
+        teamsEnabled: Boolean(settings.teamsEnabled),
+        slackEnabled: Boolean(settings.slackEnabled),
+        googleCalendarEnabled: Boolean(settings.googleCalendar),
+        outlookCalendarEnabled: Boolean(settings.outlookCalendar),
+        asanaWorkspace: settings.asanaWorkspace || null,
+        jiraProject: settings.jiraProject || null,
+        slackChannel: settings.slackChannel || null,
+        teamsChannel: settings.teamsChannel || null
+      });
+
+      res.json(updatedSettings);
+    } catch (error) {
+      console.error('Error updating integration settings:', error);
+      throw error;
+    }
+  }));
+
   // Calendar Events Routes
   app.get("/api/users/:userId/calendar-events", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
     const { startDate, endDate } = req.query;

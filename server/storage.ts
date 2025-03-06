@@ -7,6 +7,7 @@ import {
   meetingMoods,
   meetingOutcomes,
   calendarEvents,
+  userIntegrationSettings,
   type Meeting,
   type InsertMeeting,
   type User,
@@ -23,12 +24,11 @@ import {
   type InsertMeetingOutcome,
   type CalendarEvent,
   type InsertCalendarEvent,
+  type UserIntegrationSettings,
+  type InsertUserIntegrationSettings,
 } from "@shared/schema";
-import { db, testConnection } from "./db";
-import { eq, desc, and, gte, lte } from "drizzle-orm";
-
-// Test database connection on startup
-testConnection().catch(console.error);
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   // Meeting operations
@@ -103,6 +103,10 @@ export interface IStorage {
   createTask(task: InsertTask): Promise<Task>;
   updateTask(id: number, task: Partial<InsertTask>): Promise<Task>;
   deleteTask(id: number): Promise<boolean>;
+
+  // Integration settings operations
+  getUserIntegrationSettings(userId: number): Promise<UserIntegrationSettings | undefined>;
+  updateUserIntegrationSettings(userId: number, settings: Partial<InsertUserIntegrationSettings>): Promise<UserIntegrationSettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -787,6 +791,59 @@ export class DatabaseStorage implements IStorage {
       return !!deletedTask;
     } catch (error) {
       console.error(`Error deleting task ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async getUserIntegrationSettings(userId: number): Promise<UserIntegrationSettings | undefined> {
+    try {
+      const [settings] = await db
+        .select()
+        .from(userIntegrationSettings)
+        .where(eq(userIntegrationSettings.userId, userId));
+      return settings;
+    } catch (error) {
+      console.error(`Error fetching integration settings for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  async updateUserIntegrationSettings(
+    userId: number,
+    settings: Partial<InsertUserIntegrationSettings>
+  ): Promise<UserIntegrationSettings> {
+    try {
+      // Check if settings exist for this user
+      const existingSettings = await this.getUserIntegrationSettings(userId);
+
+      if (existingSettings) {
+        // Update existing settings
+        const [updatedSettings] = await db
+          .update(userIntegrationSettings)
+          .set({
+            ...settings,
+            updatedAt: new Date()
+          })
+          .where(eq(userIntegrationSettings.userId, userId))
+          .returning();
+
+        return updatedSettings;
+      } else {
+        // Create new settings
+        const [newSettings] = await db
+          .insert(userIntegrationSettings)
+          .values({
+            userId,
+            ...settings,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          })
+          .returning();
+
+        return newSettings;
+      }
+    } catch (error) {
+      console.error(`Error updating integration settings for user ${userId}:`, error);
       throw error;
     }
   }

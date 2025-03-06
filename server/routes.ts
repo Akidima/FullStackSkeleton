@@ -21,7 +21,26 @@ import { AsanaService } from "./services/asana";
 import { JiraService } from "./services/jira";
 import { MicrosoftTeamsService } from "./services/microsoft-teams";
 
-// Update the rate limiters for better usability
+// More lenient rate limiter for authenticated endpoints
+const authenticatedLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Allow 100 requests per window per IP
+  message: {
+    status: 'error',
+    message: 'Too many requests, please try again later.',
+    retryAfter: 'windowMs'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for OPTIONS requests
+    if (req.method === 'OPTIONS') return true;
+    // Skip rate limiting if user is authenticated
+    return !!req.user;
+  }
+});
+
+// Rate limiter for unauthenticated endpoints
 const analyticsLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour window
   max: 1000, // Allow more requests per window
@@ -35,17 +54,6 @@ const analyticsLimiter = rateLimit({
   skip: (req) => req.method === 'OPTIONS', // Skip preflight requests
 });
 
-// Separate limiter for auth routes with more lenient limits
-const authLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 100, // 100 requests per hour
-  message: {
-    status: 'error',
-    message: 'Too many authentication attempts. Please try again later.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
@@ -678,7 +686,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // Add these routes after existing routes but before error handler
-  app.use('/auth', authLimiter); // Apply auth rate limiter
+  app.use('/auth', authenticatedLimiter); // Apply auth rate limiter
   app.use('/api/analytics', analyticsLimiter); // Apply rate limiter
 
   app.get("/api/analytics/meetings", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {

@@ -73,7 +73,14 @@ export default function ProfileSettings() {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       };
-      return await apiRequest("PATCH", "/api/users/integrations", data, headers);
+      try {
+        return await apiRequest("PATCH", "/api/users/integrations", data, headers);
+      } catch (error: any) {
+        if (error.status === 429) {
+          throw new Error("Too many requests. Please wait a moment and try again.");
+        }
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/integrations"] });

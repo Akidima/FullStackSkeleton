@@ -10,20 +10,20 @@ import { AlertCircle } from "lucide-react";
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 
-// Query configuration
-const STALE_TIME = 5 * 60 * 1000; // 5 minutes
-const GC_TIME = 30 * 60 * 1000; // 30 minutes
-const RETRY_DELAY = 5000; // 5 seconds between retries
-const MAX_RETRIES = 3;
+// Query configuration with improved caching and retry logic
+const STALE_TIME = 10 * 60 * 1000; // 10 minutes
+const GC_TIME = 60 * 60 * 1000; // 1 hour
+const RETRY_DELAY = 10000; // 10 seconds between retries
+const MAX_RETRIES = 5;
 
 export default function AnalyticsDashboard() {
-  // Configure queries with caching and retry logic
+  // Configure queries with improved caching and retry logic
   const { data: meetingStats, isLoading: isLoadingStats, error: statsError } = useQuery({
     queryKey: ['/api/analytics/meetings'],
     staleTime: STALE_TIME,
     gcTime: GC_TIME,
     retry: MAX_RETRIES,
-    retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
+    retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 60000), // Exponential backoff
     refetchOnWindowFocus: false,
   });
 
@@ -32,7 +32,7 @@ export default function AnalyticsDashboard() {
     staleTime: STALE_TIME,
     gcTime: GC_TIME,
     retry: MAX_RETRIES,
-    retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
+    retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 60000),
     refetchOnWindowFocus: false,
   });
 
@@ -41,7 +41,7 @@ export default function AnalyticsDashboard() {
     staleTime: STALE_TIME,
     gcTime: GC_TIME,
     retry: MAX_RETRIES,
-    retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
+    retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 60000),
     refetchOnWindowFocus: false,
   });
 
@@ -62,7 +62,7 @@ export default function AnalyticsDashboard() {
 
   if (hasError) {
     const errorMessage = hasError instanceof Error && hasError.message === "Too many requests"
-      ? "Too many requests. Please wait a moment and try again."
+      ? "Analytics data is temporarily unavailable. Please try again in a few minutes."
       : "Failed to load analytics data. Please try again later.";
 
     return (

@@ -18,13 +18,13 @@ import { SlackService } from "./services/slack";
 import { GoogleCalendarService } from "./services/google-calendar";
 import { OutlookCalendarService } from "./services/outlook-calendar";
 
-// Add rate limiter before the analytics routes
+// Update the rate limiters for better usability
 const analyticsLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // limit each IP to 300 requests per windowMs
+  windowMs: 60 * 60 * 1000, // 1 hour window
+  max: 1000, // Allow more requests per window
   message: {
     status: 'error',
-    message: 'Too many requests. Please try again later.',
+    message: 'Rate limit exceeded. Please try again in a few minutes.',
     retryAfter: 'windowMs'
   },
   standardHeaders: true,
@@ -505,7 +505,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/auth', authLimiter); // Apply auth rate limiter
   app.use('/api/analytics', analyticsLimiter); // Apply rate limiter
 
-  app.get("/api/analytics/meetings", asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/analytics/meetings", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetings = await storage.getMeetings();
 
@@ -521,8 +521,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return acc;
       }, []);
 
-      // Cache headers
+      // Add strong cache headers
       res.set('Cache-Control', 'public, max-age=300'); // 5 minutes cache
+      res.set('Vary', 'Accept-Encoding');
 
       res.json({
         weeklyMeetings: weeklyMeetings.slice(-7), // Last 7 weeks
@@ -535,7 +536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  app.get("/api/analytics/participation", asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/analytics/participation", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetings = await storage.getMeetings();
       const totalParticipants = meetings.reduce((sum, meeting) =>
@@ -547,8 +548,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { name: "Rescheduled", value: Math.round(totalParticipants * 0.05) }, // Example: 5% reschedule rate
       ];
 
-      // Cache headers
+      // Add strong cache headers
       res.set('Cache-Control', 'public, max-age=300');
+      res.set('Vary', 'Accept-Encoding');
 
       res.json({ participation });
     } catch (error) {
@@ -557,7 +559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  app.get("/api/analytics/rooms", asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/analytics/rooms", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       const rooms = await storage.getRooms();
       const meetings = await storage.getMeetings();
@@ -574,6 +576,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Cache headers
       res.set('Cache-Control', 'public, max-age=300');
+      res.set('Vary', 'Accept-Encoding');
 
       res.json({ rooms: roomUtilization });
     } catch (error) {

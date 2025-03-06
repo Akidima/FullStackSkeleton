@@ -1,19 +1,23 @@
 import { WebClient } from "@slack/web-api";
 import type { Meeting } from "@shared/schema";
 
-if (!process.env.SLACK_BOT_TOKEN) {
-  throw new Error("SLACK_BOT_TOKEN environment variable must be set");
-}
+// Check if Slack integration is configured
+const slackEnabled = process.env.SLACK_BOT_TOKEN && process.env.SLACK_CHANNEL_ID;
 
-if (!process.env.SLACK_CHANNEL_ID) {
-  throw new Error("SLACK_CHANNEL_ID environment variable must be set");
-}
+// Initialize Slack client only if configured
+const slack = slackEnabled ? new WebClient(process.env.SLACK_BOT_TOKEN) : null;
 
-const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
-const defaultChannel = process.env.SLACK_CHANNEL_ID;
+// Log Slack integration status
+console.log(`Slack integration ${slackEnabled ? 'enabled' : 'disabled'}`);
+const defaultChannel = process.env.SLACK_CHANNEL_ID || '';
 
 export class SlackService {
   static async sendMeetingNotification(meeting: Meeting) {
+    if (!slack) {
+      console.log('Skipping Slack notification - Slack integration disabled');
+      return;
+    }
+    
     try {
       await slack.chat.postMessage({
         channel: defaultChannel,
@@ -55,6 +59,11 @@ export class SlackService {
   }
 
   static async sendMeetingSummary(meeting: Meeting, summary: string) {
+    if (!slack) {
+      console.log('Skipping meeting summary - Slack integration disabled');
+      return;
+    }
+    
     try {
       await slack.chat.postMessage({
         channel: defaultChannel,
@@ -90,6 +99,11 @@ export class SlackService {
   }
 
   static async updateMeetingStatus(meeting: Meeting, status: 'scheduled' | 'updated' | 'cancelled') {
+    if (!slack) {
+      console.log(`Skipping meeting status update - Slack integration disabled`);
+      return;
+    }
+    
     const statusEmoji = {
       scheduled: '📅',
       updated: '🔄',

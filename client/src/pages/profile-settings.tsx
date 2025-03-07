@@ -18,27 +18,11 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 
 // Define schemas for different sections
-const profileSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Please enter a valid email"),
-  phoneNumber: z.string().optional(),
-  timezone: z.string(),
-});
-
 const preferencesSchema = z.object({
   theme: z.enum(["light", "dark", "system"]),
   dashboardLayout: z.enum(["compact", "comfortable", "spacious"]),
   preferredDuration: z.number().min(15).max(120),
   notifications: z.enum(["all", "important", "minimal"]),
-});
-
-const notificationSchema = z.object({
-  emailEnabled: z.boolean(),
-  emailFrequency: z.enum(["instant", "daily", "weekly"]),
-  meetingReminders: z.boolean(),
-  meetingUpdates: z.boolean(),
-  taskReminders: z.boolean(),
-  taskUpdates: z.boolean(),
 });
 
 export default function ProfileSettings() {
@@ -78,18 +62,27 @@ export default function ProfileSettings() {
     mutationFn: async (data: z.infer<typeof preferencesSchema>) => {
       const token = await getAuthToken();
       if (!token) throw new Error("Authentication required");
+
       const headers = {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       };
+
       try {
         // Update theme immediately in the UI before making the API call
         setTheme(data.theme);
+
         return await apiRequest("PATCH", "/api/users/preferences", data, headers);
       } catch (error: any) {
-        // If API call fails, we don't revert the theme as it might be a temporary network issue
         if (error.status === 429) {
-          throw new Error("Please wait a moment before making more changes.");
+          // Show a specific message for rate limiting
+          toast({
+            title: "Theme Update Limited",
+            description: "Please wait a moment before changing the theme again. Your current theme will continue to work.",
+            variant: "warning"
+          });
+          // Don't throw the error since we want to keep the theme change in the UI
+          return data;
         }
         throw error;
       }
@@ -102,11 +95,13 @@ export default function ProfileSettings() {
       });
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update preferences",
-        variant: "destructive",
-      });
+      if (!error.message?.includes("Too many requests")) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to update preferences",
+          variant: "destructive",
+        });
+      }
     },
   });
 

@@ -1,10 +1,19 @@
 import { useState, useEffect } from "react";
-import { useRoute, Link } from "wouter";
+import { useRoute, Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Clock, Users, ArrowLeft, FileText, CheckCircle2, Share2 } from "lucide-react";
+import { 
+  Clock, 
+  Users, 
+  ArrowLeft, 
+  FileText, 
+  CheckCircle2, 
+  Share2, 
+  Trash2, 
+  AlertCircle 
+} from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +21,17 @@ import { LoadingSpinner } from "@/components/ui/loading-skeleton";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { TaskManager } from "@/components/task-manager";
 import { ShareButtons } from "@/components/share-buttons";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 // Rate limiting configuration
 const RETRY_DELAY = 1000; // Start with 1 second
@@ -19,6 +39,7 @@ const MAX_RETRIES = 3;
 
 export default function MeetingDetails() {
   const [, params] = useRoute("/meetings/:id");
+  const [, setLocation] = useLocation();
   const meetingId = params?.id ? parseInt(params.id, 10) : null;
   const queryClient = useQueryClient();
   const socket = useWebSocket();
@@ -141,6 +162,36 @@ export default function MeetingDetails() {
     }
   });
 
+  // Delete meeting mutation
+  const deleteMeeting = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/meetings/${meetingId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete meeting');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
+      toast({
+        title: "Success",
+        description: "Meeting deleted successfully",
+      });
+      setLocation("/"); // Redirect to meetings list
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete meeting",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Handle real-time collaborative note changes
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newNotes = e.target.value;
@@ -215,33 +266,38 @@ export default function MeetingDetails() {
               <ArrowLeft className="h-4 w-4" /> Back to Meetings
             </Button>
           </Link>
-          <div className="flex gap-2">
-            {isEditingNotes ? (
-              <Button
-                onClick={() => saveNotes.mutate(notes)}
-                disabled={saveNotes.isPending}
-              >
-                {saveNotes.isPending ? (
-                  <LoadingSpinner size="small" className="text-white" />
-                ) : (
-                  "Save Notes"
-                )}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" className="gap-2">
+                <Trash2 className="h-4 w-4" /> Delete Meeting
               </Button>
-            ) : notes && !meeting.summary && (
-              <Button
-                onClick={() => generateSummary.mutate()}
-                disabled={generateSummary.isPending || isSummarizing}
-                className="gap-2"
-              >
-                {isSummarizing ? (
-                  <LoadingSpinner size="small" className="text-white" />
-                ) : (
-                  <FileText className="h-4 w-4" />
-                )}
-                {isSummarizing ? "Generating..." : "Generate Summary"}
-              </Button>
-            )}
-          </div>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete the meeting
+                  and all associated data.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deleteMeeting.mutate()}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deleteMeeting.isPending ? (
+                    <>
+                      <LoadingSpinner size="small" className="mr-2" />
+                      Deleting...
+                    </>
+                  ) : (
+                    "Delete Meeting"
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
 
         <Card>

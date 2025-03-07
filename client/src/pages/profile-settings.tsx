@@ -1,4 +1,4 @@
-import { useState, useEffect as ReactuseEffect } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -45,7 +45,7 @@ export default function ProfileSettings() {
   });
 
   // Update form when settings are loaded
-  ReactuseEffect(() => {
+  useEffect(() => {
     if (currentSettings) {
       preferencesForm.reset({
         ...currentSettings,
@@ -58,9 +58,6 @@ export default function ProfileSettings() {
     mutationFn: async (data: z.infer<typeof preferencesSchema>) => {
       const token = await getAuthToken();
       if (!token) throw new Error("Authentication required");
-
-      // Update theme immediately for a smooth experience
-      setTheme(data.theme);
 
       const headers = {
         Authorization: `Bearer ${token}`,
@@ -85,9 +82,12 @@ export default function ProfileSettings() {
     },
   });
 
-  function onPreferencesSubmit(data: z.infer<typeof preferencesSchema>) {
-    updatePreferences.mutate(data);
-  }
+  const handleThemeChange = (newTheme: "light" | "dark" | "system") => {
+    // Update theme immediately in the UI
+    setTheme(newTheme);
+    // Update form value
+    preferencesForm.setValue("theme", newTheme);
+  };
 
   if (isLoadingSettings) {
     return (
@@ -122,14 +122,17 @@ export default function ProfileSettings() {
               </CardHeader>
               <CardContent>
                 <Form {...preferencesForm}>
-                  <form onSubmit={preferencesForm.handleSubmit(onPreferencesSubmit)} className="space-y-4">
+                  <form onSubmit={preferencesForm.handleSubmit((data) => updatePreferences.mutate(data))} className="space-y-4">
                     <FormField
                       control={preferencesForm.control}
                       name="theme"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Theme</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
+                          <Select
+                            onValueChange={handleThemeChange}
+                            value={field.value}
+                          >
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select theme" />

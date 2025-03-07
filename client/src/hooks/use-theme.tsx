@@ -5,7 +5,7 @@ import { toast } from "@/hooks/use-toast";
 type Theme = 'light' | 'dark' | 'system';
 
 export function useTheme() {
-  const [theme, setTheme] = useLocalStorage<Theme>('theme', 'system');
+  const [theme, setThemeState] = useLocalStorage<Theme>('theme', 'system');
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
@@ -27,13 +27,6 @@ export function useTheme() {
         root.classList.add(theme);
         setIsDark(theme === 'dark');
       }
-
-      // Update localStorage manually to ensure persistence
-      try {
-        localStorage.setItem('theme', theme);
-      } catch (error) {
-        console.error('Failed to save theme preference:', error);
-      }
     };
 
     // Initial theme update
@@ -47,18 +40,18 @@ export function useTheme() {
     };
   }, [theme]);
 
-  const updateTheme = (newTheme: Theme) => {
+  const setTheme = (newTheme: Theme) => {
     try {
-      setTheme(newTheme);
+      setThemeState(newTheme);
     } catch (error) {
       console.error('Error updating theme:', error);
       toast({
         title: "Theme Update Error",
-        description: "Failed to update theme. Please try again.",
+        description: "Failed to save theme preference.",
         variant: "destructive"
       });
     }
   };
 
-  return { theme, setTheme: updateTheme, isDark };
+  return { theme, setTheme, isDark };
 }

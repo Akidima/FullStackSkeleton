@@ -38,6 +38,23 @@ import { showErrorToast } from "@/lib/error-toast";
 const RETRY_DELAY = 1000; // Start with 1 second
 const MAX_RETRIES = 3;
 
+// Assumed withRetry function (replace with actual implementation if available)
+const withRetry = async (fn, retries = 3, delay = 1000) => {
+  let attempts = 0;
+  while (attempts < retries) {
+    try {
+      const result = await fn();
+      return result;
+    } catch (error) {
+      if (attempts === retries - 1) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, delay * (attempts + 1)));
+      attempts++;
+    }
+  }
+};
+
 export default function MeetingDetails() {
   const [, params] = useRoute("/meetings/:id");
   const [, setLocation] = useLocation();
@@ -163,22 +180,24 @@ export default function MeetingDetails() {
     }
   });
 
-  // Delete meeting mutation
+  // Update the deleteMeeting mutation to use the enhanced error handling
   const deleteMeeting = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`/api/meetings/${meetingId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json'
+      return await withRetry(async () => {
+        const response = await fetch(`/api/meetings/${meetingId}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to delete meeting');
         }
+
+        return response.json();
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to delete meeting');
-      }
-
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
@@ -189,8 +208,7 @@ export default function MeetingDetails() {
       setLocation("/"); // Redirect to meetings list
     },
     onError: (error: any) => {
-      console.error('Meeting deletion error:', error);
-      showErrorToast(error);
+      showErrorToast(error, () => deleteMeeting.mutate());
     },
   });
 

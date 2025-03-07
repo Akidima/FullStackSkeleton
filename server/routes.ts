@@ -210,38 +210,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   app.delete("/api/meetings/:id", asyncHandler(async (req: Request, res: Response) => {
-    const meetingId = validateMeetingId(req.params.id);
-    const meeting = await storage.getMeeting(meetingId);
-    if (!meeting) {
-      throw new NotFoundError("Meeting");
-    }
+    try {
+      const meetingId = validateMeetingId(req.params.id);
+      const meeting = await storage.getMeeting(meetingId);
 
-    // Send Slack notification
-    await SlackService.updateMeetingStatus(meeting, 'cancelled');
-
-    // Delete calendar event if exists and user has token
-    if (meeting.calendarEventId && req.headers.authorization) {
-      const token = req.headers.authorization.split(' ')[1];
-      const calendarType = req.headers['x-calendar-type'] || 'google';
-
-      try {
-        if (calendarType === 'outlook') {
-          await OutlookCalendarService.deleteCalendarEvent(meeting.calendarEventId, token);
-        } else {
-          await GoogleCalendarService.deleteCalendarEvent(meeting.calendarEventId, token);
-        }
-      } catch (error) {
-        console.error('Failed to delete calendar event:', error);
-        // Don't fail the whole request if calendar sync fails
+      if (!meeting) {
+        throw new NotFoundError("Meeting");
       }
+
+      // Delete calendar event if exists and user has token
+      if (meeting.calendarEventId && req.headers.authorization) {
+        const token = req.headers.authorization.split(' ')[1];
+        const calendarType = req.headers['x-calendar-type'] || 'google';
+
+        try {
+          if (calendarType === 'outlook') {
+            await OutlookCalendarService.deleteCalendarEvent(meeting.calendarEventId, token);
+          } else {
+            await GoogleCalendarService.deleteCalendarEvent(meeting.calendarEventId, token);
+          }
+        } catch (error) {
+          console.error('Failed to delete calendar event:', error);
+          // Don't fail the whole request if calendar sync fails
+        }
+      }
+
+      // Delete the meeting from storage
+      await storage.deleteMeeting(meetingId);
+
+      // Broadcast the deletion
+      broadcastMeetingUpdate('delete', meetingId);
+
+      // Send a proper response
+      res.status(200).json({ 
+        success: true,
+        message: 'Meeting deleted successfully'
+      });
+    } catch (error) {
+      console.error('Error deleting meeting:', error);
+      if (error instanceof NotFoundError) {
+        throw error;
+      }
+      throw new Error('Failed to delete meeting. Please try again.');
     }
-
-    await storage.deleteMeeting(meetingId);
-
-    // Broadcast the update
-    broadcastMeetingUpdate('delete', meeting.id);
-
-    res.status(204).send();
   }));
 
   app.post("/api/meetings/:id/summarize", asyncHandler(async (req: Request, res: Response) => {

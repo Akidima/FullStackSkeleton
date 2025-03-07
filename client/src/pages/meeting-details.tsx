@@ -167,10 +167,14 @@ export default function MeetingDetails() {
     mutationFn: async () => {
       const response = await fetch(`/api/meetings/${meetingId}`, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete meeting');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to delete meeting');
       }
 
       return response.json();
@@ -184,9 +188,10 @@ export default function MeetingDetails() {
       setLocation("/"); // Redirect to meetings list
     },
     onError: (error: any) => {
+      console.error('Meeting deletion error:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to delete meeting",
+        description: error.message || "Failed to delete meeting. Please try again.",
         variant: "destructive",
       });
     },

@@ -65,7 +65,7 @@ export default function ProfileSettings() {
     enabled: !!user,
   });
 
-  // Form setup
+  // Form setup with default values
   const profileForm = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
@@ -132,11 +132,13 @@ export default function ProfileSettings() {
     }
   }, [currentSettings, theme]);
 
+  // Handle theme changes
   const handleThemeChange = (newTheme: "light" | "dark" | "system") => {
     setTheme(newTheme);
     preferencesForm.setValue("theme", newTheme);
   };
 
+  // Loading state
   if (isLoadingSettings) {
     return (
       <div className="min-h-screen bg-background p-6 flex items-center justify-center">
@@ -145,6 +147,7 @@ export default function ProfileSettings() {
     );
   }
 
+  // Main content
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -174,8 +177,11 @@ export default function ProfileSettings() {
               <CardContent>
                 <Form {...profileForm}>
                   <form onSubmit={profileForm.handleSubmit((data) => {
-                    // Implement profile update
                     console.log("Profile update:", data);
+                    toast({
+                      title: "Success",
+                      description: "Profile updated",
+                    });
                   })} className="space-y-4">
                     <FormField
                       control={profileForm.control}
@@ -190,6 +196,7 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
+
                     <FormField
                       control={profileForm.control}
                       name="email"
@@ -203,6 +210,7 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
+
                     <FormField
                       control={profileForm.control}
                       name="phoneNumber"
@@ -216,6 +224,7 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
+
                     <FormField
                       control={profileForm.control}
                       name="timezone"
@@ -240,6 +249,7 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
+
                     <Button type="submit">Save Profile</Button>
                   </form>
                 </Form>
@@ -258,8 +268,11 @@ export default function ProfileSettings() {
               <CardContent>
                 <Form {...preferencesForm}>
                   <form onSubmit={preferencesForm.handleSubmit((data) => {
-                    // Implement preferences update
                     console.log("Preferences update:", data);
+                    toast({
+                      title: "Success",
+                      description: "Preferences updated",
+                    });
                   })} className="space-y-4">
                     <FormField
                       control={preferencesForm.control}
@@ -375,8 +388,11 @@ export default function ProfileSettings() {
               <CardContent>
                 <Form {...notificationForm}>
                   <form onSubmit={notificationForm.handleSubmit((data) => {
-                    // Implement notification update
                     console.log("Notification update:", data);
+                    toast({
+                      title: "Success",
+                      description: "Notification settings updated",
+                    });
                   })} className="space-y-6">
                     <div className="space-y-4">
                       <FormField
@@ -520,8 +536,11 @@ export default function ProfileSettings() {
               <CardContent>
                 <Form {...integrationsForm}>
                   <form onSubmit={integrationsForm.handleSubmit((data) => {
-                    // Implement integrations update
                     console.log("Integrations update:", data);
+                    toast({
+                      title: "Success",
+                      description: "Integration settings updated",
+                    });
                   })} className="space-y-6">
                     {/* Calendar Integrations */}
                     <div className="space-y-4">

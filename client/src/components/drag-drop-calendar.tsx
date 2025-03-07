@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { Meeting } from '@shared/schema';
 import { useAuth } from '@/hooks/use-auth';
+import { showErrorToast, withRetry } from '@/lib/error-toast';
 
 interface DragDropCalendarProps {
   onEventCreate?: (meeting: Meeting) => void;
@@ -68,7 +69,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     }
   };
 
-  // Handle event changes
+  // Handle event changes (drag & drop or resize)
   const handleEventChange = useCallback(async (changeInfo: any) => {
     if (isUpdating) {
       changeInfo.revert();
@@ -80,10 +81,9 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
 
     if (!meeting || meeting.userId !== user?.id) {
       changeInfo.revert();
-      toast({
-        title: "Permission Denied",
-        description: "You can only reschedule meetings you created.",
-        variant: "destructive",
+      showErrorToast({
+        status: 403,
+        message: "You can only reschedule meetings you created."
       });
       return;
     }
@@ -91,54 +91,97 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     setIsUpdating(true);
 
     try {
-      // Check room availability first
-      const newStart = changeInfo.event.start;
-      const newEnd = new Date(newStart.getTime() + 60 * 60 * 1000);
-      const isRoomAvailable = await checkRoomAvailability(newStart, newEnd);
+      await withRetry(async () => {
+        // Check room availability first
+        const newStart = changeInfo.event.start;
+        const newEnd = new Date(newStart.getTime() + 60 * 60 * 1000);
+        const isRoomAvailable = await checkRoomAvailability(newStart, newEnd);
 
-      if (!isRoomAvailable) {
-        throw new Error('No rooms available');
-      }
+        if (!isRoomAvailable) {
+          throw new Error('No rooms available');
+        }
 
-      // Get first available room
-      const availableRoomsResponse = await fetch(
-        `/api/rooms/available?startTime=${newStart.toISOString()}&endTime=${newEnd.toISOString()}`
-      );
-      const availableRooms = await availableRoomsResponse.json();
+        // Get first available room
+        const availableRoomsResponse = await fetch(
+          `/api/rooms/available?startTime=${newStart.toISOString()}&endTime=${newEnd.toISOString()}`
+        );
+        const availableRooms = await availableRoomsResponse.json();
 
-      // Update the meeting with new time and room
-      const response = await fetch(`/api/meetings/${meetingId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: newStart.toISOString(),
-          roomId: availableRooms[0].id
-        }),
-      });
+        // Update the meeting with new time and room
+        const response = await fetch(`/api/meetings/${meetingId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: newStart.toISOString(),
+            roomId: availableRooms[0].id
+          }),
+        });
 
-      if (!response.ok) {
-        throw new Error('Failed to update meeting');
-      }
+        if (!response.ok) {
+          throw new Error('Failed to update meeting');
+        }
 
-      toast({
-        title: "Success",
-        description: "Meeting rescheduled successfully",
+        toast({
+          title: "Success",
+          description: "Meeting rescheduled successfully",
+        });
       });
     } catch (error: any) {
-      const errorMessage = error.message === 'No rooms available'
-        ? "No rooms available for this time slot"
-        : "Failed to reschedule meeting. Please try again.";
-
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      showErrorToast(error, () => handleEventChange(changeInfo));
       changeInfo.revert();
     } finally {
       setIsUpdating(false);
     }
   }, [meetings, user, toast, isUpdating]);
+
+  // Handle new meeting creation through select
+  const handleDateSelect = useCallback(async (selectInfo: any) => {
+    const startTime = selectInfo.start;
+    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour duration
+
+    try {
+      await withRetry(async () => {
+        // Check room availability
+        const isRoomAvailable = await checkRoomAvailability(startTime, endTime);
+
+        if (!isRoomAvailable) {
+          throw new Error('No rooms available for this time slot');
+        }
+
+        // Get first available room
+        const availableRoomsResponse = await fetch(
+          `/api/rooms/available?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}`
+        );
+        const availableRooms = await availableRoomsResponse.json();
+
+        // Create new meeting
+        const response = await fetch('/api/meetings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: 'New Meeting',
+            date: startTime.toISOString(),
+            roomId: availableRooms[0].id,
+            userId: user?.id
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to create meeting');
+        }
+
+        const newMeeting = await response.json();
+        onEventCreate?.(newMeeting);
+
+        toast({
+          title: "Success",
+          description: "Meeting created successfully",
+        });
+      });
+    } catch (error: any) {
+      showErrorToast(error, () => handleDateSelect(selectInfo));
+    }
+  }, [user, onEventCreate, toast]);
 
   if (isLoading) {
     return (
@@ -160,10 +203,12 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
         }}
         editable={true}
         selectable={true}
+        selectMirror={true}
         dayMaxEvents={true}
         events={events}
         eventDrop={handleEventChange}
         eventResize={handleEventChange}
+        select={handleDateSelect}
         slotMinTime="06:00:00"
         slotMaxTime="22:00:00"
         allDaySlot={false}

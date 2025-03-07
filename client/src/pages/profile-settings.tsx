@@ -57,7 +57,7 @@ export default function ProfileSettings() {
   const preferencesForm = useForm<z.infer<typeof preferencesSchema>>({
     resolver: zodResolver(preferencesSchema),
     defaultValues: {
-      theme: theme,
+      theme: theme as "light" | "dark" | "system",
       dashboardLayout: currentSettings?.dashboardLayout || "comfortable",
       preferredDuration: currentSettings?.preferredDuration || 30,
       notifications: currentSettings?.notifications || "all",
@@ -69,7 +69,7 @@ export default function ProfileSettings() {
     if (currentSettings) {
       preferencesForm.reset({
         ...currentSettings,
-        theme: theme, // Always use the current theme from useTheme
+        theme: theme as "light" | "dark" | "system", // Always use the current theme from useTheme
       });
     }
   }, [currentSettings, theme]);
@@ -90,7 +90,7 @@ export default function ProfileSettings() {
       setTheme(data.theme);
       toast({
         title: "Success",
-        description: "Preferences updated successfully",
+        description: "Your preferences have been saved.",
       });
     },
     onError: (error: any) => {

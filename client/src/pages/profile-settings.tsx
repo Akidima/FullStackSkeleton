@@ -82,12 +82,20 @@ export default function ProfileSettings() {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       };
-      return await apiRequest("PATCH", "/api/users/preferences", data, headers);
+      try {
+        // Update theme immediately in the UI before making the API call
+        setTheme(data.theme);
+        return await apiRequest("PATCH", "/api/users/preferences", data, headers);
+      } catch (error: any) {
+        // If API call fails, we don't revert the theme as it might be a temporary network issue
+        if (error.status === 429) {
+          throw new Error("Please wait a moment before making more changes.");
+        }
+        throw error;
+      }
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/settings"] });
-      // Update theme immediately when preferences are saved
-      setTheme(data.theme);
       toast({
         title: "Success",
         description: "Your preferences have been saved.",

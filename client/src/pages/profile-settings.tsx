@@ -5,19 +5,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { LoadingSpinner } from "@/components/ui/loading-skeleton";
-import { Bell, Mail, Calendar, CheckCircle, Calendar as CalendarIcon, MessageSquare, Trello } from "lucide-react";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 
-// Define schemas for different sections
 const preferencesSchema = z.object({
   theme: z.enum(["light", "dark", "system"]),
   dashboardLayout: z.enum(["compact", "comfortable", "spacious"]),
@@ -53,7 +49,7 @@ export default function ProfileSettings() {
     if (currentSettings) {
       preferencesForm.reset({
         ...currentSettings,
-        theme: theme as "light" | "dark" | "system", // Always use the current theme from useTheme
+        theme: theme as "light" | "dark" | "system",
       });
     }
   }, [currentSettings, theme]);
@@ -63,29 +59,15 @@ export default function ProfileSettings() {
       const token = await getAuthToken();
       if (!token) throw new Error("Authentication required");
 
+      // Update theme immediately for a smooth experience
+      setTheme(data.theme);
+
       const headers = {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       };
 
-      try {
-        // Update theme immediately in the UI before making the API call
-        setTheme(data.theme);
-
-        return await apiRequest("PATCH", "/api/users/preferences", data, headers);
-      } catch (error: any) {
-        if (error.status === 429) {
-          // Show a specific message for rate limiting
-          toast({
-            title: "Theme Update Limited",
-            description: "Please wait a moment before changing the theme again. Your current theme will continue to work.",
-            variant: "warning"
-          });
-          // Don't throw the error since we want to keep the theme change in the UI
-          return data;
-        }
-        throw error;
-      }
+      return await apiRequest("PATCH", "/api/users/preferences", data, headers);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/settings"] });
@@ -95,13 +77,11 @@ export default function ProfileSettings() {
       });
     },
     onError: (error: any) => {
-      if (!error.message?.includes("Too many requests")) {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to update preferences",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update preferences",
+        variant: "destructive",
+      });
     },
   });
 
@@ -164,75 +144,6 @@ export default function ProfileSettings() {
                           <FormDescription>
                             Choose how the app should look
                           </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={preferencesForm.control}
-                      name="dashboardLayout"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Dashboard Layout</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select layout" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="compact">Compact</SelectItem>
-                              <SelectItem value="comfortable">Comfortable</SelectItem>
-                              <SelectItem value="spacious">Spacious</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={preferencesForm.control}
-                      name="preferredDuration"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Default Meeting Duration (minutes)</FormLabel>
-                          <Select onValueChange={(value) => field.onChange(Number(value))} value={String(field.value)}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select duration" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="15">15 minutes</SelectItem>
-                              <SelectItem value="30">30 minutes</SelectItem>
-                              <SelectItem value="45">45 minutes</SelectItem>
-                              <SelectItem value="60">1 hour</SelectItem>
-                              <SelectItem value="90">1.5 hours</SelectItem>
-                              <SelectItem value="120">2 hours</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={preferencesForm.control}
-                      name="notifications"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Notification Level</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select notification level" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="all">All Notifications</SelectItem>
-                              <SelectItem value="important">Important Only</SelectItem>
-                              <SelectItem value="minimal">Minimal</SelectItem>
-                            </SelectContent>
-                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}

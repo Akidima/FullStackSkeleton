@@ -4,15 +4,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { 
-  Clock, 
-  Users, 
-  ArrowLeft, 
-  FileText, 
-  CheckCircle2, 
-  Share2, 
-  Trash2, 
-  AlertCircle 
+import {
+  Clock,
+  Users,
+  ArrowLeft,
+  FileText,
+  CheckCircle2,
+  Share2,
+  Trash2,
+  AlertCircle
 } from "lucide-react";
 import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { showErrorToast } from "@/lib/error-toast";
 
 // Rate limiting configuration
 const RETRY_DELAY = 1000; // Start with 1 second
@@ -189,11 +190,7 @@ export default function MeetingDetails() {
     },
     onError: (error: any) => {
       console.error('Meeting deletion error:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete meeting. Please try again.",
-        variant: "destructive",
-      });
+      showErrorToast(error);
     },
   });
 

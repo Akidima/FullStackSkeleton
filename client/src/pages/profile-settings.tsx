@@ -69,10 +69,10 @@ export default function ProfileSettings() {
   const profileForm = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      name: currentSettings?.name || "",
-      email: currentSettings?.email || "",
-      phoneNumber: currentSettings?.phoneNumber || "",
-      timezone: currentSettings?.timezone || "UTC",
+      name: "",
+      email: "",
+      phoneNumber: "",
+      timezone: "UTC",
     },
   });
 
@@ -80,44 +80,49 @@ export default function ProfileSettings() {
     resolver: zodResolver(preferencesSchema),
     defaultValues: {
       theme: theme as "light" | "dark" | "system",
-      dashboardLayout: currentSettings?.dashboardLayout || "comfortable",
-      preferredDuration: currentSettings?.preferredDuration || 30,
-      notifications: currentSettings?.notifications || "all",
+      dashboardLayout: "comfortable",
+      preferredDuration: 30,
+      notifications: "all",
     },
   });
 
   const notificationForm = useForm<z.infer<typeof notificationSchema>>({
     resolver: zodResolver(notificationSchema),
     defaultValues: {
-      emailEnabled: currentSettings?.emailEnabled || true,
-      emailFrequency: currentSettings?.emailFrequency || "daily",
-      meetingReminders: currentSettings?.meetingReminders || true,
-      meetingUpdates: currentSettings?.meetingUpdates || true,
-      taskReminders: currentSettings?.taskReminders || true,
-      taskUpdates: currentSettings?.taskUpdates || true,
+      emailEnabled: true,
+      emailFrequency: "daily",
+      meetingReminders: true,
+      meetingUpdates: true,
+      taskReminders: true,
+      taskUpdates: true,
     },
   });
 
   const integrationsForm = useForm<z.infer<typeof integrationSettingsSchema>>({
     resolver: zodResolver(integrationSettingsSchema),
     defaultValues: {
-      asanaEnabled: currentSettings?.asanaEnabled || false,
-      jiraEnabled: currentSettings?.jiraEnabled || false,
-      teamsEnabled: currentSettings?.teamsEnabled || false,
-      slackEnabled: currentSettings?.slackEnabled || false,
-      googleCalendarEnabled: currentSettings?.googleCalendarEnabled || false,
-      outlookCalendarEnabled: currentSettings?.outlookCalendarEnabled || false,
-      asanaWorkspace: currentSettings?.asanaWorkspace || "",
-      jiraProject: currentSettings?.jiraProject || "",
-      slackChannel: currentSettings?.slackChannel || "",
-      teamsChannel: currentSettings?.teamsChannel || "",
+      asanaEnabled: false,
+      jiraEnabled: false,
+      teamsEnabled: false,
+      slackEnabled: false,
+      googleCalendarEnabled: false,
+      outlookCalendarEnabled: false,
+      asanaWorkspace: "",
+      jiraProject: "",
+      slackChannel: "",
+      teamsChannel: "",
     },
   });
 
   // Update forms when settings are loaded
   useEffect(() => {
     if (currentSettings) {
-      profileForm.reset(currentSettings);
+      profileForm.reset({
+        name: currentSettings.name || "",
+        email: currentSettings.email || "",
+        phoneNumber: currentSettings.phoneNumber || "",
+        timezone: currentSettings.timezone || "UTC",
+      });
       preferencesForm.reset({
         ...currentSettings,
         theme: theme as "light" | "dark" | "system",
@@ -127,111 +132,8 @@ export default function ProfileSettings() {
     }
   }, [currentSettings, theme]);
 
-  // Mutation handlers
-  const updateProfile = useMutation({
-    mutationFn: async (data: z.infer<typeof profileSchema>) => {
-      const token = await getAuthToken();
-      if (!token) throw new Error("Authentication required");
-      return await apiRequest("PATCH", "/api/users/profile", data, {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users/settings"] });
-      toast({
-        title: "Success",
-        description: "Profile updated successfully",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update profile",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const updatePreferences = useMutation({
-    mutationFn: async (data: z.infer<typeof preferencesSchema>) => {
-      const token = await getAuthToken();
-      if (!token) throw new Error("Authentication required");
-      return await apiRequest("PATCH", "/api/users/preferences", data, {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users/settings"] });
-      toast({
-        title: "Success",
-        description: "Preferences updated successfully",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update preferences",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const updateNotifications = useMutation({
-    mutationFn: async (data: z.infer<typeof notificationSchema>) => {
-      const token = await getAuthToken();
-      if (!token) throw new Error("Authentication required");
-      return await apiRequest("PATCH", "/api/users/notifications", data, {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users/settings"] });
-      toast({
-        title: "Success",
-        description: "Notification preferences updated successfully",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update notification preferences",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const updateIntegrations = useMutation({
-    mutationFn: async (data: z.infer<typeof integrationSettingsSchema>) => {
-      const token = await getAuthToken();
-      if (!token) throw new Error("Authentication required");
-      return await apiRequest("PATCH", "/api/users/integrations", data, {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users/settings"] });
-      toast({
-        title: "Success",
-        description: "Integration settings updated successfully",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update integration settings",
-        variant: "destructive",
-      });
-    },
-  });
-
   const handleThemeChange = (newTheme: "light" | "dark" | "system") => {
-    // Update theme immediately in the UI
     setTheme(newTheme);
-    // Update form value
     preferencesForm.setValue("theme", newTheme);
   };
 
@@ -253,7 +155,7 @@ export default function ProfileSettings() {
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs defaultValue={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="preferences">Preferences</TabsTrigger>
@@ -261,7 +163,7 @@ export default function ProfileSettings() {
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="profile">
+          <TabsContent value="profile" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Profile Information</CardTitle>
@@ -271,7 +173,10 @@ export default function ProfileSettings() {
               </CardHeader>
               <CardContent>
                 <Form {...profileForm}>
-                  <form onSubmit={profileForm.handleSubmit((data) => updateProfile.mutate(data))} className="space-y-4">
+                  <form onSubmit={profileForm.handleSubmit((data) => {
+                    // Implement profile update
+                    console.log("Profile update:", data);
+                  })} className="space-y-4">
                     <FormField
                       control={profileForm.control}
                       name="name"
@@ -285,7 +190,6 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
-
                     <FormField
                       control={profileForm.control}
                       name="email"
@@ -299,7 +203,6 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
-
                     <FormField
                       control={profileForm.control}
                       name="phoneNumber"
@@ -313,7 +216,6 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
-
                     <FormField
                       control={profileForm.control}
                       name="timezone"
@@ -338,38 +240,27 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
-
-                    <Button
-                      type="submit"
-                      disabled={updateProfile.isPending}
-                      className="w-full"
-                    >
-                      {updateProfile.isPending ? (
-                        <>
-                          <LoadingSpinner size="small" className="mr-2" />
-                          Saving...
-                        </>
-                      ) : (
-                        "Save Profile"
-                      )}
-                    </Button>
+                    <Button type="submit">Save Profile</Button>
                   </form>
                 </Form>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="preferences">
+          <TabsContent value="preferences" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Preferences</CardTitle>
                 <CardDescription>
-                  Customize your experience and default settings
+                  Customize your experience
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <Form {...preferencesForm}>
-                  <form onSubmit={preferencesForm.handleSubmit((data) => updatePreferences.mutate(data))} className="space-y-4">
+                  <form onSubmit={preferencesForm.handleSubmit((data) => {
+                    // Implement preferences update
+                    console.log("Preferences update:", data);
+                  })} className="space-y-4">
                     <FormField
                       control={preferencesForm.control}
                       name="theme"
@@ -398,7 +289,6 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
-
                     <FormField
                       control={preferencesForm.control}
                       name="dashboardLayout"
@@ -421,7 +311,6 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
-
                     <FormField
                       control={preferencesForm.control}
                       name="preferredDuration"
@@ -447,7 +336,6 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
-
                     <FormField
                       control={preferencesForm.control}
                       name="notifications"
@@ -470,28 +358,13 @@ export default function ProfileSettings() {
                         </FormItem>
                       )}
                     />
-
-                    <Button
-                      type="submit"
-                      disabled={updatePreferences.isPending}
-                      className="w-full"
-                    >
-                      {updatePreferences.isPending ? (
-                        <>
-                          <LoadingSpinner size="small" className="mr-2" />
-                          Saving...
-                        </>
-                      ) : (
-                        "Save Preferences"
-                      )}
-                    </Button>
+                    <Button type="submit">Save Preferences</Button>
                   </form>
                 </Form>
               </CardContent>
             </Card>
           </TabsContent>
-
-          <TabsContent value="notifications">
+          <TabsContent value="notifications" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Notification Settings</CardTitle>
@@ -501,7 +374,10 @@ export default function ProfileSettings() {
               </CardHeader>
               <CardContent>
                 <Form {...notificationForm}>
-                  <form onSubmit={notificationForm.handleSubmit((data) => updateNotifications.mutate(data))} className="space-y-6">
+                  <form onSubmit={notificationForm.handleSubmit((data) => {
+                    // Implement notification update
+                    console.log("Notification update:", data);
+                  })} className="space-y-6">
                     <div className="space-y-4">
                       <FormField
                         control={notificationForm.control}
@@ -546,7 +422,6 @@ export default function ProfileSettings() {
                           </FormItem>
                         )}
                       />
-
                       <FormField
                         control={notificationForm.control}
                         name="meetingReminders"
@@ -567,7 +442,6 @@ export default function ProfileSettings() {
                           </FormItem>
                         )}
                       />
-
                       <FormField
                         control={notificationForm.control}
                         name="meetingUpdates"
@@ -588,7 +462,6 @@ export default function ProfileSettings() {
                           </FormItem>
                         )}
                       />
-
                       <FormField
                         control={notificationForm.control}
                         name="taskReminders"
@@ -609,7 +482,6 @@ export default function ProfileSettings() {
                           </FormItem>
                         )}
                       />
-
                       <FormField
                         control={notificationForm.control}
                         name="taskUpdates"
@@ -631,28 +503,13 @@ export default function ProfileSettings() {
                         )}
                       />
                     </div>
-
-                    <Button
-                      type="submit"
-                      disabled={updateNotifications.isPending}
-                      className="w-full"
-                    >
-                      {updateNotifications.isPending ? (
-                        <>
-                          <LoadingSpinner size="small" className="mr-2" />
-                          Saving...
-                        </>
-                      ) : (
-                        "Save Notification Settings"
-                      )}
-                    </Button>
+                    <Button type="submit">Save Notification Settings</Button>
                   </form>
                 </Form>
               </CardContent>
             </Card>
           </TabsContent>
-
-          <TabsContent value="integrations">
+          <TabsContent value="integrations" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Integration Settings</CardTitle>
@@ -662,7 +519,10 @@ export default function ProfileSettings() {
               </CardHeader>
               <CardContent>
                 <Form {...integrationsForm}>
-                  <form onSubmit={integrationsForm.handleSubmit((data) => updateIntegrations.mutate(data))} className="space-y-6">
+                  <form onSubmit={integrationsForm.handleSubmit((data) => {
+                    // Implement integrations update
+                    console.log("Integrations update:", data);
+                  })} className="space-y-6">
                     {/* Calendar Integrations */}
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold">Calendar Services</h3>
@@ -806,21 +666,7 @@ export default function ProfileSettings() {
                         />
                       </div>
                     </div>
-
-                    <Button
-                      type="submit"
-                      disabled={updateIntegrations.isPending}
-                      className="w-full"
-                    >
-                      {updateIntegrations.isPending ? (
-                        <>
-                          <LoadingSpinner size="small" className="mr-2" />
-                          Saving...
-                        </>
-                      ) : (
-                        "Save Integration Settings"
-                      )}
-                    </Button>
+                    <Button type="submit">Save Integration Settings</Button>
                   </form>
                 </Form>
               </CardContent>

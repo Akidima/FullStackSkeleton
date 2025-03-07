@@ -434,6 +434,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
 
+  // Add unified settings endpoint after existing user routes
+  app.get("/api/users/settings", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError("Authentication required");
+      }
+
+      const userId = req.user.id;
+
+      // Fetch all settings
+      const [profile, preferences, notifications, integrations] = await Promise.all([
+        storage.getUser(userId),
+        storage.getUserPreferences(userId),
+        storage.getUserNotifications(userId),
+        storage.getUserIntegrationSettings(userId)
+      ]);
+
+      // Return combined settings
+      res.json({
+        profile: profile || {},
+        preferences: preferences || {
+          theme: "system",
+          dashboardLayout: "comfortable",
+          preferredDuration: 30,
+          notifications: "all"
+        },
+        notifications: notifications || {
+          emailEnabled: true,
+          emailFrequency: "daily",
+          meetingReminders: true,
+          meetingUpdates: true,
+          taskReminders: true,
+          taskUpdates: true
+        },
+        integrations: integrations || {
+          asanaEnabled: false,
+          jiraEnabled: false,
+          teamsEnabled: false,
+          slackEnabled: false,
+          googleCalendarEnabled: false,
+          outlookCalendarEnabled: false
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching user settings:', error);
+      throw error;
+    }
+  }));
+
+  // Update profile endpoint
+  app.patch("/api/users/profile", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError("Authentication required");
+      }
+
+      const userId = req.user.id;
+      const profileData = req.body;
+
+      // Validate profile data
+      if (!profileData || typeof profileData !== 'object') {
+        throw new ValidationError("Invalid profile data");
+      }
+
+      // Update user profile
+      const updatedProfile = await storage.updateUser(userId, profileData);
+
+      res.json(updatedProfile);
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      if (error instanceof ValidationError) {
+        res.status(400).json({
+          status: 'error',
+          message: error.message,
+          details: error.details
+        });
+      } else {
+        throw error;
+      }
+    }
+  }));
+
   // Update the integration settings endpoints
   app.get("/api/users/integrations", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
     try {

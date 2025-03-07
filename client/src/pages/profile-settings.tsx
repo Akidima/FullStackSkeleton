@@ -28,7 +28,7 @@ const preferencesSchema = z.object({
   theme: z.enum(["light", "dark", "system"]),
   dashboardLayout: z.enum(["compact", "comfortable", "spacious"]),
   preferredDuration: z.number().min(15).max(120),
-  defaultView: z.enum(["day", "week", "month"]),
+  notifications: z.enum(["all", "important", "minimal"]),
 });
 
 const notificationSchema = z.object({
@@ -63,13 +63,13 @@ export default function ProfileSettings() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("profile");
 
-  // Query current settings
+  // Query user's current settings
   const { data: currentSettings, isLoading: isLoadingSettings } = useQuery({
     queryKey: ["/api/users/settings"],
     enabled: !!user,
   });
 
-  // Form setup for each section
+  // Form setup
   const profileForm = useForm<ProfileData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
@@ -86,7 +86,7 @@ export default function ProfileSettings() {
       theme: currentSettings?.theme || "system",
       dashboardLayout: currentSettings?.dashboardLayout || "comfortable",
       preferredDuration: currentSettings?.preferredDuration || 30,
-      defaultView: currentSettings?.defaultView || "week",
+      notifications: currentSettings?.notifications || "all",
     },
   });
 
@@ -133,9 +133,11 @@ export default function ProfileSettings() {
     mutationFn: async (data: ProfileData) => {
       const token = await getAuthToken();
       if (!token) throw new Error("Authentication required");
-      return await apiRequest("PATCH", "/api/users/profile", data, {
+      const headers = {
         Authorization: `Bearer ${token}`,
-      });
+        'Content-Type': 'application/json'
+      };
+      return await apiRequest("PATCH", "/api/users/profile", data, headers);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/settings"] });
@@ -157,9 +159,11 @@ export default function ProfileSettings() {
     mutationFn: async (data: PreferencesData) => {
       const token = await getAuthToken();
       if (!token) throw new Error("Authentication required");
-      return await apiRequest("PATCH", "/api/users/preferences", data, {
+      const headers = {
         Authorization: `Bearer ${token}`,
-      });
+        'Content-Type': 'application/json'
+      };
+      return await apiRequest("PATCH", "/api/users/preferences", data, headers);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/settings"] });
@@ -181,9 +185,11 @@ export default function ProfileSettings() {
     mutationFn: async (data: NotificationData) => {
       const token = await getAuthToken();
       if (!token) throw new Error("Authentication required");
-      return await apiRequest("PATCH", "/api/users/notifications", data, {
+      const headers = {
         Authorization: `Bearer ${token}`,
-      });
+        'Content-Type': 'application/json'
+      };
+      return await apiRequest("PATCH", "/api/users/notifications", data, headers);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/settings"] });
@@ -204,9 +210,7 @@ export default function ProfileSettings() {
   const updateIntegrations = useMutation({
     mutationFn: async (data: IntegrationSettings) => {
       const token = await getAuthToken();
-      if (!token) {
-        throw new Error("Authentication required");
-      }
+      if (!token) throw new Error("Authentication required");
       const headers = {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -327,7 +331,7 @@ export default function ProfileSettings() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Timezone</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select your timezone" />
@@ -451,20 +455,20 @@ export default function ProfileSettings() {
 
                     <FormField
                       control={preferencesForm.control}
-                      name="defaultView"
+                      name="notifications"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Default Calendar View</FormLabel>
+                          <FormLabel>Notification Level</FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select view" />
+                                <SelectValue placeholder="Select notification level" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="day">Day</SelectItem>
-                              <SelectItem value="week">Week</SelectItem>
-                              <SelectItem value="month">Month</SelectItem>
+                              <SelectItem value="all">All Notifications</SelectItem>
+                              <SelectItem value="important">Important Only</SelectItem>
+                              <SelectItem value="minimal">Minimal</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -653,7 +657,7 @@ export default function ProfileSettings() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="integrations" className="space-y-4">
+          <TabsContent value="integrations">
             <Card>
               <CardHeader>
                 <CardTitle>Integration Settings</CardTitle>

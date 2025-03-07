@@ -29,6 +29,14 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
+import { 
+  userPreferences,
+  userNotifications,
+  type UserPreferences,
+  type InsertUserPreferences,
+  type UserNotifications,
+  type InsertUserNotifications,
+} from "@shared/schema";
 
 export interface IStorage {
   // Meeting operations
@@ -107,6 +115,13 @@ export interface IStorage {
   // Integration settings operations
   getUserIntegrationSettings(userId: number): Promise<UserIntegrationSettings | undefined>;
   updateUserIntegrationSettings(userId: number, settings: Partial<InsertUserIntegrationSettings>): Promise<UserIntegrationSettings>;
+
+  // Add new methods for user settings
+  getUser(id: number): Promise<User | undefined>;
+  getUserPreferences(userId: number): Promise<UserPreferences | undefined>;
+  getUserNotifications(userId: number): Promise<UserNotifications | undefined>;
+  updateUserPreferences(userId: number, preferences: Partial<InsertUserPreferences>): Promise<UserPreferences>;
+  updateUserNotifications(userId: number, notifications: Partial<InsertUserNotifications>): Promise<UserNotifications>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -844,6 +859,122 @@ export class DatabaseStorage implements IStorage {
       }
     } catch (error) {
       console.error(`Error updating integration settings for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  async getUser(id: number): Promise<User | undefined> {
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, id));
+      return user;
+    } catch (error) {
+      console.error(`Error fetching user ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async getUserPreferences(userId: number): Promise<UserPreferences | undefined> {
+    try {
+      const [preferences] = await db
+        .select()
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, userId));
+      return preferences;
+    } catch (error) {
+      console.error(`Error fetching user preferences for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  async getUserNotifications(userId: number): Promise<UserNotifications | undefined> {
+    try {
+      const [notifications] = await db
+        .select()
+        .from(userNotifications)
+        .where(eq(userNotifications.userId, userId));
+      return notifications;
+    } catch (error) {
+      console.error(`Error fetching user notifications for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  async updateUserPreferences(
+    userId: number, 
+    preferences: Partial<InsertUserPreferences>
+  ): Promise<UserPreferences> {
+    try {
+      // Check if preferences exist
+      const existingPrefs = await this.getUserPreferences(userId);
+
+      if (existingPrefs) {
+        // Update existing preferences
+        const [updatedPrefs] = await db
+          .update(userPreferences)
+          .set({
+            ...preferences,
+            updatedAt: new Date()
+          })
+          .where(eq(userPreferences.userId, userId))
+          .returning();
+
+        return updatedPrefs;
+      } else {
+        // Create new preferences
+        const [newPrefs] = await db
+          .insert(userPreferences)
+          .values({
+            userId,
+            ...preferences,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          })
+          .returning();
+
+        return newPrefs;
+      }
+    } catch (error) {
+      console.error(`Error updating preferences for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  async updateUserNotifications(
+    userId: number,
+    notifications: Partial<InsertUserNotifications>
+  ): Promise<UserNotifications> {
+    try {
+      // Check if notifications exist
+      const existingNotifs = await this.getUserNotifications(userId);
+
+      if (existingNotifs) {
+        // Update existing notifications
+        const [updatedNotifs] = await db
+          .update(userNotifications)
+          .set({
+            ...notifications,
+            updatedAt: new Date()
+          })
+          .where(eq(userNotifications.userId, userId))
+          .returning();
+
+        return updatedNotifs;
+      } else {
+        // Create new notifications
+        const [newNotifs] = await db
+          .insert(userNotifications)
+          .values({
+            userId,
+            ...notifications,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          })
+          .returning();
+
+        return newNotifs;
+      }
+    } catch (error) {
+      console.error(`Error updating notifications for user ${userId}:`, error);
       throw error;
     }
   }

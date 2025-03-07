@@ -66,7 +66,7 @@ export const securityRecommendations = pgTable("security_recommendations", {
   priorityIdx: index("sec_rec_priority_idx").on(table.priority),
 }));
 
-// Add after user schema
+// Add after the user schema
 export const userPreferences = pgTable("user_preferences", {
   id: serial("id").primaryKey(),
   userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
@@ -210,6 +210,23 @@ export const meetingMoods = pgTable("meeting_moods", {
   timestampIdx: index("meeting_moods_timestamp_idx").on(table.timestamp),
 }));
 
+// Add after other table definitions
+export const userNotifications = pgTable("user_notifications", {
+  id: serial("id").primaryKey(),
+  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  emailEnabled: boolean("email_enabled").default(true),
+  emailFrequency: text("email_frequency").default("daily"),
+  meetingReminders: boolean("meeting_reminders").default(true),
+  meetingUpdates: boolean("meeting_updates").default(true),
+  taskReminders: boolean("task_reminders").default(true),
+  taskUpdates: boolean("task_updates").default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  userIdIdx: index("user_notifications_user_id_idx").on(table.userId),
+}));
+
+
 // Enhance the tasks table with more fields for better tracking
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
@@ -272,11 +289,19 @@ export const usersRelations = relations(users, ({ many }) => ({
   userAvailability: many(userAvailability),
   meetingPreferences: many(meetingPreferences),
   integrationSettings: many(userIntegrationSettings),
+  notifications: many(userNotifications)
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
   user: one(users, {
     fields: [userPreferences.userId],
+    references: [users.id],
+  }),
+}));
+
+export const userNotificationsRelations = relations(userNotifications, ({ one }) => ({
+  user: one(users, {
+    fields: [userNotifications.userId],
     references: [users.id],
   }),
 }));
@@ -557,6 +582,14 @@ export const insertUserIntegrationSettingsSchema = createInsertSchema(userIntegr
     updatedAt: true,
   });
 
+// Add after other insert schemas
+export const insertUserNotificationSchema = createInsertSchema(userNotifications)
+  .omit({ 
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  });
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -595,3 +628,5 @@ export type TaskNotification = typeof taskNotifications.$inferSelect;
 export type InsertTaskNotification = z.infer<typeof insertTaskNotificationSchema>;
 export type UserIntegrationSettings = typeof userIntegrationSettings.$inferSelect;
 export type InsertUserIntegrationSettings = z.infer<typeof insertUserIntegrationSettingsSchema>;
+export type UserNotifications = typeof userNotifications.$inferSelect;
+export type InsertUserNotifications = z.infer<typeof insertUserNotificationSchema>;

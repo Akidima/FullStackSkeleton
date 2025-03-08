@@ -58,7 +58,7 @@ export function MeetingOptimizer() {
       if (error?.status === 404) return false;
       return failureCount < 5;
     },
-    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000),
+    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000), // Exponential backoff
   });
 
   if (isLoading) {
@@ -142,7 +142,7 @@ export function MeetingOptimizer() {
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           {error instanceof Error && error.message === 'Rate limit exceeded'
-            ? 'Failed to load optimization suggestions. Too many requests, please try again in a few minutes.'
+            ? 'Please wait a moment, our AI is processing multiple requests. Try again in a few minutes.'
             : 'Failed to load AI optimization suggestions. Please try again later.'}
         </AlertDescription>
       </Alert>

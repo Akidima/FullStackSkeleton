@@ -69,7 +69,6 @@ const analyticsLimiter = rateLimit({
 });
 
 
-
 export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
   app.get("/api/meetings", asyncHandler(async (req: Request, res: Response) => {
@@ -313,6 +312,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(suggestions);
     } catch (error) {
       console.error('Error generating optimization suggestions:', error);
+
+      // Check if it's an AI model initialization error
+      if (error instanceof Error && error.message.includes('Failed to initialize AI')) {
+        res.status(503).json({
+          status: 'error',
+          message: 'AI service temporarily unavailable. Please try again in a few moments.'
+        });
+        return;
+      }
+
       throw error;
     }
   }));

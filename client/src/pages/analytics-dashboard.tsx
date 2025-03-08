@@ -12,6 +12,35 @@ import { MeetingOptimizer } from "@/components/meeting-optimizer";
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 
+interface WeeklyMeeting {
+  week: string;
+  count: number;
+}
+
+interface ParticipationData {
+  name: string;
+  value: number;
+}
+
+interface RoomUtilization {
+  name: string;
+  utilization: number;
+}
+
+interface AnalyticsData {
+  weeklyMeetings: WeeklyMeeting[];
+  totalMeetings: number;
+  completedMeetings: number;
+}
+
+interface ParticipationResponse {
+  participation: ParticipationData[];
+}
+
+interface RoomResponse {
+  rooms: RoomUtilization[];
+}
+
 // Query configuration with improved caching and retry logic
 const STALE_TIME = 10 * 60 * 1000; // 10 minutes
 const GC_TIME = 60 * 60 * 1000; // 1 hour
@@ -20,7 +49,7 @@ const MAX_RETRIES = 5;
 
 export default function AnalyticsDashboard() {
   // Configure queries with improved caching and retry logic
-  const { data: meetingStats, isLoading: isLoadingStats, error: statsError } = useQuery({
+  const { data: meetingStats, isLoading: isLoadingStats, error: statsError } = useQuery<AnalyticsData>({
     queryKey: ['/api/analytics/meetings'],
     staleTime: STALE_TIME,
     gcTime: GC_TIME,
@@ -29,7 +58,7 @@ export default function AnalyticsDashboard() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: participationData, isLoading: isLoadingParticipation, error: participationError } = useQuery({
+  const { data: participationData, isLoading: isLoadingParticipation, error: participationError } = useQuery<ParticipationResponse>({
     queryKey: ['/api/analytics/participation'],
     staleTime: STALE_TIME,
     gcTime: GC_TIME,
@@ -38,7 +67,7 @@ export default function AnalyticsDashboard() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: roomUtilization, isLoading: isLoadingRooms, error: roomsError } = useQuery({
+  const { data: roomUtilization, isLoading: isLoadingRooms, error: roomsError } = useQuery<RoomResponse>({
     queryKey: ['/api/analytics/rooms'],
     staleTime: STALE_TIME,
     gcTime: GC_TIME,
@@ -96,7 +125,7 @@ export default function AnalyticsDashboard() {
             <CardContent>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={meetingStats?.weeklyMeetings}>
+                  <BarChart data={meetingStats?.weeklyMeetings || []}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="week" />
                     <YAxis />
@@ -118,7 +147,7 @@ export default function AnalyticsDashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={participationData?.participation}
+                      data={participationData?.participation || []}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
@@ -127,7 +156,7 @@ export default function AnalyticsDashboard() {
                       dataKey="value"
                       label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                     >
-                      {(participationData?.participation || []).map((entry: any, index: number) => (
+                      {(participationData?.participation || []).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -146,7 +175,7 @@ export default function AnalyticsDashboard() {
             <CardContent>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={roomUtilization?.rooms}>
+                  <BarChart data={roomUtilization?.rooms || []}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis />

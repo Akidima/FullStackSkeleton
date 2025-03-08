@@ -58,7 +58,9 @@ export function MeetingOptimizer() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, error: any) => {
+      // Don't retry on 404s
       if (error?.status === 404) return false;
+      // Retry up to 5 times
       return failureCount < 5;
     },
     retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000), // Exponential backoff

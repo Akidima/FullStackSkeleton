@@ -24,8 +24,8 @@ import {meetingOptimizer} from "./services/ai-optimizer";
 
 // Add these rate limiter configurations at the top of the file
 const optimizationLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 50, // Increased from 20 to 50 requests per windowMs
+  windowMs: 15 * 60 * 1000, // 15 minutes window (increased from 5)
+  max: 150, // Increased from 50 to 150 requests per windowMs
   message: {
     status: 'error',
     message: 'Too many optimization requests. Please try again in a few minutes.',
@@ -306,8 +306,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const suggestions = await meetingOptimizer.generateOptimizationSuggestions(meetings);
 
       // Add strong cache headers
-      res.set('Cache-Control', 'public, max-age=300'); // Cache for 5 minutes
+      res.set('Cache-Control', 'public, max-age=900'); // Cache for 15 minutes
       res.set('Vary', 'Accept-Encoding');
+      res.set('ETag', Math.random().toString(36).substring(7));
 
       res.json(suggestions);
     } catch (error) {
@@ -929,7 +930,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         {
           id: 3,
           title: "Project Launch",
-          dueDate: new Date("2025-05-01").toISOString(),
+          dueDate: new Date("2025-0501").toISOString(),
           progress: 20,
           status: "pending"
                 }

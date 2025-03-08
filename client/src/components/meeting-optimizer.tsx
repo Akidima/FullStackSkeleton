@@ -51,19 +51,19 @@ export function MeetingOptimizer() {
         }
 
         return response.json();
-      }, 5, 1000); // 5 retries, starting with 1s delay
+      }, 5, 2000); // Increased initial retry delay to 2s
     },
-    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
-    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+    staleTime: 15 * 60 * 1000, // Consider data fresh for 15 minutes
+    gcTime: 60 * 60 * 1000, // Keep in cache for 1 hour
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, error: any) => {
-      // Don't retry on 404s
+      // Don't retry on certain errors
       if (error?.status === 404) return false;
-      // Retry up to 5 times
-      return failureCount < 5;
+      if (error?.status === 503) return false; // Don't retry on AI service unavailable
+      return failureCount < 7; // Increased max retries
     },
-    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000), // Exponential backoff
+    retryDelay: (attemptIndex) => Math.min(2000 * Math.pow(2, attemptIndex), 60000), // Exponential backoff with higher initial delay
   });
 
   if (isLoading) {

@@ -16,7 +16,10 @@ export class MeetingOptimizer {
   private async initialize() {
     if (!this.initialized) {
       try {
-        this.classifier = await pipeline('sentiment-analysis');
+        // Initialize the Qwen model for more sophisticated analysis
+        this.classifier = await pipeline('text-generation', 'Qwen/QwQ-32B', {
+          quantized: true // Use quantized version for better performance
+        });
         this.initialized = true;
       } catch (error) {
         console.error('Error initializing AI model:', error);
@@ -45,16 +48,26 @@ export class MeetingOptimizer {
     await this.initialize();
 
     try {
-      const sentiments = await Promise.all(
-        meetings.map(async meeting => {
-          const text = `${meeting.title} ${meeting.description || ''} ${meeting.notes || ''}`;
-          const result = await this.classifier(text);
-          return result[0];
-        })
-      );
+      const analysisPromises = meetings.map(async meeting => {
+        const text = `Analyze this meeting: Title: ${meeting.title}. Description: ${meeting.description || 'N/A'}. Notes: ${meeting.notes || 'N/A'}`;
 
-      const positiveCount = sentiments.filter(s => s.label === 'POSITIVE').length;
-      return positiveCount / sentiments.length;
+        const result = await this.classifier(text, {
+          max_new_tokens: 100,
+          temperature: 0.3,
+          repetition_penalty: 1.2
+        });
+
+        // Extract sentiment from generated analysis
+        const analysis = result[0].generated_text.toLowerCase();
+        const positiveIndicators = ['productive', 'effective', 'successful', 'engaging', 'valuable'];
+        const score = positiveIndicators.reduce((sum, indicator) => 
+          sum + (analysis.includes(indicator) ? 1 : 0), 0) / positiveIndicators.length;
+
+        return score;
+      });
+
+      const scores = await Promise.all(analysisPromises);
+      return scores.reduce((sum, score) => sum + score, 0) / scores.length;
     } catch (error) {
       console.error('Error analyzing meeting effectiveness:', error);
       throw new Error('Failed to analyze meeting effectiveness');

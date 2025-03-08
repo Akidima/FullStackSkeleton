@@ -25,7 +25,7 @@ import {meetingOptimizer} from "./services/ai-optimizer";
 // Add these rate limiter configurations at the top of the file
 const optimizationLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 20, // Limit each IP to 20 requests per windowMs
+  max: 50, // Increased from 20 to 50 requests per windowMs
   message: {
     status: 'error',
     message: 'Too many optimization requests. Please try again in a few minutes.',

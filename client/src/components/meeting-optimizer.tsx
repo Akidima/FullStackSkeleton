@@ -14,6 +14,10 @@ interface OptimizationSuggestion {
   reasoning: string;
 }
 
+interface OptimizationResponse {
+  suggestions: OptimizationSuggestion[];
+}
+
 const suggestionIcons = {
   duration: Clock,
   schedule: Calendar,
@@ -29,7 +33,7 @@ const loadingSteps = [
 ];
 
 export function MeetingOptimizer() {
-  const { data: suggestions = [], isLoading, error } = useQuery<OptimizationSuggestion[]>({
+  const { data, isLoading, error } = useQuery<OptimizationResponse>({
     queryKey: ['/api/meetings/optimization-suggestions'],
     queryFn: async () => {
       return await withRetry(async () => {
@@ -65,6 +69,8 @@ export function MeetingOptimizer() {
     },
     retryDelay: (attemptIndex) => Math.min(2000 * Math.pow(2, attemptIndex), 60000), // Exponential backoff with higher initial delay
   });
+
+  const suggestions = data?.suggestions || [];
 
   if (isLoading) {
     return (

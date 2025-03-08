@@ -310,7 +310,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.set('Vary', 'Accept-Encoding');
       res.set('ETag', Math.random().toString(36).substring(7));
 
-      res.json(suggestions);
+      res.json({ suggestions });
     } catch (error) {
       console.error('Error generating optimization suggestions:', error);
 
@@ -927,13 +927,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           progress: 40,
           status: "in-progress"
         },
-        {
+{
           id: 3,
           title: "Project Launch",
-          dueDate: new Date("2025-0501").toISOString(),
+          dueDate: new Date("2025-05-01").toISOString(),
           progress: 20,
           status: "pending"
-                }
+        }
       ];
 
       res.json(milestones);

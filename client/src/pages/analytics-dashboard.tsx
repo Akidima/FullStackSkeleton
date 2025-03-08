@@ -48,7 +48,6 @@ const RETRY_DELAY = 10000; // 10 seconds between retries
 const MAX_RETRIES = 5;
 
 export default function AnalyticsDashboard() {
-  // Configure queries with improved caching and retry logic
   const { data: meetingStats, isLoading: isLoadingStats, error: statsError } = useQuery<AnalyticsData>({
     queryKey: ['/api/analytics/meetings'],
     staleTime: STALE_TIME,

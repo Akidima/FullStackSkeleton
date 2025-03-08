@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Grip, X } from 'lucide-react';
 import { 
   Card, 
@@ -59,12 +59,13 @@ const DEFAULT_WIDGETS: WidgetConfig[] = [
 
 export function DashboardWidgetConfig() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [widgets, setWidgets] = useState<WidgetConfig[]>(() => {
     const saved = localStorage.getItem('dashboard-widgets');
     return saved ? JSON.parse(saved) : DEFAULT_WIDGETS;
   });
 
-  const { data: preferences, isLoading } = useQuery({
+  const { data: preferences } = useQuery({
     queryKey: ['/api/users/preferences'],
     queryFn: async () => {
       const response = await fetch('/api/users/preferences');
@@ -72,22 +73,11 @@ export function DashboardWidgetConfig() {
         throw new Error('Failed to load preferences');
       }
       return response.json();
-    },
-    onSuccess: (data) => {
-      if (data.widgets) {
-        setWidgets(data.widgets);
-      }
     }
   });
 
-  const handleToggleWidget = async (id: string) => {
-    const newWidgets = widgets.map(widget => 
-      widget.id === id ? { ...widget, enabled: !widget.enabled } : widget
-    );
-    setWidgets(newWidgets);
-    localStorage.setItem('dashboard-widgets', JSON.stringify(newWidgets));
-
-    try {
+  const updatePreferencesMutation = useMutation({
+    mutationFn: async (newWidgets: WidgetConfig[]) => {
       const response = await fetch('/api/users/preferences', {
         method: 'PATCH',
         headers: {
@@ -97,25 +87,37 @@ export function DashboardWidgetConfig() {
           widgets: newWidgets
         })
       });
-
       if (!response.ok) {
         throw new Error('Failed to save preferences');
       }
-
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/users/preferences'] });
       toast({
         title: 'Preferences saved',
         description: 'Your dashboard layout has been updated.',
       });
-    } catch (error) {
+    },
+    onError: () => {
       toast({
         variant: 'destructive',
         title: 'Error',
         description: 'Failed to save preferences. Please try again.',
       });
     }
+  });
+
+  const handleToggleWidget = (id: string) => {
+    const newWidgets = widgets.map(widget => 
+      widget.id === id ? { ...widget, enabled: !widget.enabled } : widget
+    );
+    setWidgets(newWidgets);
+    localStorage.setItem('dashboard-widgets', JSON.stringify(newWidgets));
+    updatePreferencesMutation.mutate(newWidgets);
   };
 
-  if (isLoading) {
+  if (preferences?.isLoading) {
     return (
       <Card className="w-full">
         <CardHeader>

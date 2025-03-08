@@ -47,9 +47,7 @@ export function MeetingOptimizer() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, error: any) => {
-      // Don't retry on 404s
       if (error?.status === 404) return false;
-      // Retry up to 5 times
       return failureCount < 5;
     },
     retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000),
@@ -75,7 +73,7 @@ export function MeetingOptimizer() {
         <AlertDescription>
           {error instanceof Error && error.message === 'Rate limit exceeded'
             ? 'Failed to load optimization suggestions. Too many requests, please try again in a few minutes.'
-            : 'Failed to load optimization suggestions. Please try again later.'}
+            : 'Failed to load AI optimization suggestions. Please try again later.'}
         </AlertDescription>
       </Alert>
     );
@@ -86,7 +84,7 @@ export function MeetingOptimizer() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Zap className="h-5 w-5 text-primary" />
-          Meeting Optimization Suggestions
+          AI Meeting Optimization Suggestions
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -113,7 +111,7 @@ export function MeetingOptimizer() {
 
           {suggestions.length === 0 && (
             <div className="text-center py-6 text-muted-foreground">
-              No optimization suggestions at this time. Keep scheduling meetings to receive personalized recommendations.
+              No optimization suggestions at this time. Keep scheduling meetings to receive personalized AI recommendations.
             </div>
           )}
         </div>

@@ -862,6 +862,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
+  // Add these routes after existing routes but before error handler
+  app.get("/api/team/productivity/milestones", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      // Add strong cache headers
+      res.set('Cache-Control', 'public, max-age=300'); // 5 minutes cache
+      res.set('Vary', 'Accept-Encoding');
+
+      // Return mock milestone data for initial testing
+      const milestones = [
+        {
+          id: 1,
+          title: "Q1 Goals",
+          dueDate: new Date("2025-03-31").toISOString(),
+          progress: 75,
+          status: "in-progress"
+        },
+        {
+          id: 2,
+          title: "Team Training",
+          dueDate: new Date("2025-04-15").toISOString(),
+          progress: 40,
+          status: "in-progress"
+        },
+        {
+          id: 3,
+          title: "Project Launch",
+          dueDate: new Date("2025-05-01").toISOString(),
+          progress: 20,
+          status: "pending"
+        }
+      ];
+
+      res.json(milestones);
+    } catch (error) {
+      console.error('Error fetching productivity milestones:', error);
+      throw error;
+    }
+  }));
+
   // Register error handler last
   app.use(errorHandler);
 

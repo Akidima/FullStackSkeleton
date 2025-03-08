@@ -8,6 +8,7 @@ import { LoadingSpinner } from "@/components/ui/loading-skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { TeamProductivityRoadmap } from "@/components/team-productivity-roadmap";
+import { MeetingOptimizer } from "@/components/meeting-optimizer";
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -156,11 +157,16 @@ export default function AnalyticsDashboard() {
               </div>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Add the Team Productivity Roadmap */}
-        <div className="col-span-full">
-          <TeamProductivityRoadmap />
+          {/* Add the Meeting Optimizer */}
+          <div className="col-span-full">
+            <MeetingOptimizer />
+          </div>
+
+          {/* Team Productivity Roadmap */}
+          <div className="col-span-full">
+            <TeamProductivityRoadmap />
+          </div>
         </div>
       </div>
     </div>

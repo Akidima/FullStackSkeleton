@@ -25,12 +25,11 @@ export function TeamProductivityRoadmap() {
   const [selectedMilestone, setSelectedMilestone] = useState<number | null>(null);
 
   // Query with enhanced caching and retry logic
-  const { data: milestones = [], isLoading, error } = useQuery({
+  const { data: milestones = [], isLoading, error } = useQuery<Milestone[]>({
     queryKey: ['/api/team/productivity/milestones'],
     queryFn: async () => {
       return await withRetry(async () => {
         const response = await fetch('/api/team/productivity/milestones', {
-          // Add cache-control headers
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
@@ -71,7 +70,7 @@ export function TeamProductivityRoadmap() {
     const isRateLimit = error instanceof Error && error.message === 'Rate limit exceeded';
 
     return (
-      <Alert variant={isRateLimit ? "warning" : "destructive"}>
+      <Alert variant={isRateLimit ? "default" : "destructive"}>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           {isRateLimit

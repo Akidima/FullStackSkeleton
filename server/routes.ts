@@ -20,6 +20,7 @@ import { OutlookCalendarService } from "./services/outlook-calendar";
 import { AsanaService } from "./services/asana";
 import { JiraService } from "./services/jira";
 import { MicrosoftTeamsService } from "./services/microsoft-teams";
+import {meetingOptimizer} from "./services/ai-optimizer"; 
 
 // More lenient rate limiter for authenticated endpoints
 const authenticatedLimiter = rateLimit({
@@ -53,6 +54,7 @@ const analyticsLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => req.method === 'OPTIONS', // Skip preflight requests
 });
+
 
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -281,6 +283,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Error generating meeting summary:", error);
+      throw error;
+    }
+  }));
+
+  // Add this route after your existing meeting routes
+  app.get("/api/meetings/optimization-suggestions", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const meetings = await storage.getMeetings();
+      const suggestions = await meetingOptimizer.generateOptimizationSuggestions(meetings);
+
+      // Add cache headers for performance
+      res.set('Cache-Control', 'public, max-age=300'); // Cache for 5 minutes
+      res.set('Vary', 'Accept-Encoding');
+
+      res.json(suggestions);
+    } catch (error) {
+      console.error('Error generating optimization suggestions:', error);
       throw error;
     }
   }));

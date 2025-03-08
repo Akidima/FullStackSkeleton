@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { LoadingSpinner } from '@/components/ui/loading-skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
+import { showErrorToast, withRetry } from '@/lib/error-toast';
 
 interface Milestone {
   id: number;
@@ -23,9 +24,24 @@ const progressColors = {
 export function TeamProductivityRoadmap() {
   const [selectedMilestone, setSelectedMilestone] = useState<number | null>(null);
 
+  // Query with retry logic and caching
   const { data: milestones = [], isLoading, error } = useQuery({
     queryKey: ['/api/team/productivity/milestones'],
-    staleTime: 30000,
+    queryFn: async () => {
+      return await withRetry(async () => {
+        const response = await fetch('/api/team/productivity/milestones');
+        if (!response.ok) {
+          if (response.status === 429) {
+            throw new Error('Rate limit exceeded');
+          }
+          throw new Error('Failed to fetch milestones');
+        }
+        return response.json();
+      }, 3, 2000); // 3 retries, starting with 2s delay
+    },
+    staleTime: 30000, // Cache for 30 seconds
+    cacheTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+    refetchOnWindowFocus: false,
   });
 
   if (isLoading) {
@@ -41,7 +57,9 @@ export function TeamProductivityRoadmap() {
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          Failed to load productivity data. Please try again later.
+          {error instanceof Error && error.message === 'Rate limit exceeded'
+            ? 'Too many requests. Please wait a moment before trying again.'
+            : 'Failed to load productivity data. Please try again later.'}
         </AlertDescription>
       </Alert>
     );

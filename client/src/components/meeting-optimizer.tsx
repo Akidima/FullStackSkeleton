@@ -44,6 +44,9 @@ export function MeetingOptimizer() {
           if (response.status === 429) {
             throw new Error('Rate limit exceeded');
           }
+          if (response.status === 503) {
+            throw new Error('AI service unavailable');
+          }
           throw new Error('Failed to load optimization suggestions');
         }
 
@@ -137,12 +140,17 @@ export function MeetingOptimizer() {
   }
 
   if (error) {
+    const isRateLimit = error instanceof Error && error.message === 'Rate limit exceeded';
+    const isAIUnavailable = error instanceof Error && error.message === 'AI service unavailable';
+
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          {error instanceof Error && error.message === 'Rate limit exceeded'
+          {isRateLimit
             ? 'Please wait a moment, our AI is processing multiple requests. Try again in a few minutes.'
+            : isAIUnavailable
+            ? 'AI service is temporarily unavailable. Please try again in a few moments.'
             : 'Failed to load AI optimization suggestions. Please try again later.'}
         </AlertDescription>
       </Alert>

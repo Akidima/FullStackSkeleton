@@ -19,7 +19,6 @@ export class MeetingOptimizer {
         // Initialize the Qwen model for more sophisticated analysis
         this.classifier = await pipeline('text-generation', 'Qwen/QwQ-32B', {
           quantized: true, // Use quantized version for better performance
-          load_in_8bit: true, // Enable 8-bit quantization for memory efficiency
           max_new_tokens: 100,
           temperature: 0.3,
           repetition_penalty: 1.2

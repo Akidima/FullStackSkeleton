@@ -931,7 +931,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           title: "Project Launch",
           dueDate: new Date("2025-05-01").toISOString(),
           progress: 20,
-          status: "pending"
+                    status: "pending"
         }
       ];
 

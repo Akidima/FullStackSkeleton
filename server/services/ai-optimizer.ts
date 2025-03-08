@@ -18,9 +18,14 @@ export class MeetingOptimizer {
       try {
         // Initialize the Qwen model for more sophisticated analysis
         this.classifier = await pipeline('text-generation', 'Qwen/QwQ-32B', {
-          quantized: true // Use quantized version for better performance
+          quantized: true, // Use quantized version for better performance
+          load_in_8bit: true, // Enable 8-bit quantization for memory efficiency
+          max_new_tokens: 100,
+          temperature: 0.3,
+          repetition_penalty: 1.2
         });
         this.initialized = true;
+        console.log('Successfully initialized Qwen/QwQ-32B model');
       } catch (error) {
         console.error('Error initializing AI model:', error);
         throw new Error('Failed to initialize AI optimization model');
@@ -84,63 +89,68 @@ export class MeetingOptimizer {
       }];
     }
 
-    const suggestions: OptimizationSuggestion[] = [];
-    const dayStats = this.getDayStats(meetings);
-    const timeStats = this.getTimeStats(meetings);
-    const effectiveness = await this.analyzeMeetingEffectiveness(meetings);
+    try {
+      const suggestions: OptimizationSuggestion[] = [];
+      const dayStats = this.getDayStats(meetings);
+      const timeStats = this.getTimeStats(meetings);
+      const effectiveness = await this.analyzeMeetingEffectiveness(meetings);
 
-    // Analyze meeting patterns
-    const mostCommonDay = Object.entries(dayStats).sort((a, b) => b[1] - a[1])[0];
-    const mostCommonTime = Object.entries(timeStats).sort((a, b) => b[1] - a[1])[0];
+      // Analyze meeting patterns
+      const mostCommonDay = Object.entries(dayStats).sort((a, b) => b[1] - a[1])[0];
+      const mostCommonTime = Object.entries(timeStats).sort((a, b) => b[1] - a[1])[0];
 
-    // Calculate average meeting length
-    const avgDuration = meetings.reduce((sum, m) => {
-      const start = new Date(m.date);
-      const end = new Date(start.getTime() + 60 * 60 * 1000); // Default 1 hour
-      return sum + (end.getTime() - start.getTime()) / (60 * 1000); // Convert to minutes
-    }, 0) / meetings.length;
+      // Calculate average meeting length
+      const avgDuration = meetings.reduce((sum, m) => {
+        const start = new Date(m.date);
+        const end = new Date(start.getTime() + 60 * 60 * 1000); // Default 1 hour
+        return sum + (end.getTime() - start.getTime()) / (60 * 1000); // Convert to minutes
+      }, 0) / meetings.length;
 
-    if (avgDuration > 45) {
-      suggestions.push({
-        type: 'duration',
-        suggestion: 'Consider shorter meeting durations',
-        confidence: 0.8,
-        reasoning: `AI analysis shows average meeting duration is ${Math.round(avgDuration)} minutes. Research indicates meetings over 45 minutes tend to be less productive.`
-      });
+      if (avgDuration > 45) {
+        suggestions.push({
+          type: 'duration',
+          suggestion: 'Consider shorter meeting durations',
+          confidence: 0.8,
+          reasoning: `AI analysis shows average meeting duration is ${Math.round(avgDuration)} minutes. Research indicates meetings over 45 minutes tend to be less productive.`
+        });
+      }
+
+      // Generate schedule optimization suggestions
+      if (mostCommonDay && mostCommonTime) {
+        suggestions.push({
+          type: 'schedule',
+          suggestion: `Consider distributing meetings more evenly throughout the week`,
+          confidence: 0.7,
+          reasoning: `AI pattern analysis shows ${mostCommonDay[0]} at ${mostCommonTime[0]} is your busiest time with ${mostCommonDay[1]} meetings.`
+        });
+      }
+
+      // Generate efficiency suggestions based on sentiment analysis
+      if (effectiveness < 0.6) {
+        suggestions.push({
+          type: 'efficiency',
+          suggestion: 'Improve meeting engagement using AI-recommended strategies',
+          confidence: 0.75,
+          reasoning: 'AI sentiment analysis suggests meetings could be more engaging. Consider adding clear agendas and action items.'
+        });
+      }
+
+      // Analyze participant patterns
+      const avgParticipants = meetings.reduce((sum, m) => sum + (m.participants?.length || 0), 0) / meetings.length;
+      if (avgParticipants > 8) {
+        suggestions.push({
+          type: 'participants',
+          suggestion: 'Consider smaller meeting groups',
+          confidence: 0.85,
+          reasoning: `AI analysis shows an average of ${Math.round(avgParticipants)} participants per meeting. Research indicates smaller groups tend to be more effective.`
+        });
+      }
+
+      return suggestions;
+    } catch (error) {
+      console.error('Error generating optimization suggestions:', error);
+      throw new Error('Failed to generate AI optimization suggestions');
     }
-
-    // Generate schedule optimization suggestions
-    if (mostCommonDay && mostCommonTime) {
-      suggestions.push({
-        type: 'schedule',
-        suggestion: `Consider distributing meetings more evenly throughout the week`,
-        confidence: 0.7,
-        reasoning: `AI pattern analysis shows ${mostCommonDay[0]} at ${mostCommonTime[0]} is your busiest time with ${mostCommonDay[1]} meetings.`
-      });
-    }
-
-    // Generate efficiency suggestions based on sentiment analysis
-    if (effectiveness < 0.6) {
-      suggestions.push({
-        type: 'efficiency',
-        suggestion: 'Improve meeting engagement using AI-recommended strategies',
-        confidence: 0.75,
-        reasoning: 'AI sentiment analysis suggests meetings could be more engaging. Consider adding clear agendas and action items.'
-      });
-    }
-
-    // Analyze participant patterns
-    const avgParticipants = meetings.reduce((sum, m) => sum + (m.participants?.length || 0), 0) / meetings.length;
-    if (avgParticipants > 8) {
-      suggestions.push({
-        type: 'participants',
-        suggestion: 'Consider smaller meeting groups',
-        confidence: 0.85,
-        reasoning: `AI analysis shows an average of ${Math.round(avgParticipants)} participants per meeting. Research indicates smaller groups tend to be more effective.`
-      });
-    }
-
-    return suggestions;
   }
 }
 

@@ -22,6 +22,19 @@ import { JiraService } from "./services/jira";
 import { MicrosoftTeamsService } from "./services/microsoft-teams";
 import {meetingOptimizer} from "./services/ai-optimizer"; 
 
+// Add these rate limiter configurations at the top of the file
+const optimizationLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 20, // Limit each IP to 20 requests per windowMs
+  message: {
+    status: 'error',
+    message: 'Too many optimization requests. Please try again in a few minutes.',
+    retryAfter: 'windowMs'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // More lenient rate limiter for authenticated endpoints
 const authenticatedLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -287,13 +300,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  // Add this route after your existing meeting routes
-  app.get("/api/meetings/optimization-suggestions", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
+  // Update the optimization suggestions endpoint
+  app.get("/api/meetings/optimization-suggestions", optimizationLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetings = await storage.getMeetings();
       const suggestions = await meetingOptimizer.generateOptimizationSuggestions(meetings);
 
-      // Add cache headers for performance
+      // Add strong cache headers
       res.set('Cache-Control', 'public, max-age=300'); // Cache for 5 minutes
       res.set('Vary', 'Accept-Encoding');
 
@@ -926,6 +939,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return createServer(app);
 }
 
+// Fix the syntax error in the validateMeetingId function
 function validateMeetingId(id: string): number {
   const meetingId = Number(id);
   if (isNaN(meetingId)) {

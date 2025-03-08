@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Clock, Users, Calendar, Zap } from 'lucide-react';
 import { LoadingSpinner } from '@/components/ui/loading-skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { withRetry } from '@/lib/error-toast';
 
 interface OptimizationSuggestion {
   type: 'duration' | 'schedule' | 'participants' | 'efficiency';
@@ -20,10 +21,38 @@ const suggestionIcons = {
 };
 
 export function MeetingOptimizer() {
-  const { data: suggestions = [], isLoading, error } = useQuery({
+  const { data: suggestions = [], isLoading, error } = useQuery<OptimizationSuggestion[]>({
     queryKey: ['/api/meetings/optimization-suggestions'],
+    queryFn: async () => {
+      return await withRetry(async () => {
+        const response = await fetch('/api/meetings/optimization-suggestions', {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+
+        if (!response.ok) {
+          if (response.status === 429) {
+            throw new Error('Rate limit exceeded');
+          }
+          throw new Error('Failed to load optimization suggestions');
+        }
+
+        return response.json();
+      }, 5, 1000); // 5 retries, starting with 1s delay
+    },
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
     gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: (failureCount, error: any) => {
+      // Don't retry on 404s
+      if (error?.status === 404) return false;
+      // Retry up to 5 times
+      return failureCount < 5;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000),
   });
 
   if (isLoading) {
@@ -44,7 +73,9 @@ export function MeetingOptimizer() {
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          Failed to load optimization suggestions. Please try again later.
+          {error instanceof Error && error.message === 'Rate limit exceeded'
+            ? 'Failed to load optimization suggestions. Too many requests, please try again in a few minutes.'
+            : 'Failed to load optimization suggestions. Please try again later.'}
         </AlertDescription>
       </Alert>
     );

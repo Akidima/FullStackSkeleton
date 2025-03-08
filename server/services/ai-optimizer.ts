@@ -15,7 +15,6 @@ export class MeetingOptimizer {
 
   private async initialize() {
     if (!this.initialized) {
-      // Load the sentiment analysis pipeline - useful for analyzing meeting feedback
       this.classifier = await pipeline('sentiment-analysis');
       this.initialized = true;
     }
@@ -39,8 +38,7 @@ export class MeetingOptimizer {
 
   private async analyzeMeetingEffectiveness(meetings: Meeting[]): Promise<number> {
     await this.initialize();
-    
-    // Analyze meeting descriptions and notes for sentiment
+
     const sentiments = await Promise.all(
       meetings.map(async meeting => {
         const text = `${meeting.title} ${meeting.description || ''} ${meeting.notes || ''}`;
@@ -49,7 +47,6 @@ export class MeetingOptimizer {
       })
     );
 
-    // Calculate effectiveness score based on positive sentiment ratio
     const positiveCount = sentiments.filter(s => s.label === 'POSITIVE').length;
     return positiveCount / sentiments.length;
   }
@@ -64,8 +61,13 @@ export class MeetingOptimizer {
     const mostCommonDay = Object.entries(dayStats).sort((a, b) => b[1] - a[1])[0];
     const mostCommonTime = Object.entries(timeStats).sort((a, b) => b[1] - a[1])[0];
 
-    // Generate duration optimization suggestions
-    const avgDuration = meetings.reduce((sum, m) => sum + (m.duration || 60), 0) / meetings.length;
+    // Calculate average meeting length (end time - start time)
+    const avgDuration = meetings.reduce((sum, m) => {
+      const start = new Date(m.date);
+      const end = m.endDate ? new Date(m.endDate) : new Date(start.getTime() + 60 * 60 * 1000); // Default 1 hour if no end date
+      return sum + (end.getTime() - start.getTime()) / (60 * 1000); // Convert to minutes
+    }, 0) / meetings.length;
+
     if (avgDuration > 45) {
       suggestions.push({
         type: 'duration',

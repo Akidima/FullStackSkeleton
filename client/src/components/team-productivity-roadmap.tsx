@@ -24,12 +24,19 @@ const progressColors = {
 export function TeamProductivityRoadmap() {
   const [selectedMilestone, setSelectedMilestone] = useState<number | null>(null);
 
-  // Query with retry logic and caching
+  // Query with enhanced caching and retry logic
   const { data: milestones = [], isLoading, error } = useQuery({
     queryKey: ['/api/team/productivity/milestones'],
     queryFn: async () => {
       return await withRetry(async () => {
-        const response = await fetch('/api/team/productivity/milestones');
+        const response = await fetch('/api/team/productivity/milestones', {
+          // Add cache-control headers
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+
         if (!response.ok) {
           if (response.status === 429) {
             throw new Error('Rate limit exceeded');
@@ -37,11 +44,19 @@ export function TeamProductivityRoadmap() {
           throw new Error('Failed to fetch milestones');
         }
         return response.json();
-      }, 3, 2000); // 3 retries, starting with 2s delay
+      }, 5, 1000); // 5 retries, starting with 1s delay
     },
-    staleTime: 30000, // Cache for 30 seconds
-    cacheTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+    staleTime: 60000, // Cache for 1 minute
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: (failureCount, error: any) => {
+      // Don't retry on 404s
+      if (error?.status === 404) return false;
+      // Retry up to 5 times
+      return failureCount < 5;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000),
   });
 
   if (isLoading) {
@@ -53,11 +68,13 @@ export function TeamProductivityRoadmap() {
   }
 
   if (error) {
+    const isRateLimit = error instanceof Error && error.message === 'Rate limit exceeded';
+
     return (
-      <Alert variant="destructive">
+      <Alert variant={isRateLimit ? "warning" : "destructive"}>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          {error instanceof Error && error.message === 'Rate limit exceeded'
+          {isRateLimit
             ? 'Too many requests. Please wait a moment before trying again.'
             : 'Failed to load productivity data. Please try again later.'}
         </AlertDescription>
@@ -82,7 +99,7 @@ export function TeamProductivityRoadmap() {
 
           {/* Milestones */}
           <div className="space-y-12 relative">
-            <AnimatePresence>
+            <AnimatePresence mode="wait">
               {milestones.map((milestone: Milestone, index: number) => (
                 <motion.div
                   key={milestone.id}
@@ -90,6 +107,7 @@ export function TeamProductivityRoadmap() {
                   initial={{ opacity: 0, x: -50 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.2 }}
+                  layout
                 >
                   {/* Left side content */}
                   <div className="flex-1 text-right">

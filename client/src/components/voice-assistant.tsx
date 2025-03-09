@@ -17,66 +17,37 @@ interface VoiceAssistantProps {
 // Global model cache
 let modelCache: speechCommands.SpeechCommandRecognizer | null = null;
 
-// Rate limiting configuration
-const INITIAL_DELAY = 5000; // 5 seconds
-const MAX_DELAY = 60000; // 1 minute
-const MAX_RETRIES = 3;
-
 export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: VoiceAssistantProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("");
   const [transcript, setTranscript] = useState<string[]>([]);
   const [initError, setInitError] = useState<string | null>(null);
-  const retryCount = useRef(0);
-  const lastAttemptTime = useRef(0);
+  const retryTimeout = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     let cleanup = false;
-    let retryTimeout: NodeJS.Timeout;
 
     async function initializeModel() {
       try {
-        // Check if we're rate limited
-        const now = Date.now();
-        const timeSinceLastAttempt = now - lastAttemptTime.current;
-        const currentDelay = Math.min(INITIAL_DELAY * Math.pow(2, retryCount.current), MAX_DELAY);
-
-        if (timeSinceLastAttempt < currentDelay) {
-          const waitTime = Math.ceil((currentDelay - timeSinceLastAttempt) / 1000);
-          setLoadingStatus(`Waiting ${waitTime} seconds before retrying...`);
-          if (!cleanup) {
-            retryTimeout = setTimeout(() => initializeModel(), currentDelay - timeSinceLastAttempt);
-          }
-          return;
-        }
-
-        lastAttemptTime.current = now;
-        setLoadingStatus("Initializing TensorFlow.js...");
-
-        // Initialize TensorFlow with minimal configuration
-        await tf.ready();
-        console.log("TensorFlow.js initialized with backend:", tf.getBackend());
-
-        // Use cached model if available
+        // Check if model is already initialized
         if (modelCache) {
-          console.log("Using cached model");
-          if (!cleanup) {
-            setIsModelLoaded(true);
-            setLoadingStatus("");
-            setInitError(null);
-            retryCount.current = 0;
-          }
+          setIsModelLoaded(true);
+          setLoadingStatus("");
+          setInitError(null);
           return;
         }
 
-        // Create new model with minimal configuration
-        setLoadingStatus("Creating speech model...");
+        // Simple initialization
+        setLoadingStatus("Initializing...");
+        await tf.ready();
+
+        // Create recognizer with minimal config
         const recognizer = await speechCommands.create(
           'BROWSER_FFT',
           undefined,
           {
-            probabilityThreshold: 0.85,
+            vocabulary: 'directional4w', // Smaller vocabulary
             invokeCallbackOnNoiseAndUnknown: false
           }
         );
@@ -88,7 +59,6 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           setIsModelLoaded(true);
           setLoadingStatus("");
           setInitError(null);
-          retryCount.current = 0;
 
           toast({
             title: "Voice Assistant Ready",
@@ -100,28 +70,9 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
         if (cleanup) return;
 
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const isRateLimit = errorMessage.includes('429') || errorMessage.toLowerCase().includes('too many requests');
-
-        if (isRateLimit && retryCount.current < MAX_RETRIES) {
-          retryCount.current++;
-          const delay = Math.min(INITIAL_DELAY * Math.pow(2, retryCount.current), MAX_DELAY);
-          const waitTime = Math.ceil(delay / 1000);
-
-          setInitError(`Rate limited. Retrying in ${waitTime} seconds...`);
-          setLoadingStatus("");
-
-          if (!cleanup) {
-            retryTimeout = setTimeout(() => {
-              setInitError(null);
-              initializeModel();
-            }, delay);
-          }
-        } else {
-          setInitError("Could not initialize voice recognition. Please try again later.");
-          setLoadingStatus("");
-          retryCount.current = 0;
-        }
+        setInitError("Could not initialize voice recognition. Please try again later.");
+        setLoadingStatus("");
+        setIsModelLoaded(false);
       }
     }
 
@@ -131,12 +82,14 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
     return () => {
       cleanup = true;
-      clearTimeout(retryTimeout);
+      if (retryTimeout.current) {
+        clearTimeout(retryTimeout.current);
+      }
       if (modelCache && isRecording) {
         modelCache.stopListening();
       }
     };
-  }, [isActive]);
+  }, [isActive, isModelLoaded, initError, isRecording]);
 
   const toggleRecording = async () => {
     if (!isModelLoaded || !modelCache) {
@@ -158,7 +111,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         });
       } else {
         await modelCache.listen(
-          (result) => {
+          result => {
             const scores = result.scores as Float32Array;
             const maxScore = Math.max(...Array.from(scores));
             const maxScoreIndex = scores.indexOf(maxScore);
@@ -169,21 +122,15 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
               setTranscript(prev => [...prev, command]);
               onTranscript?.(command);
               onCommand?.(command);
-
-              // Announce for screen readers
-              const announcement = document.createElement('div');
-              announcement.setAttribute('aria-live', 'polite');
-              announcement.textContent = `Command recognized: ${command}`;
-              document.body.appendChild(announcement);
-              setTimeout(() => announcement.remove(), 1000);
             }
           },
           {
+            includeSpectrogram: false,
             probabilityThreshold: 0.85,
-            invokeCallbackOnNoiseAndUnknown: false,
-            overlapFactor: 0.5
+            invokeCallbackOnNoiseAndUnknown: false
           }
         );
+
         setIsRecording(true);
         toast({
           title: "Recording Started",

@@ -927,7 +927,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // Add these routes after existing routes but before error handler
-  app.get("/api/team/productivity/milestones", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
+app.get("/api/team/productivity/milestones", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       // Add strong cache headers
       res.set('Cache-Control', 'public, max-age=300'); // 5 minutes cache

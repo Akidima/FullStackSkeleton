@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,7 @@ interface EmojiFeedbackProps {
 
 export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
   const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
+  const [cooldownTime, setCooldownTime] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -54,7 +55,9 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
 
       if (response.status === 429) {
         const retryAfter = response.headers.get('Retry-After');
-        throw new Error(`Rate limit exceeded. Please try again in ${retryAfter || 'a few'} seconds.`);
+        const cooldown = parseInt(retryAfter || '60', 10);
+        setCooldownTime(cooldown);
+        throw new Error(`Rate limit exceeded. Please try again in ${cooldown} seconds.`);
       }
 
       if (!response.ok) {
@@ -65,6 +68,7 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
 
       // Cache the successful response
       sessionStorage.setItem(cacheKey, JSON.stringify(data));
+      setCooldownTime(null);
 
       return data;
     },
@@ -96,15 +100,32 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
     retryDelay: (attemptIndex) => Math.min(2000 * Math.pow(2, attemptIndex), 30000), // Exponential backoff with higher initial delay
   });
 
+  // Cooldown timer effect
+  useEffect(() => {
+    if (!cooldownTime) return;
+
+    const interval = setInterval(() => {
+      setCooldownTime((current) => {
+        if (current === null || current <= 0) {
+          clearInterval(interval);
+          return null;
+        }
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [cooldownTime]);
+
   const handleEmojiSelect = useCallback((value: string) => {
     // Prevent duplicate submissions
-    if (selectedEmoji === value) {
+    if (selectedEmoji === value || cooldownTime) {
       return;
     }
 
     setSelectedEmoji(value);
     feedbackMutation.mutate(value);
-  }, [selectedEmoji, feedbackMutation]);
+  }, [selectedEmoji, feedbackMutation, cooldownTime]);
 
   return (
     <Card>
@@ -130,7 +151,7 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
                   }`}
                   onClick={() => handleEmojiSelect(option.value)}
                   title={option.label}
-                  disabled={feedbackMutation.isPending}
+                  disabled={feedbackMutation.isPending || !!cooldownTime}
                 >
                   {option.emoji}
                 </Button>
@@ -138,6 +159,11 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
             ))}
           </AnimatePresence>
         </div>
+        {cooldownTime !== null && (
+          <p className="text-center text-sm text-muted-foreground mt-4">
+            Please wait {cooldownTime} seconds before submitting again
+          </p>
+        )}
       </CardContent>
     </Card>
   );

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,9 +15,8 @@ interface VoiceAssistantProps {
   isActive?: boolean;
 }
 
-// Cache for the speech command recognizer
+// Simple global cache
 let globalRecognizer: speechCommands.SpeechCommandRecognizer | null = null;
-let modelLoadPromise: Promise<void> | null = null;
 
 export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: VoiceAssistantProps) {
   const [isRecording, setIsRecording] = useState(false);
@@ -28,12 +27,9 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [initError, setInitError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const lastRequestTime = useRef<number>(0);
-  const MIN_REQUEST_INTERVAL = 10000; // 10 seconds between requests
-  const MAX_RETRIES = 5;
-  const INITIAL_RETRY_DELAY = 30000; // 30 seconds
-  const MAX_RETRY_DELAY = 300000; // 5 minutes
+  const MAX_RETRIES = 3;
 
-  // Use WebSocket manager
+  // WebSocket manager for remote command processing
   const wsManager = useWebSocketManager({
     onMessage: (event) => {
       try {
@@ -53,161 +49,94 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
     const initializeRecognizer = async () => {
       try {
-        const now = Date.now();
-        const timeSinceLastRequest = now - lastRequestTime.current;
-        if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-          await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
-        }
-        lastRequestTime.current = Date.now();
-
-        // Check for existing instances
-        if (globalRecognizer) {
-          setIsModelLoaded(true);
-          setLoadingStatus("");
-          setInitError(null);
-          return;
-        }
-
-        if (modelLoadPromise) {
-          await modelLoadPromise;
-          if (globalRecognizer) {
-            setIsModelLoaded(true);
-            setLoadingStatus("");
-            setInitError(null);
-            return;
-          }
-        }
-
         setLoadingStatus("Initializing TensorFlow.js...");
+        console.log("Starting TensorFlow initialization...");
 
-        // Initialize TensorFlow.js with explicit error handling
-        modelLoadPromise = (async () => {
-          try {
-            // Force WebGL backend
-            await tf.setBackend('webgl');
-            if (tf.getBackend() !== 'webgl') {
-              throw new Error('Failed to initialize WebGL backend');
-            }
-            await tf.ready();
+        // Initialize TensorFlow.js
+        await tf.ready();
+        console.log("TensorFlow.js initialized");
 
-            setLoadingStatus("Creating speech recognition model...");
+        // Create recognizer with basic configuration
+        setLoadingStatus("Creating speech recognition model...");
+        console.log("Creating speech commands recognizer...");
 
-            // Create recognizer with minimal configuration
-            const recognizer = await speechCommands.create(
-              'BROWSER_FFT',
-              undefined,
-              {
-                vocabulary: 'directional4w', // Use smaller vocabulary
-                probabilityThreshold: 0.85
-              }
-            );
-
-            setLoadingStatus("Loading model...");
-            await recognizer.ensureModelLoaded();
-
-            globalRecognizer = recognizer;
-          } catch (error) {
-            throw new Error(`TensorFlow initialization failed: ${error.message}`);
+        const recognizer = await speechCommands.create(
+          'BROWSER_FFT',
+          undefined,
+          {
+            vocabulary: '18w', // Use the default 18-word vocabulary
+            probabilityThreshold: 0.75
           }
-        })();
+        );
 
-        await modelLoadPromise;
-        modelLoadPromise = null;
+        console.log("Speech commands recognizer created");
+        setLoadingStatus("Loading model...");
+
+        await recognizer.ensureModelLoaded();
+        console.log("Model loaded successfully");
+
+        // Store in global cache
+        globalRecognizer = recognizer;
 
         if (!cleanup) {
-          const processResult = async (result: speechCommands.SpeechCommandRecognizerResult) => {
-            const now = Date.now();
-            if (now - lastRequestTime.current < MIN_REQUEST_INTERVAL) {
-              return;
-            }
+          // Configure the recognizer
+          await recognizer.listen(
+            async (result) => {
+              try {
+                const scores = result.scores as Float32Array;
+                const maxScore = Math.max(...Array.from(scores));
+                const maxScoreIndex = scores.indexOf(maxScore);
+                const command = recognizer.wordLabels()[maxScoreIndex];
 
-            try {
-              lastRequestTime.current = now;
-              setIsProcessing(true);
-
-              const scores = result.scores as Float32Array;
-              const maxScore = Math.max(...Array.from(scores));
-              const maxScoreIndex = scores.indexOf(maxScore);
-              const command = globalRecognizer?.wordLabels()[maxScoreIndex];
-
-              if (command && maxScore > 0.85) {
-                setTranscript(prev => [...prev, command]);
-                onTranscript?.(command);
-
-                if (wsManager.isConnected) {
-                  wsManager.send({
-                    type: 'voice_command',
-                    command,
-                    confidence: maxScore
-                  });
-                } else if (['go', 'stop', 'yes', 'no'].includes(command)) {
+                if (command && maxScore > 0.75) {
+                  console.log('Recognized command:', command, 'with confidence:', maxScore);
+                  setTranscript(prev => [...prev, command]);
+                  onTranscript?.(command);
                   onCommand?.(command);
                 }
+              } catch (error) {
+                console.error('Error processing voice command:', error);
               }
-            } finally {
-              setIsProcessing(false);
+            },
+            {
+              probabilityThreshold: 0.75,
+              overlapFactor: 0.5
             }
-          };
-
-          if (globalRecognizer) {
-            await globalRecognizer.listen(
-              processResult,
-              {
-                probabilityThreshold: 0.85,
-                overlapFactor: 0.5
-              }
-            );
-          }
+          );
 
           setIsModelLoaded(true);
           setLoadingStatus("");
           setInitError(null);
-          setRetryCount(0);
+          console.log("Voice assistant initialization complete");
+
           toast({
             title: "Voice Assistant Ready",
             description: "Voice commands are now available.",
           });
         }
-      } catch (error: unknown) {
-        console.error('Failed to initialize voice assistant:', error);
-
+      } catch (error) {
+        console.error('Voice assistant initialization failed:', error);
         globalRecognizer = null;
-        modelLoadPromise = null;
 
         if (!cleanup) {
           const shouldRetry = retryCount < MAX_RETRIES;
-          const isRateLimitError = error instanceof Error && 
-            (error.message.includes('429') || error.message.includes('Too Many Requests'));
-
-          const backoffDelay = Math.min(
-            INITIAL_RETRY_DELAY * Math.pow(2, retryCount),
-            MAX_RETRY_DELAY
-          );
-
           setInitError(
-            isRateLimitError
-              ? `Service is experiencing high demand. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
-              : shouldRetry 
-                ? `Voice assistant initialization failed. Retrying in ${Math.round(backoffDelay / 1000)} seconds...` 
-                : 'Unable to start voice recognition. Please try again later.'
+            shouldRetry 
+              ? `Voice assistant initialization failed. Retrying in 5 seconds...` 
+              : 'Unable to start voice recognition. Please try again later.'
           );
-          setLoadingStatus("");
 
           if (shouldRetry) {
             retryTimeout = setTimeout(() => {
               setRetryCount(prev => prev + 1);
               setInitError(null);
               setIsModelLoaded(false);
-            }, backoffDelay);
+            }, 5000);
           }
 
           toast({
             title: "Voice Assistant Error",
-            description: isRateLimitError
-              ? `Service is experiencing high demand. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
-              : shouldRetry 
-                ? "Voice recognition failed to start. Retrying..." 
-                : "Voice recognition unavailable. Please try again later.",
+            description: "Failed to initialize voice recognition. Retrying...",
             variant: "destructive",
           });
         }
@@ -221,11 +150,11 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
     return () => {
       cleanup = true;
       clearTimeout(retryTimeout);
-      if (isRecording && globalRecognizer) {
+      if (globalRecognizer) {
         globalRecognizer.stopListening();
       }
     };
-  }, [isActive, isModelLoaded, initError, retryCount, onCommand, onTranscript, wsManager]);
+  }, [isActive, isModelLoaded, initError, retryCount, onCommand, onTranscript]);
 
   const startRecording = async () => {
     if (!isModelLoaded || !globalRecognizer) {
@@ -245,11 +174,6 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
       });
     } catch (error) {
       console.error('Failed to start voice recognition:', error);
-      toast({
-        title: "Error",
-        description: "Could not start voice recognition.",
-        variant: "destructive",
-      });
       setIsRecording(false);
     }
   };

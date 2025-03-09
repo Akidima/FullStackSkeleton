@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Calendar, CheckCircle, Clock, AlertCircle } from "lucide-react";
-import { Meeting, Task, Note } from "@shared/schema"; // Add proper types
+import { Meeting, Task } from "@shared/schema"; 
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { VoiceAssistant } from "@/components/voice-assistant";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 interface TaskType {
   id: number;
@@ -26,10 +27,10 @@ interface NoteType {
 }
 
 export default function Dashboard() {
-  // Add state for active section
   const [activeSection, setActiveSection] = useState<string>("meetings");
+  const [isVoiceAssistantEnabled, setIsVoiceAssistantEnabled] = useState(false);
 
-  // Existing queries with proper typing
+  // Queries with proper typing
   const { data: meetings = [], isLoading: meetingsLoading } = useQuery<Meeting[]>({
     queryKey: ["/api/meetings"],
   });
@@ -78,10 +79,6 @@ export default function Dashboard() {
         setActiveSection('summary');
         toast({ title: "Showing Task Summary" });
         break;
-      case 'yes':
-      case 'no':
-        // Handle confirmations
-        break;
     }
   };
 
@@ -96,10 +93,21 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex gap-4 items-center">
-          <VoiceAssistant
-            isActive={true}
-            onCommand={handleVoiceCommand}
-          />
+          <ErrorBoundary>
+            {!isVoiceAssistantEnabled ? (
+              <Button
+                variant="outline"
+                onClick={() => setIsVoiceAssistantEnabled(true)}
+              >
+                Enable Voice Assistant
+              </Button>
+            ) : (
+              <VoiceAssistant
+                isActive={true}
+                onCommand={handleVoiceCommand}
+              />
+            )}
+          </ErrorBoundary>
           <Link href="/meetings/new">
             <Button>
               <Plus className="h-4 w-4 mr-2" />

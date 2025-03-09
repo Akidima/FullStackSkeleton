@@ -35,12 +35,8 @@ import {
 import { showErrorToast } from "@/lib/error-toast";
 import { EmojiFeedback } from "@/components/emoji-feedback"; // Updated import with correct casing
 
-// Rate limiting configuration
-const RETRY_DELAY = 1000; // Start with 1 second
-const MAX_RETRIES = 3;
-
-// Assumed withRetry function (replace with actual implementation if available)
-const withRetry = async (fn, retries = 3, delay = 1000) => {
+// Add type for withRetry function
+const withRetry = async <T,>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> => {
   let attempts = 0;
   while (attempts < retries) {
     try {
@@ -54,7 +50,13 @@ const withRetry = async (fn, retries = 3, delay = 1000) => {
       attempts++;
     }
   }
+  throw new Error('Failed after retries');
 };
+
+// Rate limiting configuration
+const RETRY_DELAY = 1000; // Start with 1 second
+const MAX_RETRIES = 3;
+
 
 export default function MeetingDetails() {
   const [, params] = useRoute("/meetings/:id");
@@ -358,7 +360,7 @@ export default function MeetingDetails() {
               </div>
 
               {/* Emoji Feedback Section */}
-              {meetingId && (
+              {typeof meetingId === 'number' && (
                 <div className="mt-6">
                   <EmojiFeedback meetingId={meetingId} />
                 </div>

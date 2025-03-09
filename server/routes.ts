@@ -84,6 +84,45 @@ const analyticsLimiter = rateLimit({
 });
 
 
+// Add this type definition at the top of the file
+type UpdateType = "delete" | "notes" | "create" | "update" | "sentiment";
+
+// Fix the broadcastMeetingUpdate function signature
+export function broadcastMeetingUpdate(type: UpdateType, meetingId: number) {
+  // ... rest of the implementation
+}
+
+// Update the meeting schema to include calendar-related fields
+export interface Meeting {
+  id: number;
+  date: Date;
+  title: string;
+  description: string | null;
+  participants: string[] | null;
+  agenda: string | null;
+  notes: string | null;
+  isCompleted: boolean;
+  summary: string | null;
+  userId: number | null;
+  roomId: number | null;
+  calendarEventId?: string;
+  calendarSynced?: boolean;
+  lastSyncedAt?: Date;
+}
+
+// Fix the error handling types
+interface ErrorResponse {
+  message: string;
+  details?: Record<string, any>;
+}
+
+interface PreferencesUpdateInput {
+  theme: 'light' | 'dark' | 'system';
+  dashboardLayout: 'compact' | 'comfortable' | 'spacious';
+  preferredDuration: number;
+  notifications: 'all' | 'important' | 'minimal';
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
   app.get("/api/meetings", asyncHandler(async (req: Request, res: Response) => {
@@ -359,6 +398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(moods);
   }));
 
+  // Update the routes to use proper types
   app.post("/api/meetings/:id/moods", sentimentLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetingId = validateMeetingId(req.params.id);
@@ -927,7 +967,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // Add these routes after existing routes but before error handler
-app.get("/api/team/productivity/milestones", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/team/productivity/milestones", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       // Add strong cache headers
       res.set('Cache-Control', 'public, max-age=300'); // 5 minutes cache

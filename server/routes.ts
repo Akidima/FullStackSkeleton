@@ -9,7 +9,7 @@ import { AgendaService } from "./services/agenda";
 import { getAIInsights } from "./services/ai-insights";
 import { generateMeetingInsights, batchSummarize } from "./services/summarize";
 import { SchedulerService } from "./services/scheduler";
-import { broadcastMeetingUpdate } from "./websocket";
+import { WebSocket } from 'ws';
 import { authenticateJWT } from "./auth";
 import {insertTaskSchema, updateTaskSchema} from "@shared/schema";
 import { format } from 'date-fns';
@@ -22,13 +22,15 @@ import { JiraService } from "./services/jira";
 import { MicrosoftTeamsService } from "./services/microsoft-teams";
 import {meetingOptimizer} from "./services/ai-optimizer"; 
 
+let wss: WebSocket.Server; // Declare wss variable here
+
 // Add new rate limiter for sentiment endpoints
 const sentimentLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour window (increased from 15 minutes)
   max: 500, // Allow 500 requests per window (increased from 100)
   message: {
     status: 'error',
-    message: 'Too many sentiment requests. Please try again in a few minutes.',
+    message: 'Too many MeetMate sentiment requests. Please try again in a few minutes.',
     retryAfter: 'windowMs'
   },
   standardHeaders: true,
@@ -43,7 +45,7 @@ const optimizationLimiter = rateLimit({
   max: 150, // Increased from 50 to 150 requests per windowMs
   message: {
     status: 'error',
-    message: 'Too many optimization requests. Please try again in a few minutes.',
+    message: 'Too many MeetMate optimization requests. Please try again in a few minutes.',
     retryAfter: 'windowMs'
   },
   standardHeaders: true,
@@ -87,9 +89,27 @@ const analyticsLimiter = rateLimit({
 // Add this type definition at the top of the file
 type UpdateType = "delete" | "notes" | "create" | "update" | "sentiment";
 
-// Fix the broadcastMeetingUpdate function signature
+// Update the broadcastMeetingUpdate function
 export function broadcastMeetingUpdate(type: UpdateType, meetingId: number) {
-  // ... rest of the implementation
+  if (!wss) {
+    console.log('MeetMate WebSocket server not initialized');
+    return;
+  }
+
+  const message = JSON.stringify({
+    type: `meeting:${type}`,
+    meetingId
+  });
+
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+      } catch (error) {
+        console.error('Error broadcasting MeetMate meeting update:', error);
+      }
+    }
+  });
 }
 
 // Update the meeting schema to include calendar-related fields
@@ -123,7 +143,8 @@ interface PreferencesUpdateInput {
   notifications: 'all' | 'important' | 'minimal';
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express, server: WebSocket.Server): Promise<Server> {
+  wss = server; // Initialize wss here
   // Meeting Management Routes
   app.get("/api/meetings", asyncHandler(async (req: Request, res: Response) => {
     const meetings = await storage.getMeetings();
@@ -178,7 +199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         await SlackService.sendMeetingNotification(meeting);
       } catch (error) {
-        console.error('Error sending Slack notification:', error);
+        console.error('Error sending MeetMate Slack notification:', error);
         // Don't fail the whole request if Slack notification fails
       }
 
@@ -212,8 +233,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(meeting);
     } catch (error) {
+      console.error('MeetMate meeting creation error:', error);
       if (error instanceof ZodError) {
-        throw new ValidationError("Invalid meeting data", error.errors);
+        throw new ValidationError("Invalid MeetMate meeting data", error.errors);
       }
       throw error;
     }
@@ -270,8 +292,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updatedMeeting);
     } catch (error) {
+      console.error('MeetMate meeting update error:', error);
       if (error instanceof ZodError) {
-        throw new ValidationError("Invalid meeting data", error.errors);
+        throw new ValidationError("Invalid MeetMate meeting data", error.errors);
       }
       throw error;
     }
@@ -310,16 +333,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       broadcastMeetingUpdate('delete', meetingId);
 
       // Send a proper response
-      res.status(200).json({ 
+      res.status(200).json({
         success: true,
         message: 'Meeting deleted successfully'
       });
     } catch (error) {
-      console.error('Error deleting meeting:', error);
+      console.error('MeetMate meeting deletion error:', error);
       if (error instanceof NotFoundError) {
         throw error;
       }
-      throw new Error('Failed to delete meeting. Please try again.');
+      throw new Error('Failed to delete MeetMate meeting. Please try again.');
     }
   }));
 
@@ -911,8 +934,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalMeetings: meetings.length,
         completedMeetings: meetings.filter(m => m.isCompleted).length,
       });
-    } catch (error) {
-      console.error('Error generating meeting analytics:', error);
+    } catch (error) {      console.error('Error generating meeting analytics:', error);
       throw error;
     }
   }));

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,10 @@ interface VoiceAssistantProps {
   isActive?: boolean;
 }
 
+// Rate limiting configuration
+const RATE_LIMIT_DELAY = 5000; // 5 seconds between retries
+const MAX_RETRIES = 3;
+
 export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: VoiceAssistantProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -20,17 +24,39 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [initError, setInitError] = useState<string | null>(null);
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
 
+  const retryCount = useRef(0);
+  const lastInitAttempt = useRef(0);
+  const initTimeoutRef = useRef<NodeJS.Timeout>();
+
   useEffect(() => {
     let cleanup = false;
 
     async function initializeVoiceRecognition() {
       try {
-        // Check if browser supports speech recognition
+        // Rate limiting check
+        const now = Date.now();
+        const timeSinceLastAttempt = now - lastInitAttempt.current;
+
+        if (timeSinceLastAttempt < RATE_LIMIT_DELAY) {
+          const waitTime = Math.ceil((RATE_LIMIT_DELAY - timeSinceLastAttempt) / 1000);
+          setLoadingStatus(`Rate limited. Waiting ${waitTime}s before retry...`);
+
+          if (!cleanup) {
+            initTimeoutRef.current = setTimeout(() => {
+              if (!cleanup) initializeVoiceRecognition();
+            }, RATE_LIMIT_DELAY - timeSinceLastAttempt);
+          }
+          return;
+        }
+
+        lastInitAttempt.current = now;
+
+        // Check browser support
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
           throw new Error('Speech recognition is not supported in your browser');
         }
 
-        // Check for microphone access
+        // Request microphone access
         setLoadingStatus("Requesting microphone access...");
         await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -46,14 +72,14 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         recognizer.onstart = () => {
           if (!cleanup) {
             setIsRecording(true);
-            console.log('Voice recognition started');
+            console.log('MeetMate voice recognition started');
           }
         };
 
         recognizer.onend = () => {
           if (!cleanup) {
             setIsRecording(false);
-            console.log('Voice recognition ended');
+            console.log('MeetMate voice recognition ended');
           }
         };
 
@@ -62,7 +88,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             const lastResult = event.results[event.results.length - 1];
             if (lastResult.isFinal) {
               const command = lastResult[0].transcript.trim().toLowerCase();
-              console.log('Recognized command:', command);
+              console.log('MeetMate recognized command:', command);
               setTranscript(prev => [...prev, command]);
               onTranscript?.(command);
               onCommand?.(command);
@@ -78,19 +104,39 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         };
 
         recognizer.onerror = (event) => {
-          console.error('Speech recognition error:', event.error);
+          console.error('MeetMate voice recognition error:', {
+            error: event.error,
+            message: event.message,
+            timestamp: new Date().toISOString(),
+            retryCount: retryCount.current
+          });
+
           if (!cleanup) {
-            if (event.error === 'not-allowed') {
-              setInitError('Please allow microphone access to use voice recognition');
-            } else {
-              setInitError(`Voice recognition error: ${event.error}`);
-            }
+            const errorMessage = event.error === 'not-allowed' 
+              ? 'Please allow microphone access to use voice recognition'
+              : event.error === 'network'
+                ? 'Network error occurred. Please check your connection.'
+                : `Voice recognition error: ${event.error}`;
+
+            setInitError(errorMessage);
             setIsRecording(false);
+
             toast({
               title: "Voice Recognition Error",
-              description: `Error: ${event.error}. Please try again.`,
+              description: errorMessage,
               variant: "destructive",
             });
+
+            // Retry logic for recoverable errors
+            if (retryCount.current < MAX_RETRIES && 
+                !['not-allowed', 'service-not-allowed'].includes(event.error)) {
+              retryCount.current++;
+              if (!cleanup) {
+                initTimeoutRef.current = setTimeout(() => {
+                  if (!cleanup) initializeVoiceRecognition();
+                }, RATE_LIMIT_DELAY);
+              }
+            }
           }
         };
 
@@ -99,26 +145,28 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           setIsInitialized(true);
           setLoadingStatus("");
           setInitError(null);
+          retryCount.current = 0;
 
           toast({
-            title: "Voice Assistant Ready",
+            title: "MeetMate Voice Assistant Ready",
             description: "You can now use voice commands.",
           });
         }
       } catch (error) {
-        console.error('Voice assistant initialization error:', error);
+        console.error('MeetMate voice assistant initialization error:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-        setInitError(
-          errorMessage.includes('getUserMedia')
-            ? 'Please allow microphone access to use voice recognition'
-            : errorMessage.includes('not supported')
-              ? 'Voice recognition is not supported in your browser. Please try Chrome or Edge.'
-              : 'Could not initialize voice recognition. Please try again'
-        );
-
-        setLoadingStatus("");
-        setIsInitialized(false);
+        if (!cleanup) {
+          setInitError(
+            errorMessage.includes('getUserMedia')
+              ? 'Please allow microphone access to use voice recognition'
+              : errorMessage.includes('not supported')
+                ? 'Voice recognition is not supported in your browser. Please try Chrome or Edge.'
+                : 'Could not initialize voice recognition. Please try again later'
+          );
+          setLoadingStatus("");
+          setIsInitialized(false);
+        }
       }
     }
 
@@ -128,6 +176,9 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
     return () => {
       cleanup = true;
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+      }
       if (recognition) {
         recognition.stop();
       }
@@ -170,7 +221,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   };
 
   return (
-    <Card role="region" aria-label="Voice Assistant Controls">
+    <Card role="region" aria-label="MeetMate Voice Assistant Controls">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {isRecording ? (
@@ -178,7 +229,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           ) : (
             <Mic className="h-5 w-5" aria-hidden="true" />
           )}
-          Voice Assistant
+          MeetMate Voice Assistant
           {!isInitialized && !initError && (
             <Badge variant="secondary" className="ml-2">
               <Loader2 className="h-3 w-3 animate-spin mr-1" aria-hidden="true" />

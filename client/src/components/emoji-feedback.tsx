@@ -38,6 +38,11 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
         body: JSON.stringify({ sentiment }),
       });
 
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        throw new Error(`Rate limit exceeded. Please try again in ${retryAfter || 'a few'} seconds.`);
+      }
+
       if (!response.ok) {
         throw new Error('Failed to submit feedback');
       }
@@ -51,13 +56,25 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
         description: 'Thank you for your feedback!',
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      const isRateLimit = error.message.includes('Rate limit exceeded');
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to submit feedback. Please try again.',
+        description: isRateLimit 
+          ? error.message 
+          : 'Failed to submit feedback. Please try again.',
       });
     },
+    retry: (failureCount, error: any) => {
+      // Don't retry on rate limit errors
+      if (error.message.includes('Rate limit exceeded')) {
+        return false;
+      }
+      // Retry up to 3 times for other errors
+      return failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 10000), // Exponential backoff
   });
 
   const handleEmojiSelect = (value: string) => {
@@ -89,6 +106,7 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
                   }`}
                   onClick={() => handleEmojiSelect(option.value)}
                   title={option.label}
+                  disabled={feedbackMutation.isPending}
                 >
                   {option.emoji}
                 </Button>

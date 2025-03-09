@@ -22,6 +22,19 @@ import { JiraService } from "./services/jira";
 import { MicrosoftTeamsService } from "./services/microsoft-teams";
 import {meetingOptimizer} from "./services/ai-optimizer"; 
 
+// Add new rate limiter for sentiment endpoints
+const sentimentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minute window
+  max: 100, // Allow 100 requests per window
+  message: {
+    status: 'error',
+    message: 'Too many sentiment requests. Please try again in a few minutes.',
+    retryAfter: 'windowMs'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // Add these rate limiter configurations at the top of the file
 const optimizationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes window (increased from 5)
@@ -327,19 +340,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  // Add these routes after the existing meeting routes
-  app.get("/api/meetings/:id/moods", asyncHandler(async (req: Request, res: Response) => {
+  // Update the sentiment routes with rate limiting and caching
+  app.get("/api/meetings/:id/moods", sentimentLimiter, asyncHandler(async (req: Request, res: Response) => {
     const meetingId = validateMeetingId(req.params.id);
     const meeting = await storage.getMeeting(meetingId);
     if (!meeting) {
       throw new NotFoundError("Meeting");
     }
 
+    // Add cache headers
+    res.set('Cache-Control', 'public, max-age=300'); // Cache for 5 minutes
+    res.set('Vary', 'Accept-Encoding');
+
     const moods = await storage.getMeetingMoods(meetingId);
     res.json(moods);
   }));
 
-  app.post("/api/meetings/:id/moods", asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/meetings/:id/moods", sentimentLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetingId = validateMeetingId(req.params.id);
       const meeting = await storage.getMeeting(meetingId);
@@ -354,8 +371,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Broadcast mood update to connected clients
-      broadcastMeetingUpdate('moods', meetingId);
+      broadcastMeetingUpdate('sentiment', meetingId);
 
+      // Cache control for POST response
+      res.set('Cache-Control', 'no-cache');
       res.status(201).json(mood);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -364,6 +383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       throw error;
     }
   }));
+
 
   // Scheduling Assistant Routes
   app.post("/api/meetings/suggest-times", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
@@ -927,7 +947,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           progress: 40,
           status: "in-progress"
         },
-{
+        {
           id: 3,
           title: "Project Launch",
           dueDate: new Date("2025-05-01").toISOString(),

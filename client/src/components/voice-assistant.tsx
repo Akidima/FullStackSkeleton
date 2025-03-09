@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,6 @@ import { Mic, MicOff, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import * as tf from '@tensorflow/tfjs';
 import * as speechCommands from '@tensorflow-models/speech-commands';
-import { useWebSocketManager } from "@/hooks/use-websocket-manager";
 
 interface VoiceAssistantProps {
   onCommand?: (command: string) => void;
@@ -15,99 +14,62 @@ interface VoiceAssistantProps {
   isActive?: boolean;
 }
 
-// Simple global cache
-let globalRecognizer: speechCommands.SpeechCommandRecognizer | null = null;
+let recognizer: speechCommands.SpeechCommandRecognizer | null = null;
 
 export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: VoiceAssistantProps) {
   const [isRecording, setIsRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [transcript, setTranscript] = useState<string[]>([]);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("");
+  const [transcript, setTranscript] = useState<string[]>([]);
   const [initError, setInitError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const lastRequestTime = useRef<number>(0);
-  const MAX_RETRIES = 3;
-
-  // WebSocket manager for remote command processing
-  const wsManager = useWebSocketManager({
-    onMessage: (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'voice_command_processed') {
-          onCommand?.(data.command);
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    }
-  });
 
   useEffect(() => {
     let cleanup = false;
-    let retryTimeout: NodeJS.Timeout;
 
-    const initializeRecognizer = async () => {
+    async function initializeVoiceRecognition() {
       try {
-        setLoadingStatus("Initializing TensorFlow.js...");
-        console.log("Starting TensorFlow initialization...");
+        setLoadingStatus("Initializing...");
+        console.log("Starting voice recognition initialization");
 
         // Initialize TensorFlow.js
         await tf.ready();
         console.log("TensorFlow.js initialized");
 
-        // Create recognizer with basic configuration
-        setLoadingStatus("Creating speech recognition model...");
-        console.log("Creating speech commands recognizer...");
+        // Create recognizer
+        if (!recognizer) {
+          recognizer = await speechCommands.create('BROWSER_FFT');
+          console.log("Speech recognizer created");
+        }
 
-        const recognizer = await speechCommands.create(
-          'BROWSER_FFT',
-          undefined,
-          {
-            vocabulary: '18w', // Use the default 18-word vocabulary
-            probabilityThreshold: 0.75
-          }
-        );
-
-        console.log("Speech commands recognizer created");
-        setLoadingStatus("Loading model...");
-
+        // Load the model
         await recognizer.ensureModelLoaded();
         console.log("Model loaded successfully");
 
-        // Store in global cache
-        globalRecognizer = recognizer;
-
         if (!cleanup) {
-          // Configure the recognizer
+          // Start listening
           await recognizer.listen(
-            async (result) => {
-              try {
-                const scores = result.scores as Float32Array;
-                const maxScore = Math.max(...Array.from(scores));
-                const maxScoreIndex = scores.indexOf(maxScore);
-                const command = recognizer.wordLabels()[maxScoreIndex];
+            result => {
+              const scores = result.scores as Float32Array;
+              const maxScore = Math.max(...Array.from(scores));
+              const maxScoreIndex = scores.indexOf(maxScore);
+              const command = recognizer?.wordLabels()[maxScoreIndex];
 
-                if (command && maxScore > 0.75) {
-                  console.log('Recognized command:', command, 'with confidence:', maxScore);
-                  setTranscript(prev => [...prev, command]);
-                  onTranscript?.(command);
-                  onCommand?.(command);
-                }
-              } catch (error) {
-                console.error('Error processing voice command:', error);
+              if (command && maxScore > 0.75) {
+                console.log(`Recognized command: ${command} with score: ${maxScore}`);
+                setTranscript(prev => [...prev, command]);
+                onTranscript?.(command);
+                onCommand?.(command);
               }
             },
             {
-              probabilityThreshold: 0.75,
-              overlapFactor: 0.5
+              includeSpectrogram: false,
+              probabilityThreshold: 0.75
             }
           );
 
           setIsModelLoaded(true);
           setLoadingStatus("");
           setInitError(null);
-          console.log("Voice assistant initialization complete");
 
           toast({
             title: "Voice Assistant Ready",
@@ -115,76 +77,79 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           });
         }
       } catch (error) {
-        console.error('Voice assistant initialization failed:', error);
-        globalRecognizer = null;
-
-        if (!cleanup) {
-          const shouldRetry = retryCount < MAX_RETRIES;
-          setInitError(
-            shouldRetry 
-              ? `Voice assistant initialization failed. Retrying in 5 seconds...` 
-              : 'Unable to start voice recognition. Please try again later.'
-          );
-
-          if (shouldRetry) {
-            retryTimeout = setTimeout(() => {
-              setRetryCount(prev => prev + 1);
-              setInitError(null);
-              setIsModelLoaded(false);
-            }, 5000);
-          }
-
-          toast({
-            title: "Voice Assistant Error",
-            description: "Failed to initialize voice recognition. Retrying...",
-            variant: "destructive",
-          });
-        }
+        console.error("Voice recognition initialization failed:", error);
+        setInitError("Failed to initialize voice recognition. Please try refreshing the page.");
+        setLoadingStatus("");
+        toast({
+          title: "Voice Assistant Error",
+          description: "Could not initialize voice recognition.",
+          variant: "destructive",
+        });
       }
-    };
+    }
 
     if (isActive && !isModelLoaded && !initError) {
-      initializeRecognizer();
+      initializeVoiceRecognition();
     }
 
     return () => {
       cleanup = true;
-      clearTimeout(retryTimeout);
-      if (globalRecognizer) {
-        globalRecognizer.stopListening();
+      if (recognizer) {
+        recognizer.stopListening();
       }
     };
-  }, [isActive, isModelLoaded, initError, retryCount, onCommand, onTranscript]);
+  }, [isActive, isModelLoaded, initError, onCommand, onTranscript]);
 
-  const startRecording = async () => {
-    if (!isModelLoaded || !globalRecognizer) {
+  const toggleRecording = async () => {
+    if (!isModelLoaded || !recognizer) {
       toast({
-        title: "Voice Assistant Not Ready",
-        description: "Please wait for initialization to complete.",
+        title: "Not Ready",
+        description: "Voice recognition is still initializing.",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      setIsRecording(true);
-      toast({
-        title: "Voice Recognition Active",
-        description: "Listening for voice commands.",
-      });
-    } catch (error) {
-      console.error('Failed to start voice recognition:', error);
-      setIsRecording(false);
-    }
-  };
+      if (isRecording) {
+        await recognizer.stopListening();
+        setIsRecording(false);
+        toast({
+          title: "Recording Stopped",
+          description: "Voice recognition paused.",
+        });
+      } else {
+        await recognizer.listen(
+          result => {
+            const scores = result.scores as Float32Array;
+            const maxScore = Math.max(...Array.from(scores));
+            const maxScoreIndex = scores.indexOf(maxScore);
+            const command = recognizer?.wordLabels()[maxScoreIndex];
 
-  const stopRecording = async () => {
-    if (globalRecognizer) {
-      globalRecognizer.stopListening();
+            if (command && maxScore > 0.75) {
+              setTranscript(prev => [...prev, command]);
+              onTranscript?.(command);
+              onCommand?.(command);
+            }
+          },
+          {
+            includeSpectrogram: false,
+            probabilityThreshold: 0.75
+          }
+        );
+        setIsRecording(true);
+        toast({
+          title: "Recording Started",
+          description: "Listening for voice commands.",
+        });
+      }
+    } catch (error) {
+      console.error("Error toggling recording:", error);
       setIsRecording(false);
       toast({
-        title: "Voice Recognition Stopped",
-        description: "Voice recognition paused.",
+        title: "Error",
+        description: "Failed to toggle voice recognition.",
+        variant: "destructive",
       });
     }
   };
@@ -192,29 +157,21 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   if (!isActive) return null;
 
   return (
-    <Card role="region" aria-label="Voice Assistant Controls">
+    <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {isRecording ? (
-            <Mic className="h-5 w-5 text-red-500 animate-pulse" aria-hidden="true" />
+            <Mic className="h-5 w-5 text-red-500 animate-pulse" />
           ) : (
-            <Mic className="h-5 w-5" aria-hidden="true" />
+            <Mic className="h-5 w-5" />
           )}
           Voice Assistant
-          {isProcessing && (
-            <Badge variant="secondary" className="ml-2">
-              <Loader2 className="h-3 w-3 animate-spin mr-1" aria-hidden="true" />
-              Processing
-            </Badge>
-          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {initError ? (
-            <div className="text-destructive text-sm mb-4">
-              {initError}
-            </div>
+            <div className="text-destructive text-sm">{initError}</div>
           ) : !isModelLoaded ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -222,21 +179,18 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             </div>
           ) : (
             <Button
-              onClick={isRecording ? stopRecording : startRecording}
+              onClick={toggleRecording}
               variant={isRecording ? "destructive" : "default"}
               className="w-full"
-              disabled={!isModelLoaded}
-              aria-pressed={isRecording}
-              aria-label={isRecording ? "Stop voice recognition" : "Start voice recognition"}
             >
               {isRecording ? (
                 <>
-                  <MicOff className="h-4 w-4 mr-2" aria-hidden="true" />
+                  <MicOff className="h-4 w-4 mr-2" />
                   Stop Recording
                 </>
               ) : (
                 <>
-                  <Mic className="h-4 w-4 mr-2" aria-hidden="true" />
+                  <Mic className="h-4 w-4 mr-2" />
                   Start Recording
                 </>
               )}
@@ -244,12 +198,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           )}
 
           {transcript.length > 0 && (
-            <ScrollArea className="h-[200px] w-full rounded-md border p-4" role="log" aria-label="Voice command history">
+            <ScrollArea className="h-[200px] w-full rounded-md border p-4">
               <div className="space-y-2">
                 {transcript.map((text, index) => (
-                  <p key={index} className="text-sm">
-                    {text}
-                  </p>
+                  <p key={index} className="text-sm">{text}</p>
                 ))}
               </div>
             </ScrollArea>

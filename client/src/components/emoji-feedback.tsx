@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -32,7 +32,7 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
   const { data: existingFeedback } = useQuery({
     queryKey: [`/api/meetings/${meetingId}/moods`],
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
-    cacheTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
   });
 
   const feedbackMutation = useMutation({

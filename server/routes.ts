@@ -350,9 +350,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       throw new NotFoundError("Meeting");
     }
 
-    // Add cache headers
-    res.set('Cache-Control', 'public, max-age=300'); // Cache for 5 minutes
+    // Add strong cache headers
+    res.set('Cache-Control', 'public, max-age=900'); // Cache for 15 minutes
     res.set('Vary', 'Accept-Encoding');
+    res.set('ETag', Math.random().toString(36).substring(7));
 
     const moods = await storage.getMeetingMoods(meetingId);
     res.json(moods);

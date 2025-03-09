@@ -17,14 +17,21 @@ interface VoiceAssistantProps {
 // Global model cache
 let modelCache: speechCommands.SpeechCommandRecognizer | null = null;
 
+// Rate limiting configuration
+const INITIAL_DELAY = 2000; // 2 seconds
+const MAX_DELAY = 32000; // 32 seconds
+const MAX_RETRIES = 5;
+
 export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: VoiceAssistantProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("");
   const [transcript, setTranscript] = useState<string[]>([]);
   const [initError, setInitError] = useState<string | null>(null);
+  const [isRateLimited, setIsRateLimited] = useState(false);
   const retryCount = useRef(0);
-  const MAX_RETRIES = 3;
+  const lastRequestTime = useRef(0);
+  const currentDelay = useRef(INITIAL_DELAY);
 
   useEffect(() => {
     let cleanup = false;
@@ -32,6 +39,14 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
     async function initializeModel() {
       try {
+        // Check if we're rate limited
+        const now = Date.now();
+        if (isRateLimited && now - lastRequestTime.current < currentDelay.current) {
+          const remainingTime = Math.ceil((currentDelay.current - (now - lastRequestTime.current)) / 1000);
+          setLoadingStatus(`Rate limited. Waiting ${remainingTime} seconds...`);
+          return;
+        }
+
         // Step 1: Check for audio capabilities
         try {
           await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -41,16 +56,16 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
         // Step 2: Initialize TensorFlow.js
         setLoadingStatus("Initializing voice recognition...");
-
         await tf.ready();
-        const backend = tf.getBackend();
-        console.log("TensorFlow.js initialized with backend:", backend);
+        console.log("TensorFlow.js initialized with backend:", tf.getBackend());
 
-        // Step 3: Check existing model or create new one
+        // Step 3: Use cached model or create new one
         if (modelCache && !cleanup) {
           setIsModelLoaded(true);
           setLoadingStatus("");
           setInitError(null);
+          setIsRateLimited(false);
+          currentDelay.current = INITIAL_DELAY;
           return;
         }
 
@@ -71,6 +86,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           setIsModelLoaded(true);
           setLoadingStatus("");
           setInitError(null);
+          setIsRateLimited(false);
+          currentDelay.current = INITIAL_DELAY;
+          retryCount.current = 0;
+
           toast({
             title: "Voice Assistant Ready",
             description: "Voice commands are now available.",
@@ -82,20 +101,36 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         if (cleanup) return;
 
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const isRateLimit = errorMessage.includes('429') || errorMessage.includes('Too Many Requests');
 
-        if (errorMessage.includes('getUserMedia')) {
+        if (isRateLimit) {
+          setIsRateLimited(true);
+          lastRequestTime.current = Date.now();
+
+          if (retryCount.current < MAX_RETRIES) {
+            const delay = Math.min(currentDelay.current * 2, MAX_DELAY);
+            currentDelay.current = delay;
+            retryCount.current++;
+
+            const waitTime = Math.ceil(delay / 1000);
+            setInitError(`Rate limited. Retrying in ${waitTime} seconds...`);
+
+            retryTimeout = setTimeout(() => {
+              if (!cleanup) {
+                setInitError(null);
+                initializeModel();
+              }
+            }, delay);
+          } else {
+            setInitError("Too many requests. Please try again later.");
+            setIsRateLimited(false);
+            currentDelay.current = INITIAL_DELAY;
+            retryCount.current = 0;
+          }
+        } else if (errorMessage.includes('getUserMedia')) {
           setInitError('Please allow microphone access to use voice recognition');
-        } else if (retryCount.current < MAX_RETRIES) {
-          const delay = 2000 * Math.pow(2, retryCount.current);
-          setInitError(`Initialization failed. Retrying in ${Math.round(delay / 1000)} seconds...`);
-
-          retryTimeout = setTimeout(() => {
-            retryCount.current += 1;
-            setInitError(null);
-            if (!cleanup) initializeModel();
-          }, delay);
         } else {
-          setInitError('Could not initialize voice recognition. Please refresh and try again.');
+          setInitError('Could not initialize voice recognition. Please try again');
         }
 
         setLoadingStatus("");
@@ -114,13 +149,15 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         modelCache.stopListening();
       }
     };
-  }, [isActive, isRecording]);
+  }, [isActive, isRateLimited]);
 
   const toggleRecording = async () => {
-    if (!isModelLoaded || !modelCache) {
+    if (!isModelLoaded || !modelCache || isRateLimited) {
       toast({
         title: "Not Ready",
-        description: "Voice recognition is still initializing.",
+        description: isRateLimited 
+          ? "Please wait for rate limit to expire" 
+          : "Voice recognition is still initializing.",
         variant: "destructive",
       });
       return;
@@ -157,9 +194,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             }
           },
           {
+            includeSpectrogram: false,
             probabilityThreshold: 0.85,
             invokeCallbackOnNoiseAndUnknown: false,
-            overlapFactor: 0.5
+            overlapFactor: 0.3 // Reduce overlap to decrease request frequency
           }
         );
         setIsRecording(true);
@@ -171,11 +209,25 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
     } catch (error) {
       console.error('Failed to toggle recording:', error);
       setIsRecording(false);
-      toast({
-        title: "Error",
-        description: "Failed to toggle voice recognition.",
-        variant: "destructive",
-      });
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
+        setIsRateLimited(true);
+        lastRequestTime.current = Date.now();
+        currentDelay.current = Math.min(currentDelay.current * 2, MAX_DELAY);
+
+        toast({
+          title: "Rate Limited",
+          description: `Too many requests. Please wait ${Math.ceil(currentDelay.current / 1000)} seconds.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to toggle voice recognition.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -221,7 +273,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
               onClick={toggleRecording}
               variant={isRecording ? "destructive" : "default"}
               className="w-full"
-              disabled={!isModelLoaded}
+              disabled={!isModelLoaded || isRateLimited}
               aria-pressed={isRecording}
               aria-label={isRecording ? "Stop voice recognition" : "Start voice recognition"}
             >

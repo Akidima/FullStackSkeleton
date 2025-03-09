@@ -17,14 +17,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="p-6">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-8">
-            {isNotDashboard && (
-              <h1 className="text-4xl font-bold">
-                {location.startsWith("/meetings") ? "Meetings" :
-                 location === "/calendar" ? "Calendar" :
-                 location === "/analytics" ? "Analytics Dashboard" :
-                 location === "/profile/settings" ? "Settings" : ""}
-              </h1>
-            )}
+            <Link href="/">
+              <h1 className="text-2xl font-bold text-primary">MeetMate</h1>
+            </Link>
             <div className={`flex items-center gap-2 ${!isNotDashboard ? "" : ""}`}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

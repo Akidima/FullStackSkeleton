@@ -17,7 +17,7 @@ export class SlackService {
       console.log('Skipping Slack notification - Slack integration disabled');
       return;
     }
-    
+
     try {
       await slack.chat.postMessage({
         channel: defaultChannel,
@@ -26,7 +26,7 @@ export class SlackService {
             type: "header",
             text: {
               type: "plain_text",
-              text: "📅 New Meeting Scheduled",
+              text: "📅 New MeetMate Meeting Scheduled",
               emoji: true
             }
           },
@@ -63,7 +63,7 @@ export class SlackService {
       console.log('Skipping meeting summary - Slack integration disabled');
       return;
     }
-    
+
     try {
       await slack.chat.postMessage({
         channel: defaultChannel,
@@ -72,7 +72,7 @@ export class SlackService {
             type: "header",
             text: {
               type: "plain_text",
-              text: "📝 Meeting Summary",
+              text: "📝 MeetMate Meeting Summary",
               emoji: true
             }
           },
@@ -103,7 +103,7 @@ export class SlackService {
       console.log(`Skipping meeting status update - Slack integration disabled`);
       return;
     }
-    
+
     const statusEmoji = {
       scheduled: '📅',
       updated: '🔄',
@@ -118,7 +118,7 @@ export class SlackService {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: `${statusEmoji[status]} Meeting ${status}: *${meeting.title}*`
+              text: `${statusEmoji[status]} MeetMate meeting ${status}: *${meeting.title}*`
             }
           },
           {

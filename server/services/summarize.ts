@@ -5,7 +5,6 @@ let summarizationModel: any = null;
 
 async function initializeModel() {
   if (!summarizationModel) {
-    // Using BART for summarization as it's particularly good at this task
     summarizationModel = await pipeline('summarization', 'Xenova/bart-large-cnn');
   }
   return summarizationModel;
@@ -26,7 +25,6 @@ export async function generateMeetingInsights(meeting: Meeting): Promise<Meeting
   try {
     const model = await initializeModel();
 
-    // Combine relevant meeting text for summarization
     const textToSummarize = [
       meeting.description,
       meeting.agenda,
@@ -46,17 +44,14 @@ export async function generateMeetingInsights(meeting: Meeting): Promise<Meeting
       };
     }
 
-    // Generate main summary using BART
     const summaryResult = await model(textToSummarize, {
       max_length: 150,
       min_length: 40,
       temperature: 0.7,
     });
 
-    // Extract key points from the notes
     const notes = meeting.notes || '';
 
-    // Enhanced key points extraction with better pattern matching
     const keyPoints = notes.split('\n')
       .filter(line => /^[•\-\*]\s/.test(line))
       .map(line => line.replace(/^[•\-\*]\s/, '').trim());
@@ -69,7 +64,6 @@ export async function generateMeetingInsights(meeting: Meeting): Promise<Meeting
       .filter(line => /^(?:action|task|todo):?/i.test(line))
       .map(line => line.replace(/^(?:action|task|todo):?/i, '').trim());
 
-    // Enhanced sentiment analysis based on keywords
     const sentimentKeywords = {
       positive: ['agree', 'good', 'great', 'success', 'achieve', 'improve', 'resolved', 'completed', 'progress'],
       negative: ['disagree', 'bad', 'fail', 'issue', 'problem', 'concern', 'delayed', 'blocked', 'risk']
@@ -93,7 +87,7 @@ export async function generateMeetingInsights(meeting: Meeting): Promise<Meeting
       }
     };
   } catch (error) {
-    console.error('Summarization error:', error);
+    console.error('MeetMate summarization error:', error);
     throw new Error('Failed to generate meeting insights');
   }
 }
@@ -112,7 +106,7 @@ export async function batchSummarize(meetings: Meeting[]): Promise<Record<number
         summaries[meeting.id] = await generateMeetingInsights(meeting);
         break;
       } catch (error) {
-        console.error(`Failed to summarize meeting ${meeting.id}:`, error);
+        console.error(`Failed to summarize MeetMate meeting ${meeting.id}:`, error);
         if (retries === MAX_RETRIES - 1) {
           summaries[meeting.id] = {
             summary: "Failed to generate summary.",

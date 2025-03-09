@@ -7,7 +7,7 @@ export function setupWebSocket(server: Server) {
   wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', (ws) => {
-    console.log('Client connected to WebSocket');
+    console.log('Client connected to MeetMate WebSocket');
 
     // Send initial connection success message
     ws.send(JSON.stringify({
@@ -22,11 +22,11 @@ export function setupWebSocket(server: Server) {
     });
 
     ws.on('error', (error) => {
-      console.error('WebSocket client error:', error);
+      console.error('MeetMate WebSocket client error:', error);
     });
 
     ws.on('close', () => {
-      console.log('Client disconnected from WebSocket');
+      console.log('Client disconnected from MeetMate WebSocket');
     });
   });
 
@@ -34,7 +34,7 @@ export function setupWebSocket(server: Server) {
   const interval = setInterval(() => {
     wss.clients.forEach((ws: WebSocket & { isAlive?: boolean }) => {
       if (ws.isAlive === false) {
-        console.log('Terminating stale WebSocket connection');
+        console.log('Terminating stale MeetMate WebSocket connection');
         return ws.terminate();
       }
 
@@ -62,7 +62,7 @@ export function broadcastMeetingUpdate(type: 'create' | 'update' | 'delete' | 'n
       try {
         client.send(message);
       } catch (error) {
-        console.error('Error broadcasting meeting update:', error);
+        console.error('Error broadcasting MeetMate meeting update:', error);
       }
     }
   });

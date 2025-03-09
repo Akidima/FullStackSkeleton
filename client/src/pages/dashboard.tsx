@@ -89,7 +89,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-4xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground mt-2">
-            Welcome back! Here's what's happening today.
+            Welcome to MeetMate! Here's what's happening today.
           </p>
         </div>
         <div className="flex gap-4 items-center">

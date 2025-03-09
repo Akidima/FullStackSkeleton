@@ -100,5 +100,3 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
     </Card>
   );
 }
-
-export default EmojiFeedback;

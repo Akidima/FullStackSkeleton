@@ -358,9 +358,11 @@ export default function MeetingDetails() {
               </div>
 
               {/* Emoji Feedback Section */}
-              <div className="mt-6">
-                <EmojiFeedback meetingId={meetingId} />
-              </div>
+              {meetingId && (
+                <div className="mt-6">
+                  <EmojiFeedback meetingId={meetingId} />
+                </div>
+              )}
 
               {/* Agenda Section */}
               {meeting.agenda && (

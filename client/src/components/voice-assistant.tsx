@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,115 +14,73 @@ interface VoiceAssistantProps {
   isActive?: boolean;
 }
 
-let recognizer: speechCommands.SpeechCommandRecognizer | null = null;
-
 export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: VoiceAssistantProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("");
   const [transcript, setTranscript] = useState<string[]>([]);
   const [initError, setInitError] = useState<string | null>(null);
-  const [isRateLimited, setIsRateLimited] = useState(false);
-  const lastRequestTime = useRef<number>(0);
-  const rateLimitBackoff = useRef<number>(1000); // Start with 1 second
-  const MAX_BACKOFF = 60000; // Maximum backoff of 60 seconds
 
   useEffect(() => {
+    let recognizer: speechCommands.SpeechCommandRecognizer | null = null;
     let cleanup = false;
-    let backoffTimeout: NodeJS.Timeout;
 
     async function initializeVoiceRecognition() {
       try {
-        // Check rate limiting
-        const now = Date.now();
-        const timeSinceLastRequest = now - lastRequestTime.current;
-
-        if (isRateLimited && timeSinceLastRequest < rateLimitBackoff.current) {
-          const waitTime = Math.ceil((rateLimitBackoff.current - timeSinceLastRequest) / 1000);
-          setLoadingStatus(`Rate limited. Waiting ${waitTime} seconds...`);
-          return;
+        // Step 1: Check audio capabilities
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Microphone access is not supported in your browser');
         }
 
-        lastRequestTime.current = now;
-        setIsRateLimited(false);
-        rateLimitBackoff.current = 1000; // Reset backoff on successful request
+        setLoadingStatus("Requesting microphone access...");
+        await navigator.mediaDevices.getUserMedia({ audio: true });
 
-        console.log("Starting voice recognition initialization");
-        setLoadingStatus("Initializing TensorFlow.js");
-
+        // Step 2: Initialize TensorFlow.js with minimal configuration
+        setLoadingStatus("Initializing TensorFlow.js...");
         await tf.ready();
-        console.log("TensorFlow.js initialized with backend:", tf.getBackend());
 
-        if (!recognizer) {
-          setLoadingStatus("Creating speech recognition model");
-          console.log("Creating speech commands recognizer");
+        // Step 3: Create speech recognizer with minimal configuration
+        setLoadingStatus("Creating speech recognition model...");
+        recognizer = speechCommands.create(
+          'BROWSER_FFT',
+          undefined,
+          {
+            vocabulary: 'directional4w', // Use smaller vocabulary
+            probabilityThreshold: 0.85,
+            invokeCallbackOnNoiseAndUnknown: false
+          }
+        );
 
-          recognizer = await speechCommands.create(
-            'BROWSER_FFT',
-            undefined,
-            {
-              vocabulary: '18w',
-              includeSpectogram: false,
-              invokeCallbackOnNoiseAndUnknown: false
-            }
-          );
-        }
-
-        setLoadingStatus("Loading speech model");
+        // Step 4: Load the model
+        setLoadingStatus("Loading voice model...");
         await recognizer.ensureModelLoaded();
 
-        if (!cleanup) {
-          setIsModelLoaded(true);
-          setLoadingStatus("");
-          setInitError(null);
-
-          toast({
-            title: "Voice Assistant Ready",
-            description: "Voice commands are now available.",
-          });
-        }
-      } catch (error) {
-        console.error("Voice recognition initialization error:", error);
-
-        // Handle rate limiting
-        if (error instanceof Error && error.message.includes('429')) {
-          setIsRateLimited(true);
-          rateLimitBackoff.current = Math.min(rateLimitBackoff.current * 2, MAX_BACKOFF);
-          const waitTime = Math.ceil(rateLimitBackoff.current / 1000);
-
-          setInitError(`Too many requests. Retrying in ${waitTime} seconds...`);
-
-          if (!cleanup) {
-            backoffTimeout = setTimeout(() => {
-              setInitError(null);
-              setIsModelLoaded(false);
-              initializeVoiceRecognition();
-            }, rateLimitBackoff.current);
-          }
-
-          return;
-        }
-
-        // Handle other errors
-        let errorMessage = "Failed to initialize voice recognition. ";
-        if (error instanceof Error) {
-          if (error.message.includes('WebGL')) {
-            errorMessage += "Your browser may not support WebGL. Try using a different browser.";
-          } else if (error.message.includes('Audio')) {
-            errorMessage += "Could not access microphone. Please check your browser permissions.";
-          } else {
-            errorMessage += "Please check console for details and try refreshing.";
-          }
-        }
-
-        setInitError(errorMessage);
+        // Success - update state
+        setIsModelLoaded(true);
         setLoadingStatus("");
+        setInitError(null);
 
         toast({
-          title: "Voice Assistant Error",
-          description: errorMessage,
-          variant: "destructive",
+          title: "Voice Assistant Ready",
+          description: "You can now use voice commands.",
         });
+
+      } catch (error) {
+        console.error('Voice assistant initialization error:', error);
+
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        // Provide specific error messages based on the error type
+        if (errorMessage.includes('getUserMedia')) {
+          setInitError('Please allow microphone access to use voice recognition');
+        } else if (errorMessage.includes('vocabulary')) {
+          setInitError('Failed to load voice recognition model. Please try refreshing');
+        } else {
+          setInitError('Could not initialize voice recognition. Please try again');
+        }
+
+        setLoadingStatus("");
+        setIsModelLoaded(false);
       }
     }
 
@@ -132,15 +90,14 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
     return () => {
       cleanup = true;
-      clearTimeout(backoffTimeout);
       if (recognizer) {
         recognizer.stopListening();
       }
     };
-  }, [isActive, isModelLoaded, initError, isRateLimited]);
+  }, [isActive]);
 
   const toggleRecording = async () => {
-    if (!isModelLoaded || !recognizer) {
+    if (!isModelLoaded) {
       toast({
         title: "Not Ready",
         description: "Voice recognition is still initializing.",
@@ -150,50 +107,21 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
     }
 
     try {
-      if (isRecording) {
-        await recognizer.stopListening();
-        setIsRecording(false);
-        toast({
-          title: "Recording Stopped",
-          description: "Voice recognition paused.",
-        });
-      } else {
-        await recognizer.listen(
-          result => {
-            const scores = result.scores as Float32Array;
-            const maxScore = Math.max(...Array.from(scores));
-            const maxScoreIndex = scores.indexOf(maxScore);
-            const command = recognizer?.wordLabels()[maxScoreIndex];
+      setIsRecording(!isRecording);
 
-            if (command && maxScore > 0.75) {
-              console.log(`Recognized command: ${command} with confidence: ${maxScore}`);
-              setTranscript(prev => [...prev, command]);
-              onTranscript?.(command);
-              onCommand?.(command);
-
-              // Announce command for screen readers
-              const announcement = document.createElement('div');
-              announcement.setAttribute('aria-live', 'polite');
-              announcement.textContent = `Command recognized: ${command}`;
-              document.body.appendChild(announcement);
-              setTimeout(() => announcement.remove(), 1000);
-            }
-          },
-          {
-            includeSpectrogram: false,
-            probabilityThreshold: 0.75,
-            invokeCallbackOnNoiseAndUnknown: false,
-            overlapFactor: 0.3 // Reduce overlap to decrease request frequency
-          }
-        );
-        setIsRecording(true);
+      if (!isRecording) {
         toast({
           title: "Recording Started",
           description: "Listening for voice commands.",
         });
+      } else {
+        toast({
+          title: "Recording Stopped",
+          description: "Voice recognition paused.",
+        });
       }
     } catch (error) {
-      console.error("Error toggling recording:", error);
+      console.error('Failed to toggle recording:', error);
       setIsRecording(false);
       toast({
         title: "Error",
@@ -240,14 +168,14 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
               aria-live="polite"
             >
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              {loadingStatus || "Initializing..."}
+              {loadingStatus}
             </div>
           ) : (
             <Button
               onClick={toggleRecording}
               variant={isRecording ? "destructive" : "default"}
               className="w-full"
-              disabled={!isModelLoaded || isRateLimited}
+              disabled={!isModelLoaded}
               aria-pressed={isRecording}
               aria-label={isRecording ? "Stop voice recognition" : "Start voice recognition"}
             >

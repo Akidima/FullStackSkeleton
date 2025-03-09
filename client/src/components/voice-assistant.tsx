@@ -85,8 +85,9 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           await tf.ready();
 
           const recognizer = await speechCommands.create('BROWSER_FFT', undefined, {
-            enableMaxValueLimit: true,
-            maxValueLimit: 3, // Limit max API calls
+            invokeCallbackOnNoiseAndUnknown: false,
+            overlapFactor: 0.5,
+            probabilityThreshold: 0.85
           });
           await recognizer.ensureModelLoaded();
           globalRecognizer = recognizer;

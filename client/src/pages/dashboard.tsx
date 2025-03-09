@@ -1,30 +1,44 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Calendar, CheckCircle, Clock, AlertCircle } from "lucide-react";
-import { Meeting } from "@shared/schema";
+import { Meeting, Task, Note } from "@shared/schema"; // Add proper types
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { VoiceAssistant } from "@/components/voice-assistant";
-import { useState } from "react";
+
+interface TaskType {
+  id: number;
+  title: string;
+  completed: boolean;
+  priority: "high" | "medium" | "low";
+}
+
+interface NoteType {
+  id: number;
+  meetingTitle: string;
+  content: string;
+  createdAt: string;
+}
 
 export default function Dashboard() {
   // Add state for active section
   const [activeSection, setActiveSection] = useState<string>("meetings");
 
-  // Existing queries
+  // Existing queries with proper typing
   const { data: meetings = [], isLoading: meetingsLoading } = useQuery<Meeting[]>({
     queryKey: ["/api/meetings"],
   });
 
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery<TaskType[]>({
     queryKey: ["/api/tasks"],
   });
 
-  const { data: recentNotes = [], isLoading: notesLoading } = useQuery({
+  const { data: recentNotes = [], isLoading: notesLoading } = useQuery<NoteType[]>({
     queryKey: ["/api/meetings/notes"],
   });
 
@@ -36,7 +50,7 @@ export default function Dashboard() {
   const completedTasks = tasks.filter(t => t.completed).length;
   const completionRate = tasks.length ? (completedTasks / tasks.length) * 100 : 0;
 
-  const priorityColors = {
+  const priorityColors: Record<string, string> = {
     high: "bg-red-500",
     medium: "bg-yellow-500",
     low: "bg-green-500",
@@ -224,7 +238,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="space-y-4">
               {Object.entries(
-                tasks.reduce((acc, task) => {
+                tasks.reduce<Record<string, number>>((acc, task) => {
                   acc[task.priority] = (acc[task.priority] || 0) + 1;
                   return acc;
                 }, {})

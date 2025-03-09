@@ -33,6 +33,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { showErrorToast } from "@/lib/error-toast";
+import { EmojiFeedback } from "@/components/emoji-feedback"; // Updated import with correct casing
 
 // Rate limiting configuration
 const RETRY_DELAY = 1000; // Start with 1 second
@@ -354,6 +355,11 @@ export default function MeetingDetails() {
                     {meeting.participants.length} participant{meeting.participants.length !== 1 ? 's' : ''}
                   </div>
                 )}
+              </div>
+
+              {/* Emoji Feedback Section */}
+              <div className="mt-6">
+                <EmojiFeedback meetingId={meetingId} />
               </div>
 
               {/* Agenda Section */}

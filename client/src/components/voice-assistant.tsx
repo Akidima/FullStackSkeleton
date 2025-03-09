@@ -7,6 +7,7 @@ import { Mic, MicOff, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import * as tf from '@tensorflow/tfjs';
 import * as speechCommands from '@tensorflow-models/speech-commands';
+import { useWebSocketManager } from "@/hooks/use-websocket-manager";
 
 interface VoiceAssistantProps {
   onCommand?: (command: string) => void;
@@ -31,6 +32,21 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const MAX_RETRIES = 5; // Increased max retries
   const INITIAL_RETRY_DELAY = 30000; // Increased to 30 seconds initial delay
   const MAX_RETRY_DELAY = 300000; // Increased to 5 minutes maximum delay
+
+  // Use our new WebSocket manager
+  const wsManager = useWebSocketManager({
+    onMessage: (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'voice_command_processed') {
+          // Handle processed voice command
+          onCommand?.(data.command);
+        }
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
+      }
+    }
+  });
 
   useEffect(() => {
     let cleanup = false;
@@ -99,8 +115,18 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
                 setTranscript(prev => [...prev, command]);
                 onTranscript?.(command);
 
-                if (['go', 'stop', 'yes', 'no'].includes(command)) {
-                  onCommand?.(command);
+                // Send command through WebSocket if connected
+                if (wsManager.isConnected) {
+                  wsManager.send({
+                    type: 'voice_command',
+                    command,
+                    confidence: maxScore
+                  });
+                } else {
+                  // Fallback to direct handler if WebSocket is not available
+                  if (['go', 'stop', 'yes', 'no'].includes(command)) {
+                    onCommand?.(command);
+                  }
                 }
               }
             } finally {
@@ -112,10 +138,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             await globalRecognizer.listen(
               processResult,
               {
-                probabilityThreshold: 0.85, // Increased threshold
+                probabilityThreshold: 0.85,
                 invokeCallbackOnNoiseAndUnknown: false,
-                overlapFactor: 0.75, // Reduced overlap to lower processing frequency
-                includeSpectrogram: false // Disable spectrogram to reduce processing
+                overlapFactor: 0.75,
+                includeSpectrogram: false
               }
             );
           }
@@ -186,7 +212,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         globalRecognizer.stopListening();
       }
     };
-  }, [isActive, isModelLoaded, initError, retryCount, onCommand, onTranscript]);
+  }, [isActive, isModelLoaded, initError, retryCount, onCommand, onTranscript, wsManager]);
 
   const startRecording = async () => {
     if (!isModelLoaded || !globalRecognizer) {
@@ -222,6 +248,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         title: "Voice Recognition Stopped",
         description: "Voice command recognition has been paused.",
       });
+      globalRecognizer.stopListening();
     }
   };
 
@@ -302,6 +329,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             className="w-full"
             aria-pressed={isRecording}
             aria-label={isRecording ? "Stop voice recognition" : "Start voice recognition"}
+            disabled={!isModelLoaded || initError !== null}
           >
             {isRecording ? (
               <>

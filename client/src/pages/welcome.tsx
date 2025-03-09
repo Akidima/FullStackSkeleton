@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { PreferenceWizard } from "@/components/preference-wizard";
-import { VoiceAssistant } from "@/components/voice-assistant";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -23,24 +22,6 @@ export default function Welcome() {
       navigate('/dashboard');
     }
   }, [preferences, navigate]);
-
-  const handleVoiceCommand = (command: string) => {
-    // Handle voice commands for navigation and form interactions
-    switch (command) {
-      case 'go':
-        // Progress to next step in wizard
-        break;
-      case 'stop':
-        // Pause current action
-        break;
-      case 'yes':
-        // Confirm current selection
-        break;
-      case 'no':
-        // Reject current selection
-        break;
-    }
-  };
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -92,10 +73,6 @@ export default function Welcome() {
           transition={{ delay: 0.6, duration: 0.5 }}
           className="space-y-6"
         >
-          <VoiceAssistant 
-            isActive={true}
-            onCommand={handleVoiceCommand}
-          />
           <PreferenceWizard />
         </motion.div>
       </motion.div>

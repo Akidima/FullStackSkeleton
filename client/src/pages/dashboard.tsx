@@ -8,19 +8,22 @@ import { Meeting } from "@shared/schema";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+import { VoiceAssistant } from "@/components/voice-assistant";
+import { useState } from "react";
 
 export default function Dashboard() {
-  // Fetch meetings
+  // Add state for active section
+  const [activeSection, setActiveSection] = useState<string>("meetings");
+
+  // Existing queries
   const { data: meetings = [], isLoading: meetingsLoading } = useQuery<Meeting[]>({
     queryKey: ["/api/meetings"],
   });
 
-  // Fetch tasks with progress
   const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ["/api/tasks"],
   });
 
-  // Fetch recent meeting notes
   const { data: recentNotes = [], isLoading: notesLoading } = useQuery({
     queryKey: ["/api/meetings/notes"],
   });
@@ -39,6 +42,35 @@ export default function Dashboard() {
     low: "bg-green-500",
   };
 
+  // Handle voice commands
+  const handleVoiceCommand = (command: string) => {
+    switch (command) {
+      case 'meetings':
+        setActiveSection('meetings');
+        toast({ title: "Navigated to Meetings" });
+        break;
+      case 'tasks':
+        setActiveSection('tasks');
+        toast({ title: "Navigated to Tasks" });
+        break;
+      case 'notes':
+        setActiveSection('notes');
+        toast({ title: "Navigated to Notes" });
+        break;
+      case 'new':
+        window.location.href = '/meetings/new';
+        break;
+      case 'summary':
+        setActiveSection('summary');
+        toast({ title: "Showing Task Summary" });
+        break;
+      case 'yes':
+      case 'no':
+        // Handle confirmations
+        break;
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -49,12 +81,18 @@ export default function Dashboard() {
             Welcome back! Here's what's happening today.
           </p>
         </div>
-        <Link href="/meetings/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Schedule Meeting
-          </Button>
-        </Link>
+        <div className="flex gap-4 items-center">
+          <VoiceAssistant
+            isActive={true}
+            onCommand={handleVoiceCommand}
+          />
+          <Link href="/meetings/new">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Schedule Meeting
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Main Grid */}

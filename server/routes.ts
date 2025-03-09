@@ -24,15 +24,17 @@ import {meetingOptimizer} from "./services/ai-optimizer";
 
 // Add new rate limiter for sentiment endpoints
 const sentimentLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minute window
-  max: 100, // Allow 100 requests per window
+  windowMs: 60 * 60 * 1000, // 1 hour window (increased from 15 minutes)
+  max: 500, // Allow 500 requests per window (increased from 100)
   message: {
     status: 'error',
     message: 'Too many sentiment requests. Please try again in a few minutes.',
     retryAfter: 'windowMs'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skipFailedRequests: true, // Don't count failed requests
+  skipSuccessfulRequests: false // Count successful requests
 });
 
 // Add these rate limiter configurations at the top of the file
@@ -505,7 +507,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     res.status(201).json(preferences);
   }));
-
 
   // Add unified settings endpoint after existing user routes
   app.get("/api/users/settings", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {

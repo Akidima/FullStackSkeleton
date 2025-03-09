@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQueryClient, useMutation } from '@tanstack/react-query';
+import { useState, useCallback } from 'react';
+import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -28,9 +28,23 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Query for existing feedback with caching
+  const { data: existingFeedback } = useQuery({
+    queryKey: [`/api/meetings/${meetingId}/moods`],
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    cacheTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+  });
+
   const feedbackMutation = useMutation({
     mutationFn: async (sentiment: string) => {
-      const response = await fetch(`/api/meetings/${meetingId}/sentiment`, {
+      // Check if we've already submitted this feedback recently
+      const cacheKey = `feedback_${meetingId}_${sentiment}`;
+      const cachedResponse = sessionStorage.getItem(cacheKey);
+      if (cachedResponse) {
+        return JSON.parse(cachedResponse);
+      }
+
+      const response = await fetch(`/api/meetings/${meetingId}/moods`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -47,10 +61,15 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
         throw new Error('Failed to submit feedback');
       }
 
-      return response.json();
+      const data = await response.json();
+
+      // Cache the successful response
+      sessionStorage.setItem(cacheKey, JSON.stringify(data));
+
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/meetings', meetingId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/meetings/${meetingId}/moods`] });
       toast({
         title: 'Feedback submitted',
         description: 'Thank you for your feedback!',
@@ -61,8 +80,8 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: isRateLimit 
-          ? error.message 
+        description: isRateLimit
+          ? error.message
           : 'Failed to submit feedback. Please try again.',
       });
     },
@@ -74,13 +93,18 @@ export function EmojiFeedback({ meetingId }: EmojiFeedbackProps) {
       // Retry up to 3 times for other errors
       return failureCount < 3;
     },
-    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 10000), // Exponential backoff
+    retryDelay: (attemptIndex) => Math.min(2000 * Math.pow(2, attemptIndex), 30000), // Exponential backoff with higher initial delay
   });
 
-  const handleEmojiSelect = (value: string) => {
+  const handleEmojiSelect = useCallback((value: string) => {
+    // Prevent duplicate submissions
+    if (selectedEmoji === value) {
+      return;
+    }
+
     setSelectedEmoji(value);
     feedbackMutation.mutate(value);
-  };
+  }, [selectedEmoji, feedbackMutation]);
 
   return (
     <Card>

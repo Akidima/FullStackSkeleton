@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,16 +22,34 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [loadingStatus, setLoadingStatus] = useState("");
   const [transcript, setTranscript] = useState<string[]>([]);
   const [initError, setInitError] = useState<string | null>(null);
+  const [isRateLimited, setIsRateLimited] = useState(false);
+  const lastRequestTime = useRef<number>(0);
+  const rateLimitBackoff = useRef<number>(1000); // Start with 1 second
+  const MAX_BACKOFF = 60000; // Maximum backoff of 60 seconds
 
   useEffect(() => {
     let cleanup = false;
+    let backoffTimeout: NodeJS.Timeout;
 
     async function initializeVoiceRecognition() {
       try {
+        // Check rate limiting
+        const now = Date.now();
+        const timeSinceLastRequest = now - lastRequestTime.current;
+
+        if (isRateLimited && timeSinceLastRequest < rateLimitBackoff.current) {
+          const waitTime = Math.ceil((rateLimitBackoff.current - timeSinceLastRequest) / 1000);
+          setLoadingStatus(`Rate limited. Waiting ${waitTime} seconds...`);
+          return;
+        }
+
+        lastRequestTime.current = now;
+        setIsRateLimited(false);
+        rateLimitBackoff.current = 1000; // Reset backoff on successful request
+
         console.log("Starting voice recognition initialization");
         setLoadingStatus("Initializing TensorFlow.js");
 
-        // First try to initialize TensorFlow.js without specifying a backend
         await tf.ready();
         console.log("TensorFlow.js initialized with backend:", tf.getBackend());
 
@@ -51,9 +69,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         }
 
         setLoadingStatus("Loading speech model");
-        console.log("Loading speech model");
         await recognizer.ensureModelLoaded();
-        console.log("Speech model loaded successfully");
 
         if (!cleanup) {
           setIsModelLoaded(true);
@@ -68,7 +84,26 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
       } catch (error) {
         console.error("Voice recognition initialization error:", error);
 
-        // Try to determine the specific error
+        // Handle rate limiting
+        if (error instanceof Error && error.message.includes('429')) {
+          setIsRateLimited(true);
+          rateLimitBackoff.current = Math.min(rateLimitBackoff.current * 2, MAX_BACKOFF);
+          const waitTime = Math.ceil(rateLimitBackoff.current / 1000);
+
+          setInitError(`Too many requests. Retrying in ${waitTime} seconds...`);
+
+          if (!cleanup) {
+            backoffTimeout = setTimeout(() => {
+              setInitError(null);
+              setIsModelLoaded(false);
+              initializeVoiceRecognition();
+            }, rateLimitBackoff.current);
+          }
+
+          return;
+        }
+
+        // Handle other errors
         let errorMessage = "Failed to initialize voice recognition. ";
         if (error instanceof Error) {
           if (error.message.includes('WebGL')) {
@@ -97,11 +132,12 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
     return () => {
       cleanup = true;
+      clearTimeout(backoffTimeout);
       if (recognizer) {
         recognizer.stopListening();
       }
     };
-  }, [isActive]);
+  }, [isActive, isModelLoaded, initError, isRateLimited]);
 
   const toggleRecording = async () => {
     if (!isModelLoaded || !recognizer) {
@@ -146,7 +182,8 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           {
             includeSpectrogram: false,
             probabilityThreshold: 0.75,
-            invokeCallbackOnNoiseAndUnknown: false
+            invokeCallbackOnNoiseAndUnknown: false,
+            overlapFactor: 0.3 // Reduce overlap to decrease request frequency
           }
         );
         setIsRecording(true);
@@ -210,14 +247,9 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
               onClick={toggleRecording}
               variant={isRecording ? "destructive" : "default"}
               className="w-full"
+              disabled={!isModelLoaded || isRateLimited}
               aria-pressed={isRecording}
               aria-label={isRecording ? "Stop voice recognition" : "Start voice recognition"}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  toggleRecording();
-                }
-              }}
             >
               {isRecording ? (
                 <>

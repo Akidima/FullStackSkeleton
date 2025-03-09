@@ -27,10 +27,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [initError, setInitError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const lastRequestTime = useRef<number>(0);
-  const MIN_REQUEST_INTERVAL = 5000; // Increase to 5 seconds between requests
+  const MIN_REQUEST_INTERVAL = 5000; // 5 seconds between requests
   const MAX_RETRIES = 3;
-  const INITIAL_RETRY_DELAY = 10000; // Increase initial retry delay to 10 seconds
-  const MAX_RETRY_DELAY = 60000; // Maximum delay of 1 minute
+  const INITIAL_RETRY_DELAY = 10000; // 10 seconds
+  const MAX_RETRY_DELAY = 60000; // 1 minute
 
   useEffect(() => {
     let cleanup = false;
@@ -38,7 +38,6 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
     const initializeRecognizer = async () => {
       try {
-        // Check if we need to wait before making another request
         const now = Date.now();
         const timeSinceLastRequest = now - lastRequestTime.current;
         if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
@@ -46,18 +45,14 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         }
         lastRequestTime.current = Date.now();
 
-        // Use cached recognizer if available
         if (globalRecognizer) {
-          console.log('Using cached speech command recognizer');
           setIsModelLoaded(true);
           setLoadingStatus("");
           setInitError(null);
           return;
         }
 
-        // Use cached loading promise if one is in progress
         if (modelLoadPromise) {
-          console.log('Waiting for existing model load to complete');
           await modelLoadPromise;
           if (globalRecognizer) {
             setIsModelLoaded(true);
@@ -67,24 +62,14 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           }
         }
 
-        console.log('Starting voice assistant initialization...');
-        setLoadingStatus("Initializing TensorFlow.js...");
+        setLoadingStatus("Initializing voice recognition system...");
 
         modelLoadPromise = (async () => {
-          // Initialize TensorFlow.js with WebGL backend for better performance
           await tf.setBackend('webgl');
           await tf.ready();
-          console.log('TensorFlow.js initialized');
 
-          setLoadingStatus("Creating speech command recognizer...");
-          const recognizer = speechCommands.create('BROWSER_FFT');
-          console.log('Speech command recognizer created');
-
-          setLoadingStatus("Loading speech recognition model...");
+          const recognizer = await speechCommands.create('BROWSER_FFT');
           await recognizer.ensureModelLoaded();
-          console.log('Model loaded successfully');
-
-          // Store in global cache
           globalRecognizer = recognizer;
         })();
 
@@ -92,7 +77,6 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         modelLoadPromise = null;
 
         if (!cleanup) {
-          // Configure the recognizer with rate limiting
           const processResult = (result: speechCommands.SpeechCommandRecognizerResult) => {
             const now = Date.now();
             if (now - lastRequestTime.current < MIN_REQUEST_INTERVAL) return;
@@ -104,7 +88,6 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             const command = globalRecognizer?.wordLabels()[maxScoreIndex];
 
             if (command && maxScore > 0.75) {
-              console.log('Recognized command:', command, 'with score:', maxScore);
               setTranscript(prev => [...prev, command]);
               onTranscript?.(command);
 
@@ -114,38 +97,37 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             }
           };
 
-          await globalRecognizer?.listen(
-            processResult,
-            {
-              probabilityThreshold: 0.75,
-              invokeCallbackOnNoiseAndUnknown: false,
-              overlapFactor: 0.9 // Increase overlap factor to reduce processing frequency even more
-            }
-          );
+          if (globalRecognizer) {
+            await globalRecognizer.listen(
+              processResult,
+              {
+                probabilityThreshold: 0.75,
+                invokeCallbackOnNoiseAndUnknown: false,
+                overlapFactor: 0.9
+              }
+            );
+          }
 
           setIsModelLoaded(true);
           setLoadingStatus("");
           setInitError(null);
           setRetryCount(0);
-          console.log('Voice assistant fully initialized');
           toast({
             title: "Voice Assistant Ready",
-            description: "You can now use voice commands",
+            description: "Voice commands are now available. You can use commands like 'go', 'stop', 'yes', and 'no'.",
           });
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Failed to initialize voice assistant:', error);
 
-        // Clear caches on error
         globalRecognizer = null;
         modelLoadPromise = null;
 
         if (!cleanup) {
           const shouldRetry = retryCount < MAX_RETRIES;
-          const isRateLimitError = error.toString().includes('429') || 
-                                 error.toString().includes('Too Many Requests');
+          const isRateLimitError = error instanceof Error && 
+            (error.message.includes('429') || error.message.includes('Too Many Requests'));
 
-          // Calculate exponential backoff with maximum delay
           const backoffDelay = Math.min(
             INITIAL_RETRY_DELAY * Math.pow(2, retryCount),
             MAX_RETRY_DELAY
@@ -153,10 +135,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
           setInitError(
             isRateLimitError
-              ? `Too many requests. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
+              ? `Voice recognition temporarily unavailable. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
               : shouldRetry 
-                ? `Initialization failed. Retrying in ${Math.round(backoffDelay / 1000)} seconds...` 
-                : 'Failed to initialize voice assistant. Please try again later.'
+                ? `Voice assistant initialization failed. Retrying in ${Math.round(backoffDelay / 1000)} seconds...` 
+                : 'Unable to start voice recognition. Please try again later.'
           );
           setLoadingStatus("");
 
@@ -169,12 +151,12 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           }
 
           toast({
-            title: "Error",
+            title: "Voice Assistant Error",
             description: isRateLimitError
-              ? `Too many requests. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
+              ? `Service temporarily unavailable. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
               : shouldRetry 
-                ? "Failed to initialize voice assistant. Retrying..." 
-                : "Too many requests. Please try again later.",
+                ? "Voice recognition failed to start. Retrying..." 
+                : "Voice recognition unavailable. Please try again later.",
             variant: "destructive",
           });
         }
@@ -197,8 +179,8 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const startRecording = async () => {
     if (!isModelLoaded || !globalRecognizer) {
       toast({
-        title: "Error",
-        description: "Voice assistant is not ready yet. Please wait.",
+        title: "Voice Assistant Not Ready",
+        description: "Please wait for the voice recognition system to initialize.",
         variant: "destructive",
       });
       return;
@@ -207,14 +189,14 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
     try {
       setIsRecording(true);
       toast({
-        title: "Recording Started",
-        description: "Listening for voice commands...",
+        title: "Voice Recognition Active",
+        description: "Listening for voice commands: 'go', 'stop', 'yes', 'no'",
       });
     } catch (error) {
-      console.error('Failed to start recording:', error);
+      console.error('Failed to start voice recognition:', error);
       toast({
         title: "Error",
-        description: "Failed to start recording. Please try again.",
+        description: "Could not start voice recognition. Please try again.",
         variant: "destructive",
       });
       setIsRecording(false);
@@ -225,8 +207,8 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
     if (globalRecognizer) {
       setIsRecording(false);
       toast({
-        title: "Recording Stopped",
-        description: "Processing complete.",
+        title: "Voice Recognition Stopped",
+        description: "Voice command recognition has been paused.",
       });
     }
   };
@@ -235,10 +217,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
   if (initError) {
     return (
-      <Card>
+      <Card role="alert" aria-live="polite">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-destructive">
-            <Mic className="h-5 w-5" />
+            <Mic className="h-5 w-5" aria-hidden="true" />
             Voice Assistant Error
           </CardTitle>
         </CardHeader>
@@ -253,6 +235,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
               }}
               variant="outline"
               className="mt-4"
+              aria-label="Retry voice assistant initialization"
             >
               Try Again
             </Button>
@@ -264,16 +247,16 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
   if (!isModelLoaded) {
     return (
-      <Card>
+      <Card role="status" aria-live="polite">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin" />
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
             Initializing Voice Assistant
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">
-            {loadingStatus || "Please wait..."}
+            {loadingStatus || "Please wait while the voice recognition system initializes..."}
             {retryCount > 0 && ` (Attempt ${retryCount + 1}/${MAX_RETRIES})`}
           </p>
         </CardContent>
@@ -282,18 +265,18 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   }
 
   return (
-    <Card>
+    <Card role="region" aria-label="Voice Assistant Controls">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {isRecording ? (
-            <Mic className="h-5 w-5 text-red-500 animate-pulse" />
+            <Mic className="h-5 w-5 text-red-500 animate-pulse" aria-hidden="true" />
           ) : (
-            <Mic className="h-5 w-5" />
+            <Mic className="h-5 w-5" aria-hidden="true" />
           )}
           Voice Assistant
           {isProcessing && (
             <Badge variant="secondary" className="ml-2">
-              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              <Loader2 className="h-3 w-3 animate-spin mr-1" aria-hidden="true" />
               Processing
             </Badge>
           )}
@@ -305,22 +288,24 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             onClick={isRecording ? stopRecording : startRecording}
             variant={isRecording ? "destructive" : "default"}
             className="w-full"
+            aria-pressed={isRecording}
+            aria-label={isRecording ? "Stop voice recognition" : "Start voice recognition"}
           >
             {isRecording ? (
               <>
-                <MicOff className="h-4 w-4 mr-2" />
+                <MicOff className="h-4 w-4 mr-2" aria-hidden="true" />
                 Stop Recording
               </>
             ) : (
               <>
-                <Mic className="h-4 w-4 mr-2" />
+                <Mic className="h-4 w-4 mr-2" aria-hidden="true" />
                 Start Recording
               </>
             )}
           </Button>
 
           {transcript.length > 0 && (
-            <ScrollArea className="h-[200px] w-full rounded-md border p-4">
+            <ScrollArea className="h-[200px] w-full rounded-md border p-4" role="log" aria-label="Voice command history">
               <div className="space-y-2">
                 {transcript.map((text, index) => (
                   <p key={index} className="text-sm">

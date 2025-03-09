@@ -31,7 +31,7 @@ export default function Landing() {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
               <Link href="/">
-                <span className="text-2xl font-bold text-primary">MeetFlow</span>
+                <span className="text-2xl font-bold text-primary">MeetMate</span>
               </Link>
             </div>
             <nav className="hidden md:flex items-center gap-8">

@@ -28,43 +28,68 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
     async function initializeVoiceRecognition() {
       try {
-        setLoadingStatus("Initializing voice recognition...");
-        console.log("Starting voice recognition initialization");
+        // Step 1: Initialize TensorFlow.js
+        setLoadingStatus("Initializing TensorFlow.js...");
+        console.log("Step 1: Initializing TensorFlow.js");
 
-        // Initialize TensorFlow.js
+        // Force WebGL backend initialization
+        await tf.setBackend('webgl');
         await tf.ready();
-        console.log("TensorFlow.js initialized");
 
-        // Create recognizer
-        if (!recognizer) {
-          recognizer = await speechCommands.create('BROWSER_FFT', undefined, {
-            vocabulary: '18w',
-            probabilityThreshold: 0.75
-          });
-          console.log("Speech recognizer created");
+        const backend = tf.getBackend();
+        console.log("TensorFlow.js initialized with backend:", backend);
+
+        if (backend !== 'webgl') {
+          throw new Error('WebGL backend initialization failed');
         }
 
-        // Load the model
-        await recognizer.ensureModelLoaded();
-        console.log("Model loaded successfully");
+        // Step 2: Create speech commands recognizer
+        setLoadingStatus("Creating speech recognition model...");
+        console.log("Step 2: Creating speech commands recognizer");
 
+        if (!recognizer) {
+          recognizer = await speechCommands.create(
+            'BROWSER_FFT',
+            undefined,
+            {
+              probabilityThreshold: 0.75,
+              invokeCallbackOnNoiseAndUnknown: false,
+              overlapFactor: 0.5
+            }
+          );
+        }
+
+        // Step 3: Load the model
+        setLoadingStatus("Loading speech recognition model...");
+        console.log("Step 3: Loading speech recognition model");
+        await recognizer.ensureModelLoaded();
+
+        // Step 4: Setup is complete
         if (!cleanup) {
           setIsModelLoaded(true);
           setLoadingStatus("");
           setInitError(null);
 
+          console.log("Voice recognition initialized successfully");
           toast({
             title: "Voice Assistant Ready",
             description: "Voice commands are now available.",
           });
         }
       } catch (error) {
-        console.error("Voice recognition initialization failed:", error);
-        setInitError("Failed to initialize voice recognition. Please refresh to try again.");
+        console.error("Voice recognition initialization error:", error);
+
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const userMessage = errorMessage.includes('WebGL')
+          ? "Your browser may not support WebGL. Please try using a modern browser."
+          : "Failed to initialize voice recognition. Please try refreshing the page.";
+
+        setInitError(userMessage);
         setLoadingStatus("");
+
         toast({
           title: "Voice Assistant Error",
-          description: "Could not initialize voice recognition.",
+          description: userMessage,
           variant: "destructive",
         });
       }
@@ -80,7 +105,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         recognizer.stopListening();
       }
     };
-  }, [isActive, isModelLoaded, initError]);
+  }, [isActive]);
 
   const toggleRecording = async () => {
     if (!isModelLoaded || !recognizer) {
@@ -109,7 +134,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             const command = recognizer?.wordLabels()[maxScoreIndex];
 
             if (command && maxScore > 0.75) {
-              console.log(`Recognized command: ${command} with score: ${maxScore}`);
+              console.log(`Recognized command: ${command} with confidence: ${maxScore}`);
               setTranscript(prev => [...prev, command]);
               onTranscript?.(command);
               onCommand?.(command);
@@ -124,7 +149,8 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           },
           {
             includeSpectrogram: false,
-            probabilityThreshold: 0.75
+            probabilityThreshold: 0.75,
+            overlapFactor: 0.5
           }
         );
         setIsRecording(true);
@@ -159,7 +185,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           {!isModelLoaded && !initError && (
             <Badge variant="secondary" className="ml-2">
               <Loader2 className="h-3 w-3 animate-spin mr-1" aria-hidden="true" />
-              Initializing
+              {loadingStatus || "Initializing"}
             </Badge>
           )}
         </CardTitle>

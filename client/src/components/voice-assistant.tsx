@@ -27,10 +27,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [initError, setInitError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const lastRequestTime = useRef<number>(0);
-  const MIN_REQUEST_INTERVAL = 5000; // 5 seconds between requests
-  const MAX_RETRIES = 3;
-  const INITIAL_RETRY_DELAY = 10000; // 10 seconds
-  const MAX_RETRY_DELAY = 60000; // 1 minute
+  const MIN_REQUEST_INTERVAL = 10000; // Increased to 10 seconds between requests
+  const MAX_RETRIES = 5; // Increased max retries
+  const INITIAL_RETRY_DELAY = 30000; // Increased to 30 seconds initial delay
+  const MAX_RETRY_DELAY = 300000; // Increased to 5 minutes maximum delay
 
   useEffect(() => {
     let cleanup = false;
@@ -68,7 +68,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           await tf.setBackend('webgl');
           await tf.ready();
 
-          const recognizer = await speechCommands.create('BROWSER_FFT');
+          const recognizer = await speechCommands.create('BROWSER_FFT', undefined, {
+            enableMaxValueLimit: true,
+            maxValueLimit: 3, // Limit max API calls
+          });
           await recognizer.ensureModelLoaded();
           globalRecognizer = recognizer;
         })();
@@ -77,23 +80,31 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         modelLoadPromise = null;
 
         if (!cleanup) {
-          const processResult = (result: speechCommands.SpeechCommandRecognizerResult) => {
+          const processResult = async (result: speechCommands.SpeechCommandRecognizerResult) => {
             const now = Date.now();
-            if (now - lastRequestTime.current < MIN_REQUEST_INTERVAL) return;
-            lastRequestTime.current = now;
+            if (now - lastRequestTime.current < MIN_REQUEST_INTERVAL) {
+              return;
+            }
 
-            const scores = result.scores as Float32Array;
-            const maxScore = Math.max(...Array.from(scores));
-            const maxScoreIndex = scores.indexOf(maxScore);
-            const command = globalRecognizer?.wordLabels()[maxScoreIndex];
+            try {
+              lastRequestTime.current = now;
+              setIsProcessing(true);
 
-            if (command && maxScore > 0.75) {
-              setTranscript(prev => [...prev, command]);
-              onTranscript?.(command);
+              const scores = result.scores as Float32Array;
+              const maxScore = Math.max(...Array.from(scores));
+              const maxScoreIndex = scores.indexOf(maxScore);
+              const command = globalRecognizer?.wordLabels()[maxScoreIndex];
 
-              if (['go', 'stop', 'yes', 'no'].includes(command)) {
-                onCommand?.(command);
+              if (command && maxScore > 0.85) { // Increased confidence threshold
+                setTranscript(prev => [...prev, command]);
+                onTranscript?.(command);
+
+                if (['go', 'stop', 'yes', 'no'].includes(command)) {
+                  onCommand?.(command);
+                }
               }
+            } finally {
+              setIsProcessing(false);
             }
           };
 
@@ -101,9 +112,10 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             await globalRecognizer.listen(
               processResult,
               {
-                probabilityThreshold: 0.75,
+                probabilityThreshold: 0.85, // Increased threshold
                 invokeCallbackOnNoiseAndUnknown: false,
-                overlapFactor: 0.9
+                overlapFactor: 0.75, // Reduced overlap to lower processing frequency
+                includeSpectrogram: false // Disable spectrogram to reduce processing
               }
             );
           }
@@ -135,7 +147,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
           setInitError(
             isRateLimitError
-              ? `Voice recognition temporarily unavailable. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
+              ? `Voice recognition temporarily unavailable due to high demand. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
               : shouldRetry 
                 ? `Voice assistant initialization failed. Retrying in ${Math.round(backoffDelay / 1000)} seconds...` 
                 : 'Unable to start voice recognition. Please try again later.'
@@ -153,7 +165,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           toast({
             title: "Voice Assistant Error",
             description: isRateLimitError
-              ? `Service temporarily unavailable. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
+              ? `Service is experiencing high demand. Will retry in ${Math.round(backoffDelay / 1000)} seconds.`
               : shouldRetry 
                 ? "Voice recognition failed to start. Retrying..." 
                 : "Voice recognition unavailable. Please try again later.",

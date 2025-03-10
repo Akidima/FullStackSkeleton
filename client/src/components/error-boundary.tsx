@@ -4,6 +4,7 @@ import { AlertCircle } from "lucide-react";
 
 interface Props {
   children: ReactNode;
+  fallback?: ReactNode;
 }
 
 interface State {
@@ -22,6 +23,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
       return (
         <div className="min-h-screen flex items-center justify-center bg-background p-6">
           <div className="text-center space-y-4">
@@ -31,7 +36,10 @@ export class ErrorBoundary extends Component<Props, State> {
               {this.state.error?.message || "An unexpected error occurred"}
             </p>
             <Button 
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                this.setState({ hasError: false });
+                window.location.reload();
+              }}
               variant="outline"
             >
               Try Again

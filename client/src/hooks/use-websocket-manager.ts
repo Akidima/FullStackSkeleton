@@ -16,7 +16,7 @@ interface WebSocketState {
 }
 
 export function useWebSocketManager({
-  url = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`,
+  url = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/app`,
   reconnectAttempts = 5,
   reconnectInterval = 5000,
   onMessage
@@ -47,7 +47,8 @@ export function useWebSocketManager({
         }));
         toast({
           title: "Connected",
-          description: "WebSocket connection established",
+          description: "Real-time updates enabled",
+          variant: "default"
         });
       };
 
@@ -74,12 +75,21 @@ export function useWebSocketManager({
 
           console.log(`WebSocket: Reconnecting in ${backoffDelay}ms (attempt ${state.connectionAttempts + 1})`);
           reconnectTimeoutRef.current = setTimeout(connect, backoffDelay);
+
+          // Only show toast for first attempt
+          if (state.connectionAttempts === 0) {
+            toast({
+              title: "Connection Lost",
+              description: "Attempting to reconnect...",
+              variant: "default"
+            });
+          }
         } else {
           console.log('WebSocket: Max reconnection attempts reached');
           toast({
             title: "Connection Failed",
-            description: "Unable to establish WebSocket connection after multiple attempts",
-            variant: "destructive"
+            description: "Unable to establish connection. The app will continue with limited functionality.",
+            variant: "default"
           });
         }
       };
@@ -93,8 +103,13 @@ export function useWebSocketManager({
       };
 
       ws.onmessage = (event) => {
-        console.log('WebSocket: Message received', event.data);
-        onMessage?.(event);
+        try {
+          const data = JSON.parse(event.data);
+          console.log('WebSocket: Message received', data);
+          onMessage?.(event);
+        } catch (error) {
+          console.error('WebSocket: Failed to parse message', error);
+        }
       };
 
       wsRef.current = ws;
@@ -130,8 +145,8 @@ export function useWebSocketManager({
       console.warn('WebSocket: Cannot send message - connection not open');
       toast({
         title: "Warning",
-        description: "Cannot send message - connection not open",
-        variant: "destructive"
+        description: "Some real-time features may be unavailable",
+        variant: "default"
       });
     }
   }, []);

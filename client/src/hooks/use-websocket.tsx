@@ -42,7 +42,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       clearTimers();
 
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      const wsUrl = `${protocol}//${window.location.host}/ws/app`; // Updated path to match server
 
       console.log('WebSocket: Attempting connection to', wsUrl);
       const ws = new WebSocket(wsUrl);

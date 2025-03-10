@@ -18,6 +18,26 @@ import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { Layout } from "@/components/layout";
 import { WebSocketProvider } from "@/hooks/use-websocket";
+import { Loader2 } from "lucide-react";
+
+// Loading fallback component
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+}
+
+// Error fallback component
+function ErrorFallback() {
+  return (
+    <div className="p-4 text-center">
+      <h2 className="text-lg font-semibold">Something went wrong</h2>
+      <p className="text-muted-foreground mt-2">Please try refreshing the page</p>
+    </div>
+  );
+}
 
 function Router() {
   return (
@@ -30,7 +50,7 @@ function Router() {
         component={() => (
           <ProtectedRoute>
             <Layout>
-              <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+              <ErrorBoundary fallback={<ErrorFallback />}>
                 <Dashboard />
               </ErrorBoundary>
             </Layout>
@@ -40,7 +60,7 @@ function Router() {
       <Route path="/meetings" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+            <ErrorBoundary fallback={<ErrorFallback />}>
               <MeetingList />
             </ErrorBoundary>
           </Layout>
@@ -49,7 +69,7 @@ function Router() {
       <Route path="/meetings/new" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+            <ErrorBoundary fallback={<ErrorFallback />}>
               <MeetingForm />
             </ErrorBoundary>
           </Layout>
@@ -58,7 +78,7 @@ function Router() {
       <Route path="/meetings/:id" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+            <ErrorBoundary fallback={<ErrorFallback />}>
               <MeetingDetails />
             </ErrorBoundary>
           </Layout>
@@ -67,7 +87,7 @@ function Router() {
       <Route path="/meetings/:id/edit" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+            <ErrorBoundary fallback={<ErrorFallback />}>
               <MeetingForm />
             </ErrorBoundary>
           </Layout>
@@ -76,7 +96,7 @@ function Router() {
       <Route path="/calendar" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+            <ErrorBoundary fallback={<ErrorFallback />}>
               <CalendarView />
             </ErrorBoundary>
           </Layout>
@@ -85,7 +105,7 @@ function Router() {
       <Route path="/analytics" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+            <ErrorBoundary fallback={<ErrorFallback />}>
               <AnalyticsDashboard />
             </ErrorBoundary>
           </Layout>
@@ -94,7 +114,7 @@ function Router() {
       <Route path="/profile/settings" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+            <ErrorBoundary fallback={<ErrorFallback />}>
               <ProfileSettings />
             </ErrorBoundary>
           </Layout>
@@ -107,7 +127,7 @@ function Router() {
 
 function App() {
   return (
-    <ErrorBoundary fallback={<div className="p-4">Something went wrong. Please refresh the page.</div>}>
+    <ErrorBoundary fallback={<ErrorFallback />}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <WebSocketProvider>

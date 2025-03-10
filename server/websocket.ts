@@ -9,7 +9,7 @@ const MAX_RECONNECT_DELAY = 30000;
 const RECONNECT_DECAY = 1.5;
 
 export function setupWebSocket(server: Server) {
-  wss = new WebSocketServer({ server, path: '/ws' });
+  wss = new WebSocketServer({ server, path: '/ws/app' }); // Changed path to avoid conflicts
 
   wss.on('connection', (ws: WebSocket & { isAlive?: boolean; reconnectAttempts?: number }) => {
     console.log('Client connected to MeetMate WebSocket');

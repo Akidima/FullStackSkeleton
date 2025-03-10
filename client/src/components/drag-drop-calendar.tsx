@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Meeting } from '@shared/schema';
 import { useAuth } from '@/hooks/use-auth';
 import { showErrorToast, withRetry } from '@/lib/error-toast';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface DragDropCalendarProps {
   onEventCreate?: (meeting: Meeting) => void;
@@ -18,6 +19,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
+  const [view, setView] = useState('timeGridWeek');
 
   // Query meetings
   const { data: meetings = [], isLoading } = useQuery<Meeting[]>({
@@ -92,7 +94,6 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
 
     try {
       await withRetry(async () => {
-        // Check room availability first
         const newStart = changeInfo.event.start;
         const newEnd = new Date(newStart.getTime() + 60 * 60 * 1000);
         const isRoomAvailable = await checkRoomAvailability(newStart, newEnd);
@@ -101,13 +102,11 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
           throw new Error('No rooms available');
         }
 
-        // Get first available room
         const availableRoomsResponse = await fetch(
           `/api/rooms/available?startTime=${newStart.toISOString()}&endTime=${newEnd.toISOString()}`
         );
         const availableRooms = await availableRoomsResponse.json();
 
-        // Update the meeting with new time and room
         const response = await fetch(`/api/meetings/${meetingId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -137,24 +136,21 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
   // Handle new meeting creation through select
   const handleDateSelect = useCallback(async (selectInfo: any) => {
     const startTime = selectInfo.start;
-    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour duration
+    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
 
     try {
       await withRetry(async () => {
-        // Check room availability
         const isRoomAvailable = await checkRoomAvailability(startTime, endTime);
 
         if (!isRoomAvailable) {
           throw new Error('No rooms available for this time slot');
         }
 
-        // Get first available room
         const availableRoomsResponse = await fetch(
           `/api/rooms/available?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}`
         );
         const availableRooms = await availableRoomsResponse.json();
 
-        // Create new meeting
         const response = await fetch('/api/meetings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -183,47 +179,95 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     }
   }, [user, onEventCreate, toast]);
 
+  // Handle view changes
+  const handleViewChange = (newView: any) => {
+    setView(newView.view.type);
+  };
+
   if (isLoading) {
     return (
-      <div className="h-[700px] bg-background rounded-lg border p-4 flex items-center justify-center">
-        Loading calendar...
-      </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="h-[700px] bg-background rounded-lg border p-4 flex items-center justify-center"
+      >
+        <motion.div
+          animate={{
+            scale: [1, 1.2, 1],
+            opacity: [0.5, 1, 0.5],
+          }}
+          transition={{
+            duration: 1.5,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        >
+          Loading calendar...
+        </motion.div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="h-[700px] bg-background rounded-lg border p-4">
-      <FullCalendar
-        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-        initialView="timeGridWeek"
-        headerToolbar={{
-          left: 'prev,next today',
-          center: 'title',
-          right: 'dayGridMonth,timeGridWeek,timeGridDay'
-        }}
-        editable={true}
-        selectable={true}
-        selectMirror={true}
-        dayMaxEvents={true}
-        events={events}
-        eventDrop={handleEventChange}
-        eventResize={handleEventChange}
-        select={handleDateSelect}
-        slotMinTime="06:00:00"
-        slotMaxTime="22:00:00"
-        allDaySlot={false}
-        expandRows={true}
-        stickyHeaderDates={true}
-        dayHeaderFormat={{ weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }}
-        slotLabelFormat={{
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        }}
-        eventDidMount={(info) => {
-          info.el.title = `${info.event.title}\n${format(info.event.start!, 'PPp')}`;
-        }}
-      />
-    </div>
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={view}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        transition={{ duration: 0.3 }}
+        className="h-[700px] bg-background rounded-lg border p-4"
+      >
+        <FullCalendar
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          initialView="timeGridWeek"
+          headerToolbar={{
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+          }}
+          editable={true}
+          selectable={true}
+          selectMirror={true}
+          dayMaxEvents={true}
+          events={events}
+          eventDrop={handleEventChange}
+          eventResize={handleEventChange}
+          select={handleDateSelect}
+          slotMinTime="06:00:00"
+          slotMaxTime="22:00:00"
+          allDaySlot={false}
+          expandRows={true}
+          stickyHeaderDates={true}
+          viewDidMount={handleViewChange}
+          dayHeaderFormat={{ weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }}
+          slotLabelFormat={{
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+          }}
+          eventDidMount={(info) => {
+            info.el.title = `${info.event.title}\n${format(info.event.start!, 'PPp')}`;
+
+            // Add animation classes to events
+            info.el.classList.add('transition-transform', 'duration-200', 'hover:scale-[1.02]');
+
+            // Add hover effect styles
+            info.el.style.transition = 'all 0.2s ease-in-out';
+            info.el.addEventListener('mouseenter', () => {
+              info.el.style.transform = 'scale(1.02)';
+              info.el.style.zIndex = '1';
+              info.el.style.boxShadow = '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)';
+            });
+            info.el.addEventListener('mouseleave', () => {
+              info.el.style.transform = 'scale(1)';
+              info.el.style.zIndex = 'auto';
+              info.el.style.boxShadow = 'none';
+            });
+          }}
+        />
+      </motion.div>
+    </AnimatePresence>
   );
 }

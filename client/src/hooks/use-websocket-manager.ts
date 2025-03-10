@@ -16,7 +16,7 @@ interface WebSocketState {
 }
 
 export function useWebSocketManager({
-  url = `ws://${window.location.host}`,
+  url = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`,
   reconnectAttempts = 5,
   reconnectInterval = 5000,
   onMessage

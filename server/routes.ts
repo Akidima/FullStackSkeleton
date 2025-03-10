@@ -24,6 +24,56 @@ import {meetingOptimizer} from "./services/ai-optimizer";
 
 let wss: WebSocket.Server; // Declare wss variable here
 
+// Add new rate limiter for critical meeting endpoints
+const meetingEndpointsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Allow more requests for meeting operations
+  message: {
+    status: 'error',
+    message: 'Too many requests to meeting endpoints. Please try again later.',
+    retryAfter: 'windowMs'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for authenticated users and OPTIONS requests
+    return req.method === 'OPTIONS' || !!req.user;
+  }
+});
+
+// More lenient rate limiter for room availability checks
+const roomAvailabilityLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60, // Allow more frequent room availability checks
+  message: {
+    status: 'error',
+    message: 'Too many room availability requests. Please try again later.',
+    retryAfter: 'windowMs'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS' || !!req.user // Skip for authenticated users
+});
+
+// Update existing authenticated rate limiter to be more lenient
+const authenticatedLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300, // Increased from 100 to 300 for authenticated users
+  message: {
+    status: 'error',
+    message: 'Too many requests, please try again later.',
+    retryAfter: 'windowMs'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for OPTIONS requests
+    if (req.method === 'OPTIONS') return true;
+    // Skip rate limiting if user is authenticated
+    return !!req.user;
+  }
+});
+
 // Add new rate limiter for voice recognition endpoints
 const voiceRecognitionLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute window
@@ -71,25 +121,6 @@ const optimizationLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-});
-
-// More lenient rate limiter for authenticated endpoints
-const authenticatedLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Allow 100 requests per window per IP
-  message: {
-    status: 'error',
-    message: 'Too many requests, please try again later.',
-    retryAfter: 'windowMs'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => {
-    // Skip rate limiting for OPTIONS requests
-    if (req.method === 'OPTIONS') return true;
-    // Skip rate limiting if user is authenticated
-    return !!req.user;
-  }
 });
 
 // Add rate limiter for unauthenticated endpoints
@@ -208,7 +239,7 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
     }
   }));
 
-  app.post("/api/meetings", asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/meetings", meetingEndpointsLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetingData = insertMeetingSchema.parse(req.body);
       const meeting = await storage.createMeeting(meetingData);
@@ -499,7 +530,7 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
     res.json(rooms);
   }));
 
-  app.get("/api/rooms/available", asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/rooms/available", roomAvailabilityLimiter, asyncHandler(async (req: Request, res: Response) => {
     const { startTime, endTime, capacity } = req.query;
 
     if (!startTime || !endTime) {
@@ -511,6 +542,10 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
       new Date(endTime as string),
       capacity ? Number(capacity) : undefined
     );
+
+    // Add cache headers for room availability
+    res.set('Cache-Control', 'public, max-age=60'); // Cache for 1 minute
+    res.set('Vary', 'Accept-Encoding');
 
     res.json(availableRooms);
   }));
@@ -927,6 +962,9 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
   app.use('/api/voice/*', voiceRecognitionLimiter);
   app.use('/auth', authenticatedLimiter);
   app.use('/api/analytics', analyticsLimiter);
+  app.use('/api/meetings/*', meetingEndpointsLimiter); // Apply to all meeting endpoints
+  app.use('/api/rooms/available', roomAvailabilityLimiter); // Apply to room availability endpoint
+
 
   app.get("/api/analytics/meetings", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {

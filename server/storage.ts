@@ -28,8 +28,9 @@ import {
   type InsertUserIntegrationSettings,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
-import { 
+import { eq, and, gte, lte, desc } from "drizzle-orm";
+
+import {
   userPreferences,
   userNotifications,
   type UserPreferences,
@@ -429,10 +430,9 @@ export class DatabaseStorage implements IStorage {
         .select()
         .from(rooms)
         .where(
-          and(
-            eq(rooms.isAvailable, true),
-            capacity ? gte(rooms.capacity, capacity) : undefined
-          )
+          capacity
+            ? and(eq(rooms.isAvailable, true), gte(rooms.capacity, capacity))
+            : eq(rooms.isAvailable, true)
         );
 
       // Filter out rooms with conflicting bookings
@@ -900,7 +900,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserPreferences(
-    userId: number, 
+    userId: number,
     preferences: Partial<InsertUserPreferences>
   ): Promise<UserPreferences> {
     try {

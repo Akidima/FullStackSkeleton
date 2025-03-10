@@ -30,7 +30,9 @@ function Router() {
         component={() => (
           <ProtectedRoute>
             <Layout>
-              <Dashboard />
+              <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+                <Dashboard />
+              </ErrorBoundary>
             </Layout>
           </ProtectedRoute>
         )} 
@@ -38,49 +40,63 @@ function Router() {
       <Route path="/meetings" component={() => (
         <ProtectedRoute>
           <Layout>
-            <MeetingList />
+            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+              <MeetingList />
+            </ErrorBoundary>
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/meetings/new" component={() => (
         <ProtectedRoute>
           <Layout>
-            <MeetingForm />
+            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+              <MeetingForm />
+            </ErrorBoundary>
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/meetings/:id" component={() => (
         <ProtectedRoute>
           <Layout>
-            <MeetingDetails />
+            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+              <MeetingDetails />
+            </ErrorBoundary>
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/meetings/:id/edit" component={() => (
         <ProtectedRoute>
           <Layout>
-            <MeetingForm />
+            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+              <MeetingForm />
+            </ErrorBoundary>
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/calendar" component={() => (
         <ProtectedRoute>
           <Layout>
-            <CalendarView />
+            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+              <CalendarView />
+            </ErrorBoundary>
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/analytics" component={() => (
         <ProtectedRoute>
           <Layout>
-            <AnalyticsDashboard />
+            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+              <AnalyticsDashboard />
+            </ErrorBoundary>
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/profile/settings" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ProfileSettings />
+            <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
+              <ProfileSettings />
+            </ErrorBoundary>
           </Layout>
         </ProtectedRoute>
       )} />
@@ -91,7 +107,7 @@ function Router() {
 
 function App() {
   return (
-    <ErrorBoundary>
+    <ErrorBoundary fallback={<div className="p-4">Something went wrong. Please refresh the page.</div>}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <WebSocketProvider>

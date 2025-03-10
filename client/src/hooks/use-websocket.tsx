@@ -28,6 +28,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   };
 
   const setupHeartbeat = (ws: WebSocket) => {
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
     const interval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ping' }));
@@ -43,6 +44,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${window.location.host}/ws`;
 
+      console.log('WebSocket: Attempting connection to', wsUrl);
       const ws = new WebSocket(wsUrl);
 
       ws.addEventListener('open', () => {
@@ -61,6 +63,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           if (data.type === 'pong') return;
 
           if (data.type.startsWith('meeting:')) {
+            // Invalidate the meetings query to refresh the data
             queryClient.invalidateQueries({ queryKey: ['/api/meetings'] });
 
             // Map of message types to user-friendly messages
@@ -100,7 +103,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
             toast({
               title: "Connection Lost",
               description: "Attempting to reconnect...",
-              variant: "destructive",
+              variant: "default",
             });
           }
 
@@ -112,7 +115,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         } else {
           toast({
             title: "Connection Error",
-            description: "Failed to establish connection. Please refresh the page.",
+            description: "Failed to establish connection. The app will continue to work with limited functionality.",
             variant: "destructive",
           });
         }

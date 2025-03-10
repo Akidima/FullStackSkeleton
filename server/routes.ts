@@ -24,6 +24,27 @@ import {meetingOptimizer} from "./services/ai-optimizer";
 
 let wss: WebSocket.Server; // Declare wss variable here
 
+// Add new rate limiter for voice recognition endpoints
+const voiceRecognitionLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 30, // Allow 30 requests per minute for voice recognition
+  message: {
+    status: 'error',
+    message: 'Voice recognition rate limit exceeded. Please wait before trying again.',
+    retryAfter: 'windowMs'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // Don't count successful requests
+  handler: (req, res) => {
+    res.status(429).json({
+      status: 'error',
+      message: 'Too many requests, please try again later.',
+      retryAfter: Math.ceil(req.rateLimit.resetTime / 1000 - Date.now() / 1000)
+    });
+  }
+});
+
 // Add new rate limiter for sentiment endpoints
 const sentimentLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour window (increased from 15 minutes)
@@ -71,7 +92,7 @@ const authenticatedLimiter = rateLimit({
   }
 });
 
-// Rate limiter for unauthenticated endpoints
+// Add rate limiter for unauthenticated endpoints
 const analyticsLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour window
   max: 1000, // Allow more requests per window
@@ -85,9 +106,6 @@ const analyticsLimiter = rateLimit({
   skip: (req) => req.method === 'OPTIONS', // Skip preflight requests
 });
 
-
-// Add this type definition at the top of the file
-type UpdateType = "delete" | "notes" | "create" | "update" | "sentiment";
 
 // Update the broadcastMeetingUpdate function
 export function broadcastMeetingUpdate(type: UpdateType, meetingId: number) {
@@ -906,15 +924,16 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
   }));
 
   // Add these routes after existing routes but before error handler
-  app.use('/auth', authenticatedLimiter); // Apply auth rate limiter
-  app.use('/api/analytics', analyticsLimiter); // Apply rate limiter
+  app.use('/api/voice/*', voiceRecognitionLimiter);
+  app.use('/auth', authenticatedLimiter);
+  app.use('/api/analytics', analyticsLimiter);
 
   app.get("/api/analytics/meetings", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetings = await storage.getMeetings();
 
       // Group meetings by week
-      const weeklyMeetings = meetings.reduce((acc: any[], meeting) => {
+            const weeklyMeetings = meetings.reduce((acc: any[], meeting) => {
         const week = format(new Date(meeting.date), 'MM/dd');
         const existingWeek = acc.find(w => w.week === week);
         if (existingWeek) {
@@ -1043,3 +1062,5 @@ function validateMeetingId(id: string): number {
   }
   return meetingId;
 }
+
+type UpdateType = "delete" | "notes" | "create" | "update" | "sentiment";

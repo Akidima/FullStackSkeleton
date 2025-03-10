@@ -16,6 +16,7 @@ interface VoiceAssistantProps {
 // Rate limiting configuration
 const RATE_LIMIT_DELAY = 5000; // 5 seconds between retries
 const MAX_RETRIES = 3;
+const MAX_BACKOFF = 30000; // Maximum backoff of 30 seconds
 
 // Supported languages configuration
 const SUPPORTED_LANGUAGES = {
@@ -45,6 +46,15 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const initTimeoutRef = useRef<NodeJS.Timeout>();
   const languageChangeTimeoutRef = useRef<NodeJS.Timeout>();
 
+  // Calculate exponential backoff delay
+  const getBackoffDelay = useCallback((retryAttempt: number) => {
+    const delay = Math.min(
+      RATE_LIMIT_DELAY * Math.pow(2, retryAttempt),
+      MAX_BACKOFF
+    );
+    return delay + Math.random() * 1000; // Add jitter
+  }, []);
+
   // Debounced initialization function
   const debouncedInitialize = useCallback(async () => {
     if (!isActive) return;
@@ -53,10 +63,11 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
       // Rate limiting check
       const now = Date.now();
       const timeSinceLastAttempt = now - lastInitAttempt.current;
+      const backoffDelay = getBackoffDelay(retryCount.current);
 
-      if (timeSinceLastAttempt < RATE_LIMIT_DELAY) {
-        const waitTime = Math.ceil((RATE_LIMIT_DELAY - timeSinceLastAttempt) / 1000);
-        setLoadingStatus(`Please wait ${waitTime}s before changing language...`);
+      if (timeSinceLastAttempt < backoffDelay) {
+        const waitTime = Math.ceil((backoffDelay - timeSinceLastAttempt) / 1000);
+        setLoadingStatus(`Please wait ${waitTime}s before retrying...`);
         return;
       }
 
@@ -134,11 +145,12 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           variant: "destructive",
         });
 
-        // Retry logic for recoverable errors
+        // Retry logic for recoverable errors with exponential backoff
         if (retryCount.current < MAX_RETRIES && 
             !['not-allowed', 'service-not-allowed', 'language-not-supported'].includes(event.error)) {
           retryCount.current++;
-          initTimeoutRef.current = setTimeout(debouncedInitialize, RATE_LIMIT_DELAY);
+          const backoffDelay = getBackoffDelay(retryCount.current);
+          initTimeoutRef.current = setTimeout(debouncedInitialize, backoffDelay);
         }
       };
 
@@ -169,7 +181,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
       setLoadingStatus("");
       setIsInitialized(false);
     }
-  }, [isActive, onCommand, onTranscript, selectedLanguage]);
+  }, [isActive, onCommand, onTranscript, selectedLanguage, getBackoffDelay]);
 
   // Initialize or reinitialize recognition when language changes
   useEffect(() => {
@@ -227,14 +239,17 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
     }
   };
 
-  // Handle language change with debouncing
+  // Handle language change with debouncing and request queue
   const handleLanguageChange = (value: string) => {
     // Prevent rapid language changes
     if (languageChangeTimeoutRef.current) {
       clearTimeout(languageChangeTimeoutRef.current);
     }
 
+    // Add delay before processing language change
     languageChangeTimeoutRef.current = setTimeout(() => {
+      // Reset retry count when changing language
+      retryCount.current = 0;
       setSelectedLanguage(value as keyof typeof SUPPORTED_LANGUAGES);
     }, 300);
   };

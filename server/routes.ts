@@ -58,7 +58,7 @@ const roomAvailabilityLimiter = rateLimit({
 // Update existing authenticated rate limiter to be more lenient
 const authenticatedLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // Increased from 100 to 300 for authenticated users
+  max: 1000, // Increased limit significantly
   message: {
     status: 'error',
     message: 'Too many requests, please try again later.',
@@ -67,10 +67,8 @@ const authenticatedLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting for OPTIONS requests
-    if (req.method === 'OPTIONS') return true;
-    // Skip rate limiting if user is authenticated
-    return !!req.user;
+    // Skip rate limiting for authenticated users and OPTIONS requests
+    return req.method === 'OPTIONS' || !!req.user;
   }
 });
 
@@ -126,10 +124,10 @@ const optimizationLimiter = rateLimit({
 // Add rate limiter for unauthenticated endpoints
 const analyticsLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour window
-  max: 1000, // Allow more requests per window
+  max: 2000, // Increased from 1000 to 2000
   message: {
     status: 'error',
-    message: 'Rate limit exceeded. Please try again in a few minutes.',
+    message: 'Rate limit exceeded. Please try again later.',
     retryAfter: 'windowMs'
   },
   standardHeaders: true,

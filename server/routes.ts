@@ -9,7 +9,6 @@ import { AgendaService } from "./services/agenda";
 import { getAIInsights } from "./services/ai-insights";
 import { generateMeetingInsights, batchSummarize } from "./services/summarize";
 import { SchedulerService } from "./services/scheduler";
-import { WebSocket } from 'ws';
 import { authenticateJWT } from "./auth";
 import {insertTaskSchema, updateTaskSchema} from "@shared/schema";
 import { format } from 'date-fns';
@@ -21,8 +20,6 @@ import { AsanaService } from "./services/asana";
 import { JiraService } from "./services/jira";
 import { MicrosoftTeamsService } from "./services/microsoft-teams";
 import {meetingOptimizer} from "./services/ai-optimizer"; 
-
-let wss: WebSocket.Server; // Declare wss variable here
 
 // Add new rate limiter for critical meeting endpoints
 const meetingEndpointsLimiter = rateLimit({
@@ -58,7 +55,7 @@ const roomAvailabilityLimiter = rateLimit({
 // Update existing authenticated rate limiter to be more lenient
 const authenticatedLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Increased limit significantly
+  max: 2000, // Increased significantly
   message: {
     status: 'error',
     message: 'Too many requests, please try again later.',
@@ -136,29 +133,6 @@ const analyticsLimiter = rateLimit({
 });
 
 
-// Update the broadcastMeetingUpdate function
-export function broadcastMeetingUpdate(type: UpdateType, meetingId: number) {
-  if (!wss) {
-    console.log('MeetMate WebSocket server not initialized');
-    return;
-  }
-
-  const message = JSON.stringify({
-    type: `meeting:${type}`,
-    meetingId
-  });
-
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      try {
-        client.send(message);
-      } catch (error) {
-        console.error('Error broadcasting MeetMate meeting update:', error);
-      }
-    }
-  });
-}
-
 // Update the meeting schema to include calendar-related fields
 export interface Meeting {
   id: number;
@@ -190,8 +164,7 @@ interface PreferencesUpdateInput {
   notifications: 'all' | 'important' | 'minimal';
 }
 
-export async function registerRoutes(app: Express, server: WebSocket.Server): Promise<Server> {
-  wss = server; // Initialize wss here
+export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
   app.get("/api/meetings", asyncHandler(async (req: Request, res: Response) => {
     const meetings = await storage.getMeetings();
@@ -275,8 +248,6 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
         }
       }
 
-      // Broadcast the update
-      broadcastMeetingUpdate('create', meeting.id);
 
       res.status(201).json(meeting);
     } catch (error) {
@@ -297,7 +268,7 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
     res.json(meeting);
   }));
 
-  app.patch("/api/meetings/:id", asyncHandler(async (req: Request, res: Response) => {
+  app.patch("/api/meetings/:id", meetingEndpointsLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetingId = validateMeetingId(req.params.id);
       const meeting = await storage.getMeeting(meetingId);
@@ -334,9 +305,6 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
         }
       }
 
-      // Broadcast the update
-      broadcastMeetingUpdate('update', meeting.id);
-
       res.json(updatedMeeting);
     } catch (error) {
       console.error('MeetMate meeting update error:', error);
@@ -347,7 +315,7 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
     }
   }));
 
-  app.delete("/api/meetings/:id", asyncHandler(async (req: Request, res: Response) => {
+  app.delete("/api/meetings/:id", meetingEndpointsLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetingId = validateMeetingId(req.params.id);
       const meeting = await storage.getMeeting(meetingId);
@@ -375,9 +343,6 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
 
       // Delete the meeting from storage
       await storage.deleteMeeting(meetingId);
-
-      // Broadcast the deletion
-      broadcastMeetingUpdate('delete', meetingId);
 
       // Send a proper response
       res.status(200).json({
@@ -409,9 +374,6 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
 
       // Send meeting summary to Slack
       await SlackService.sendMeetingSummary(updatedMeeting, summary.summary);
-
-      // Broadcast the update to connected clients
-      broadcastMeetingUpdate('update', meeting.id);
 
       res.json({
         meeting: updatedMeeting,
@@ -482,9 +444,6 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
         meetingId,
         ...moodData
       });
-
-      // Broadcast mood update to connected clients
-      broadcastMeetingUpdate('sentiment', meetingId);
 
       // Cache control for POST response
       res.set('Cache-Control', 'no-cache');
@@ -959,10 +918,8 @@ export async function registerRoutes(app: Express, server: WebSocket.Server): Pr
   // Add these routes after existing routes but before error handler
   app.use('/api/voice/*', voiceRecognitionLimiter);
   app.use('/auth', authenticatedLimiter);
-  app.use('/api/analytics', analyticsLimiter);
-  app.use('/api/meetings/*', meetingEndpointsLimiter); // Apply to all meeting endpoints
-  app.use('/api/rooms/available', roomAvailabilityLimiter); // Apply to room availability endpoint
-
+  app.use('/api/analytics/*', analyticsLimiter);
+  app.use('/api/meetings/*', meetingEndpointsLimiter); // Apply to all meeting endpoints app.use('/api/rooms/available', roomAvailabilityLimiter); // Apply to room availability endpoint
 
   app.get("/api/analytics/meetings", analyticsLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {

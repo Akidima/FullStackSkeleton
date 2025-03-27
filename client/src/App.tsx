@@ -34,18 +34,15 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={SignUp} />
-      <Route 
-        path="/dashboard" 
-        component={() => (
-          <ProtectedRoute>
-            <Layout>
-              <ErrorBoundary>
-                <Dashboard />
-              </ErrorBoundary>
-            </Layout>
-          </ProtectedRoute>
-        )} 
-      />
+      <Route path="/dashboard" component={() => (
+        <ProtectedRoute>
+          <Layout>
+            <ErrorBoundary>
+              <Dashboard />
+            </ErrorBoundary>
+          </Layout>
+        </ProtectedRoute>
+      )} />
       <Route path="/meetings" component={() => (
         <ProtectedRoute>
           <Layout>

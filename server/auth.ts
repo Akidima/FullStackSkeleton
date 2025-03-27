@@ -6,7 +6,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
-import express, { Express } from "express";
+import express, { Express, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { rateLimit } from 'express-rate-limit';
 import { errorHandler, asyncHandler } from "./middleware/errorHandler";
@@ -38,9 +38,9 @@ function generateToken(user: Express.User) {
 export function authenticateJWT(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ 
+    return res.status(401).json({
       status: 'error',
-      message: "No token provided" 
+      message: "No token provided"
     });
   }
 
@@ -51,14 +51,14 @@ export function authenticateJWT(req: express.Request, res: express.Response, nex
     next();
   } catch (err) {
     if (err instanceof jwt.TokenExpiredError) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         status: 'error',
-        message: "Token expired" 
+        message: "Token expired"
       });
     }
-    return res.status(401).json({ 
+    return res.status(401).json({
       status: 'error',
-      message: "Invalid token" 
+      message: "Invalid token"
     });
   }
 }
@@ -66,7 +66,7 @@ export function authenticateJWT(req: express.Request, res: express.Response, nex
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
-  message: { 
+  message: {
     status: 'error',
     message: 'Too many requests, please try again in 15 minutes'
   },
@@ -283,14 +283,14 @@ export function registerAuthEndpoints(app: Express) {
   app.post("/api/logout", (req, res) => {
     req.logout((err) => {
       if (err) {
-        return res.status(500).json({ 
+        return res.status(500).json({
           status: 'error',
-          message: 'Logout failed' 
+          message: 'Logout failed'
         });
       }
-      res.json({ 
+      res.json({
         status: 'success',
-        message: 'Logged out successfully' 
+        message: 'Logged out successfully'
       });
     });
   });
@@ -300,9 +300,9 @@ export function registerAuthEndpoints(app: Express) {
     try {
       const user = await storage.getUserById(req.user!.id);
       if (!user) {
-        return res.status(401).json({ 
+        return res.status(401).json({
           status: 'error',
-          message: "User not found" 
+          message: "User not found"
         });
       }
       res.json({
@@ -317,13 +317,13 @@ export function registerAuthEndpoints(app: Express) {
         }
       });
     } catch (err) {
-      res.status(500).json({ 
+      res.status(500).json({
         status: 'error',
-        message: "Internal server error" 
+        message: "Internal server error"
       });
     }
   });
-  
+
   passport.use(new LocalStrategy(
     {
       usernameField: 'email',
@@ -369,17 +369,11 @@ export function registerAuthEndpoints(app: Express) {
       done(err);
     }
   });
-}
 
-if (!process.env.JWT_SECRET) {
-  throw new Error("Missing JWT_SECRET environment variable");
-}
-
-export default passport;
-  // Forgot password route
+  // Forgot password route - Moved inside registerAuthEndpoints
   app.post("/api/forgot-password", authLimiter, asyncHandler(async (req: Request, res: Response) => {
     const { email } = req.body;
-    
+
     if (!email) {
       throw new ValidationError("Email is required");
     }
@@ -396,7 +390,7 @@ export default passport;
     // Generate reset token
     const resetToken = randomBytes(32).toString('hex');
     const hashedToken = await hashPassword(resetToken);
-    
+
     // Save reset token and expiry
     await storage.updateUser(user.id, {
       passwordResetToken: hashedToken,
@@ -413,7 +407,7 @@ export default passport;
     });
   }));
 
-  // Reset password route
+  // Reset password route - Moved inside registerAuthEndpoints
   app.post("/api/reset-password", authLimiter, asyncHandler(async (req: Request, res: Response) => {
     const { token, password } = req.body;
 
@@ -438,3 +432,6 @@ export default passport;
       message: 'Password has been reset'
     });
   }));
+}
+
+export default passport;

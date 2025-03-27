@@ -2,7 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Eye, EyeOff } from "lucide-react";
+import { Calendar, Eye, EyeOff, Loader2 } from "lucide-react";
 import { z } from "zod";
 import { useLocation } from "wouter";
 import {
@@ -17,16 +17,13 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { useState } from "react";
 import { AuthSkeleton } from "@/components/ui/auth-skeleton";
-import { TooltipError } from "@/components/ui/tooltip-error";
-import { PasswordStrengthIndicator } from "@/components/ui/password-strength";
-import { ReCAPTCHA } from "@/components/ui/recaptcha";
 import { AuthError } from "@/components/ui/auth-error";
+import { useState } from "react";
 
 const resetPasswordSchema = z.object({
   password: z.string()
-    .min(8, "Password must be at least 8 characters long")
+    .min(8, "Password must be at least 8 characters")
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
     .regex(/[0-9]/, "Password must contain at least one number")
@@ -44,7 +41,6 @@ export default function ResetPassword() {
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<{ title: string; message: string } | null>(null);
 
   const form = useForm<ResetPasswordData>({
@@ -56,48 +52,38 @@ export default function ResetPassword() {
   });
 
   const resetMutation = useMutation({
-    mutationFn: async (data: ResetPasswordData & { recaptchaToken: string }) => {
-      const token = new URLSearchParams(window.location.search).get("token");
+    mutationFn: async (data: ResetPasswordData) => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token');
+
       if (!token) {
-        throw new Error("Reset token is missing or invalid");
+        throw new Error("Reset token is missing");
       }
+
       const res = await apiRequest("POST", "/api/reset-password", {
-        password: data.password,
         token,
-        recaptchaToken: data.recaptchaToken,
+        password: data.password,
       });
       return res.json();
     },
     onSuccess: () => {
       toast({
-        title: "Success",
-        description: "Your password has been reset successfully. Please log in with your new password.",
+        title: "Password Reset Successful",
+        description: "You can now log in with your new password",
       });
       setLocation("/login");
     },
     onError: (error: Error) => {
       setError({
         title: "Password Reset Failed",
-        message: error.message || "Please try again or request a new reset link",
+        message: error.message || "Please try again later",
       });
     },
   });
 
   const onSubmit = async (data: ResetPasswordData) => {
     setError(null);
-
-    if (!recaptchaToken) {
-      setError({
-        title: "Verification Required",
-        message: "Please complete the security verification before proceeding",
-      });
-      return;
-    }
-
-    await resetMutation.mutateAsync({
-      ...data,
-      recaptchaToken,
-    });
+    await resetMutation.mutateAsync(data);
   };
 
   if (resetMutation.isPending) {
@@ -130,7 +116,7 @@ export default function ResetPassword() {
                 control={form.control}
                 name="password"
                 render={({ field }) => (
-                  <FormItem className="relative">
+                  <FormItem>
                     <FormLabel>New Password</FormLabel>
                     <FormControl>
                       <div className="relative">
@@ -155,22 +141,16 @@ export default function ResetPassword() {
                         </Button>
                       </div>
                     </FormControl>
-                    <TooltipError
-                      message={form.formState.errors.password?.message}
-                      show={!!form.formState.errors.password}
-                    />
-                    <PasswordStrengthIndicator
-                      password={field.value}
-                      className="mt-2"
-                    />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="confirmPassword"
                 render={({ field }) => (
-                  <FormItem className="relative">
+                  <FormItem>
                     <FormLabel>Confirm Password</FormLabel>
                     <FormControl>
                       <div className="relative">
@@ -195,32 +175,22 @@ export default function ResetPassword() {
                         </Button>
                       </div>
                     </FormControl>
-                    <TooltipError
-                      message={form.formState.errors.confirmPassword?.message}
-                      show={!!form.formState.errors.confirmPassword}
-                    />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
-              <div className="space-y-4">
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={resetMutation.isPending || !recaptchaToken}
-                >
-                  {resetMutation.isPending ? "Resetting..." : "Reset Password"}
-                </Button>
-                <ReCAPTCHA onVerify={setRecaptchaToken} />
-                <div className="text-center text-sm">
-                  <Button
-                    variant="link"
-                    className="text-primary hover:underline"
-                    onClick={() => setLocation("/login")}
-                  >
-                    Back to Login
-                  </Button>
-                </div>
-              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={resetMutation.isPending}
+              >
+                {resetMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Reset Password"
+                )}
+              </Button>
             </form>
           </Form>
         </CardContent>

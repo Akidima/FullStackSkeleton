@@ -1,8 +1,9 @@
+
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar } from "lucide-react";
+import { Calendar, Loader2 } from "lucide-react";
 import { z } from "zod";
 import { useLocation } from "wouter";
 import {
@@ -81,6 +82,29 @@ export default function ForgotPassword() {
     return <AuthSkeleton />;
   }
 
+  if (isSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/50 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center space-y-2">
+            <CardTitle className="text-2xl font-bold">Check Your Email</CardTitle>
+            <p className="text-muted-foreground">
+              If an account exists with the email you provided, you will receive password reset instructions.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button
+              className="w-full"
+              onClick={() => setLocation("/login")}
+            >
+              Return to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/50 p-4">
       <Card className="w-full max-w-md">
@@ -88,9 +112,9 @@ export default function ForgotPassword() {
           <div className="flex justify-center mb-4">
             <Calendar className="h-12 w-12 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>
+          <CardTitle className="text-2xl font-bold">Forgot Password</CardTitle>
           <p className="text-muted-foreground">
-            Enter your email address and we'll send you instructions to reset your password
+            Enter your email address and we'll send you instructions to reset your password.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -101,21 +125,13 @@ export default function ForgotPassword() {
               className="mb-4"
             />
           )}
-          {isSuccess && (
-            <AuthError
-              type="success"
-              title="Check Your Email"
-              message="If an account exists with this email, you will receive password reset instructions."
-              className="mb-4"
-            />
-          )}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
                 name="email"
                 render={({ field }) => (
-                  <FormItem className="relative">
+                  <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
                       <Input
@@ -125,31 +141,33 @@ export default function ForgotPassword() {
                         autoComplete="email"
                       />
                     </FormControl>
-                    <TooltipError
-                      message={form.formState.errors.email?.message}
-                      show={!!form.formState.errors.email}
-                    />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
-              <div className="space-y-4">
+
+              <ReCAPTCHA onVerify={setRecaptchaToken} />
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={resetMutation.isPending}
+              >
+                {resetMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Send Reset Instructions"
+                )}
+              </Button>
+
+              <div className="text-center">
                 <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={resetMutation.isPending || !recaptchaToken}
+                  variant="link"
+                  className="text-sm"
+                  onClick={() => setLocation("/login")}
                 >
-                  {resetMutation.isPending ? "Sending..." : "Send Reset Instructions"}
+                  Back to Login
                 </Button>
-                <ReCAPTCHA onVerify={setRecaptchaToken} />
-                <div className="text-center text-sm">
-                  <Button
-                    variant="link"
-                    className="text-primary hover:underline"
-                    onClick={() => setLocation("/login")}
-                  >
-                    Back to Login
-                  </Button>
-                </div>
               </div>
             </form>
           </Form>

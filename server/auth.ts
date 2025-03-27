@@ -376,3 +376,65 @@ if (!process.env.JWT_SECRET) {
 }
 
 export default passport;
+  // Forgot password route
+  app.post("/api/forgot-password", authLimiter, asyncHandler(async (req: Request, res: Response) => {
+    const { email } = req.body;
+    
+    if (!email) {
+      throw new ValidationError("Email is required");
+    }
+
+    const user = await storage.getUserByEmail(email);
+    if (!user) {
+      // Return success even if user not found to prevent email enumeration
+      return res.json({
+        status: 'success',
+        message: 'If an account exists, a password reset link has been sent'
+      });
+    }
+
+    // Generate reset token
+    const resetToken = randomBytes(32).toString('hex');
+    const hashedToken = await hashPassword(resetToken);
+    
+    // Save reset token and expiry
+    await storage.updateUser(user.id, {
+      passwordResetToken: hashedToken,
+      passwordResetExpires: new Date(Date.now() + 3600000) // 1 hour
+    });
+
+    // TODO: Send reset email with token
+    // For now, just return the token
+    res.json({
+      status: 'success',
+      message: 'Password reset instructions sent',
+      // Remove this in production:
+      debug: { resetToken }
+    });
+  }));
+
+  // Reset password route
+  app.post("/api/reset-password", authLimiter, asyncHandler(async (req: Request, res: Response) => {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      throw new ValidationError("Token and new password are required");
+    }
+
+    const user = await storage.getUserByResetToken(token);
+    if (!user || !user.passwordResetExpires || user.passwordResetExpires < new Date()) {
+      throw new ValidationError("Invalid or expired reset token");
+    }
+
+    const hashedPassword = await hashPassword(password);
+    await storage.updateUser(user.id, {
+      password: hashedPassword,
+      passwordResetToken: null,
+      passwordResetExpires: null
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Password has been reset'
+    });
+  }));

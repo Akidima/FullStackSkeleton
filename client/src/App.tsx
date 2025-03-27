@@ -1,3 +1,4 @@
+import React from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -37,72 +38,56 @@ function Router() {
       <Route path="/dashboard" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary>
-              <Dashboard />
-            </ErrorBoundary>
+            <Dashboard />
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/meetings" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary>
-              <MeetingList />
-            </ErrorBoundary>
+            <MeetingList />
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/meetings/new" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary>
-              <MeetingForm />
-            </ErrorBoundary>
+            <MeetingForm />
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/meetings/:id" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary>
-              <MeetingDetails />
-            </ErrorBoundary>
+            <MeetingDetails />
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/meetings/:id/edit" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary>
-              <MeetingForm />
-            </ErrorBoundary>
+            <MeetingForm />
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/calendar" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary>
-              <CalendarView />
-            </ErrorBoundary>
+            <CalendarView />
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/analytics" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary>
-              <AnalyticsDashboard />
-            </ErrorBoundary>
+            <AnalyticsDashboard />
           </Layout>
         </ProtectedRoute>
       )} />
       <Route path="/profile/settings" component={() => (
         <ProtectedRoute>
           <Layout>
-            <ErrorBoundary>
-              <ProfileSettings />
-            </ErrorBoundary>
+            <ProfileSettings />
           </Layout>
         </ProtectedRoute>
       )} />
@@ -112,6 +97,19 @@ function Router() {
 }
 
 function App() {
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    // Simulate an async operation to fetch data or check authentication
+    setTimeout(() => {
+      setIsLoading(false);
+    }, 1000);
+  }, []);
+
+  if (isLoading) {
+    return <LoadingFallback />;
+  }
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

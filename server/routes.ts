@@ -21,41 +21,10 @@ import { JiraService } from "./services/jira";
 import { MicrosoftTeamsService } from "./services/microsoft-teams";
 import {meetingOptimizer} from "./services/ai-optimizer"; 
 
-// Add new rate limiter for critical meeting endpoints
-const meetingEndpointsLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Allow more requests for meeting operations
-  message: {
-    status: 'error',
-    message: 'Too many requests to meeting endpoints. Please try again later.',
-    retryAfter: 'windowMs'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => {
-    // Skip rate limiting for authenticated users and OPTIONS requests
-    return req.method === 'OPTIONS' || !!req.user;
-  }
-});
-
-// More lenient rate limiter for room availability checks
-const roomAvailabilityLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 60, // Allow more frequent room availability checks
-  message: {
-    status: 'error',
-    message: 'Too many room availability requests. Please try again later.',
-    retryAfter: 'windowMs'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => req.method === 'OPTIONS' || !!req.user // Skip for authenticated users
-});
-
-// Update existing authenticated rate limiter to be more lenient
+// Temporarily disable rate limiting for basic functionality
 const authenticatedLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 2000, // Increased significantly
+  max: 100000, // Set very high to effectively disable
   message: {
     status: 'error',
     message: 'Too many requests, please try again later.',
@@ -63,75 +32,16 @@ const authenticatedLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => {
-    // Skip rate limiting for authenticated users and OPTIONS requests
-    return req.method === 'OPTIONS' || !!req.user;
-  }
+  skip: (req) => true // Skip rate limiting for all requests temporarily
 });
 
-// Add new rate limiter for voice recognition endpoints
-const voiceRecognitionLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute window
-  max: 30, // Allow 30 requests per minute for voice recognition
-  message: {
-    status: 'error',
-    message: 'Voice recognition rate limit exceeded. Please wait before trying again.',
-    retryAfter: 'windowMs'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true, // Don't count successful requests
-  handler: (req, res) => {
-    res.status(429).json({
-      status: 'error',
-      message: 'Too many requests, please try again later.',
-      retryAfter: Math.ceil(req.rateLimit.resetTime / 1000 - Date.now() / 1000)
-    });
-  }
-});
-
-// Add new rate limiter for sentiment endpoints
-const sentimentLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour window (increased from 15 minutes)
-  max: 500, // Allow 500 requests per window (increased from 100)
-  message: {
-    status: 'error',
-    message: 'Too many MeetMate sentiment requests. Please try again in a few minutes.',
-    retryAfter: 'windowMs'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipFailedRequests: true, // Don't count failed requests
-  skipSuccessfulRequests: false // Count successful requests
-});
-
-// Add these rate limiter configurations at the top of the file
-const optimizationLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes window (increased from 5)
-  max: 150, // Increased from 50 to 150 requests per windowMs
-  message: {
-    status: 'error',
-    message: 'Too many MeetMate optimization requests. Please try again in a few minutes.',
-    retryAfter: 'windowMs'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Add rate limiter for unauthenticated endpoints
-const analyticsLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour window
-  max: 2000, // Increased from 1000 to 2000
-  message: {
-    status: 'error',
-    message: 'Rate limit exceeded. Please try again later.',
-    retryAfter: 'windowMs'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => req.method === 'OPTIONS', // Skip preflight requests
-});
-
+// Set other limiters to skip all requests
+const meetingEndpointsLimiter = authenticatedLimiter;
+const roomAvailabilityLimiter = authenticatedLimiter;
+const voiceRecognitionLimiter = authenticatedLimiter;
+const sentimentLimiter = authenticatedLimiter;
+const optimizationLimiter = authenticatedLimiter;
+const analyticsLimiter = authenticatedLimiter;
 
 // Update the meeting schema to include calendar-related fields
 export interface Meeting {

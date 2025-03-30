@@ -8,17 +8,30 @@ const app = express();
 // Trust proxy - required for rate limiting to work properly behind proxy
 app.set('trust proxy', 1);
 
-app.use(express.json());
+app.use(express.json({ limit: '10kb' })); // Limit payload size
 app.use(express.urlencoded({ extended: false }));
+
+// Add security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Content-Security-Policy', "default-src 'self'");
+  next();
+});
 
 // Global rate limiter - temporarily set to high values
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 100000, // Temporarily set very high to effectively disable rate limiting
-  message: 'Too many requests from this IP, please try again later.',
+  limit: 100, // 100 requests per 15 minutes
+  message: { 
+    status: 'error',
+    message: 'Too many requests, please try again later.'
+  },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => true // Skip rate limiting for all requests temporarily
+  skip: (req) => req.path.startsWith('/health') // Only skip health checks
 });
 
 // Apply rate limiters

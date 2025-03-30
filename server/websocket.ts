@@ -9,9 +9,16 @@ const INITIAL_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
 const RECONNECT_DECAY = 1.5;
 
+// Add isValidOrigin function (placeholder - needs actual implementation)
+const isValidOrigin = (origin: string): boolean => {
+  // Replace with your actual origin validation logic
+  // This is a placeholder and needs to be implemented based on your security requirements
+  return true;
+};
+
 export function setupWebSocket(server: Server) {
   console.log('Initializing WebSocket server on path: /ws');
-  
+
   try {
     // Configure WebSocket server with permissive settings for development
     const wsOptions = { 
@@ -30,20 +37,31 @@ export function setupWebSocket(server: Server) {
         return true; // Accept all connections in development
       }
     };
-    
+
     wss = new WebSocketServer(wsOptions);
-    
+
     // Handle server-level errors
     wss.on('error', (error) => {
       console.error('WebSocket server error:', error.message);
     });
 
-    wss.on('connection', (ws: WebSocket & { isAlive?: boolean; reconnectAttempts?: number }) => {
+    wss.on('connection', (ws: WebSocket & { isAlive?: boolean; reconnectAttempts?: number }, req) => {
+      // Validate origin
+      const origin = req.headers.origin;
+      if (!origin || !isValidOrigin(origin)) {
+        ws.close(1008, 'Invalid origin');
+        return;
+      }
+
+      // Add ping/pong for connection health check
+      ws.isAlive = true;
+      ws.on('pong', () => { ws.isAlive = true; });
+
       console.log('Client connected to MeetMate WebSocket');
 
       // Initialize client state
-      ws.isAlive = true;
       ws.reconnectAttempts = 0;
+
 
       // Send initial connection success message
       try {
@@ -70,6 +88,7 @@ export function setupWebSocket(server: Server) {
           console.error('Error handling WebSocket message:', err);
         }
       });
+
 
       // Setup ping-pong to detect stale connections
       ws.on('pong', () => {

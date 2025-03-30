@@ -129,26 +129,44 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
           retryCount: retryCount.current,
           language: selectedLanguage
         });
-
-        const errorMessage = event.error === 'not-allowed' 
-          ? 'Please allow microphone access to use voice recognition'
-          : event.error === 'network'
-            ? 'Network error occurred. Please check your connection.'
-          : event.error === 'language-not-supported'
-            ? `Language ${SUPPORTED_LANGUAGES[selectedLanguage]} is not supported by your browser`
-            : `Voice recognition error: ${event.error}`;
+        
+        // In Replit preview environment, network errors are common for speech recognition
+        // Provide a more helpful message specifically for Replit environment
+        const isReplit = window.location.hostname.includes('replit');
+        
+        let errorMessage = '';
+        if (event.error === 'not-allowed') {
+          errorMessage = 'Please allow microphone access to use voice recognition';
+        } else if (event.error === 'network') {
+          if (isReplit) {
+            errorMessage = 'Network error occurred. Voice recognition may not work properly in Replit preview. Try clicking "Open in new tab" for better experience.';
+          } else {
+            errorMessage = 'Network error occurred. Please check your connection.';
+          }
+        } else if (event.error === 'language-not-supported') {
+          errorMessage = `Language ${SUPPORTED_LANGUAGES[selectedLanguage]} is not supported by your browser`;
+        } else if (event.error === 'no-speech') {
+          errorMessage = 'No speech detected. Please try speaking again.';
+          // Don't show error UI for no-speech, just log it
+          console.log(errorMessage);
+          return;
+        } else {
+          errorMessage = `Voice recognition error: ${event.error}`;
+        }
 
         setInitError(errorMessage);
         setIsRecording(false);
 
+        // Don't show destructive toast for network errors in Replit as they're expected
         toast({
-          title: "Voice Recognition Error",
+          title: "Voice Recognition Status",
           description: errorMessage,
-          variant: "destructive",
+          variant: isReplit && event.error === 'network' ? "default" : "destructive",
         });
 
-        // Retry logic for recoverable errors with exponential backoff
-        if (retryCount.current < MAX_RETRIES && 
+        // Don't retry for network errors in Replit since they will likely continue to fail
+        if (!(isReplit && event.error === 'network') && 
+            retryCount.current < MAX_RETRIES && 
             !['not-allowed', 'service-not-allowed', 'language-not-supported'].includes(event.error)) {
           retryCount.current++;
           const backoffDelay = getBackoffDelay(retryCount.current);

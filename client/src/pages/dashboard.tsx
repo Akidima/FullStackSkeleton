@@ -37,13 +37,18 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const { isConnected, connectionState } = useWebSocket();
 
-  // Queries with proper typing
+  // Queries with proper typing and error handling
   const { data: meetings = [], isLoading: meetingsLoading } = useQuery<Meeting[]>({
     queryKey: ["/api/meetings"],
+    // Add retry and longer staleTime to handle potential connectivity issues
+    retry: 3,
+    staleTime: 30000
   });
 
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<TaskType[]>({
     queryKey: ["/api/tasks"],
+    retry: 3,
+    staleTime: 30000
   });
   
   // WebSocket connection status effect
@@ -55,6 +60,8 @@ export default function Dashboard() {
 
   const { data: recentNotes = [], isLoading: notesLoading } = useQuery<NoteType[]>({
     queryKey: ["/api/meetings/notes"],
+    retry: 3,
+    staleTime: 30000
   });
 
   const upcomingMeetings = meetings

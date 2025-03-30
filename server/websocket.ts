@@ -10,9 +10,23 @@ const MAX_RECONNECT_DELAY = 30000;
 const RECONNECT_DECAY = 1.5;
 
 // Add isValidOrigin function (placeholder - needs actual implementation)
+const ALLOWED_ORIGINS = [
+  'https://meetmate.repl.co',
+  'https://meetmate.dev'
+];
+
+const MAX_CONNECTIONS_PER_IP = 5;
+const ipConnections = new Map<string, number>();
+
 const isValidOrigin = (origin: string): boolean => {
-  // Replace with your actual origin validation logic
-  // This is a placeholder and needs to be implemented based on your security requirements
+  if (!origin) return false;
+  return ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.repl.co');
+};
+
+const enforceConnectionLimit = (ip: string): boolean => {
+  const currentConnections = ipConnections.get(ip) || 0;
+  if (currentConnections >= MAX_CONNECTIONS_PER_IP) return false;
+  ipConnections.set(ip, currentConnections + 1);
   return true;
 };
 

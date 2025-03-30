@@ -63,6 +63,11 @@ export function authenticateJWT(req: express.Request, res: express.Response, nex
   }
 }
 
+// Track failed login attempts
+const failedLogins = new Map<string, { count: number; lastAttempt: number }>();
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION = 30 * 60 * 1000; // 30 minutes
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -72,7 +77,33 @@ const authLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skipFailedRequests: false,
+  keyGenerator: (req) => req.ip || 'unknown',
+  handler: (req, res) => {
+    const ip = req.ip || 'unknown';
+    const failures = failedLogins.get(ip);
+    
+    if (failures?.count >= MAX_FAILED_ATTEMPTS) {
+      const timeLeft = LOCKOUT_DURATION - (Date.now() - failures.lastAttempt);
+      if (timeLeft > 0) {
+        return res.status(429).json({
+          status: 'error',
+          message: `Account locked. Try again in ${Math.ceil(timeLeft / 60000)} minutes`
+        });
+      }
+      failedLogins.delete(ip);
+    }
+    
+    res.status(429).json({
+      status: 'error',
+      message: 'Too many authentication attempts'
+    });
+  }
 });
+
+// Password strength requirements
+const PASSWORD_MIN_LENGTH = 12;
+const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/;
 
 export function registerAuthEndpoints(app: Express) {
   // Get the Replit domain

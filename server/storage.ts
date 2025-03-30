@@ -762,17 +762,10 @@ export class DatabaseStorage implements IStorage {
 
   async getTasks(filters: { meetingId?: number; userId?: number } = {}): Promise<Task[]> {
     try {
-      let query = db.select().from(tasks);
-
-      if (filters.meetingId) {
-        query = query.where(eq(tasks.meetingId, filters.meetingId));
-      }
-
-      if (filters.userId) {
-        query = query.where(eq(tasks.assigneeId, filters.userId));
-      }
-
-      return await query.orderBy(desc(tasks.createdAt));
+      // Create a SQL query directly since there's a mismatch between the schema and database
+      const where = filters.userId ? `WHERE user_id = ${filters.userId}` : '';
+      const result = await db.execute(`SELECT * FROM tasks ${where}`);
+      return result.rows as Task[];
     } catch (error) {
       console.error('Error fetching tasks:', error);
       throw error;
@@ -781,8 +774,8 @@ export class DatabaseStorage implements IStorage {
 
   async getTask(id: number): Promise<Task | undefined> {
     try {
-      const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
-      return task;
+      const result = await db.execute(`SELECT * FROM tasks WHERE id = ${id}`);
+      return result.rows[0] as Task;
     } catch (error) {
       console.error(`Error fetching task ${id}:`, error);
       throw error;
@@ -791,8 +784,19 @@ export class DatabaseStorage implements IStorage {
 
   async createTask(task: InsertTask): Promise<Task> {
     try {
-      const [createdTask] = await db.insert(tasks).values(task).returning();
-      return createdTask;
+      // Only use fields that exist in the database
+      const title = task.title;
+      const description = task.description ?? null;
+      const completed = task.completed ?? false;
+      const userId = task.userId ?? null;
+      
+      const result = await db.execute(
+        `INSERT INTO tasks (title, description, completed, user_id) 
+         VALUES ('${title}', ${description ? `'${description}'` : 'NULL'}, ${completed}, ${userId || 'NULL'}) 
+         RETURNING *`
+      );
+      
+      return result.rows[0] as Task;
     } catch (error) {
       console.error('Error creating task:', error);
       throw error;
@@ -801,17 +805,33 @@ export class DatabaseStorage implements IStorage {
 
   async updateTask(id: number, update: Partial<InsertTask>): Promise<Task> {
     try {
-      const [updatedTask] = await db
-        .update(tasks)
-        .set(update)
-        .where(eq(tasks.id, id))
-        .returning();
-
-      if (!updatedTask) {
+      // Build update SET clause for SQL
+      const updates = [];
+      
+      if (update.title !== undefined) updates.push(`title = '${update.title}'`);
+      if (update.description !== undefined) updates.push(`description = ${update.description ? `'${update.description}'` : 'NULL'}`);
+      if (update.completed !== undefined) updates.push(`completed = ${update.completed}`);
+      if (update.userId !== undefined) updates.push(`user_id = ${update.userId || 'NULL'}`);
+      
+      if (updates.length === 0) {
+        // No updates to perform
+        const result = await db.execute(`SELECT * FROM tasks WHERE id = ${id}`);
+        if (result.rows.length === 0) {
+          throw new Error('Task not found');
+        }
+        return result.rows[0] as Task;
+      }
+      
+      const updateClause = updates.join(', ');
+      const result = await db.execute(
+        `UPDATE tasks SET ${updateClause} WHERE id = ${id} RETURNING *`
+      );
+      
+      if (result.rows.length === 0) {
         throw new Error('Task not found');
       }
-
-      return updatedTask;
+      
+      return result.rows[0] as Task;
     } catch (error) {
       console.error(`Error updating task ${id}:`, error);
       throw error;
@@ -820,11 +840,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTask(id: number): Promise<boolean> {
     try {
-      const [deletedTask] = await db
-        .delete(tasks)
-        .where(eq(tasks.id, id))
-        .returning();
-      return !!deletedTask;
+      const result = await db.execute(
+        `DELETE FROM tasks WHERE id = ${id} RETURNING id`
+      );
+      return result.rows.length > 0;
     } catch (error) {
       console.error(`Error deleting task ${id}:`, error);
       throw error;

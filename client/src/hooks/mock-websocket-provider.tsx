@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useState, useCallback } from 'react';
+import { createContext, useContext, ReactNode, useState, useCallback, useEffect } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -21,7 +21,7 @@ const defaultContextValue: WebSocketContextType = {
   socket: null
 };
 
-// Create context
+// Create context with the same name as the real WebSocketContext to ensure type compatibility
 const WebSocketContext = createContext<WebSocketContextType>(defaultContextValue);
 
 // Provider component
@@ -102,7 +102,10 @@ export function MockWebSocketProvider({ children }: { children: ReactNode }) {
     socket: null // We don't need an actual socket for mocking
   };
   
-  console.log('Using mock WebSocket provider for development');
+  // Log once on initial mount to confirm we're using the mock provider
+  useEffect(() => {
+    console.log('Using mock WebSocket provider for development');
+  }, []);
   
   return (
     <WebSocketContext.Provider value={contextValue}>

@@ -36,15 +36,13 @@ export function setupWebSocket(server: Server) {
   try {
     // Configure WebSocket server with permissive settings for development
     const wsOptions = { 
-      server,
+      server, // Only specify server, not port or host
       path: '/ws',
       perMessageDeflate: false,
       clientTracking: true,
       maxPayload: 1024 * 1024 * 5,
       heartbeatInterval: 30000,
-      verifyClient: () => true,
-      host: '0.0.0.0',
-      port: 5000
+      verifyClient: () => true
     };
 
     wss = new WebSocketServer(wsOptions);
@@ -62,15 +60,11 @@ export function setupWebSocket(server: Server) {
         return;
       }
 
-      // Add ping/pong for connection health check
-      ws.isAlive = true;
-      ws.on('pong', () => { ws.isAlive = true; });
-
       console.log('Client connected to MeetMate WebSocket');
 
       // Initialize client state
+      ws.isAlive = true;
       ws.reconnectAttempts = 0;
-
 
       // Send initial connection success message
       try {

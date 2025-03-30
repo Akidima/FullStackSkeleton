@@ -70,6 +70,11 @@ export default function MeetingDetails() {
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isCollaborating, setIsCollaborating] = useState(false);
+  
+  // Log the meeting ID for debugging
+  useEffect(() => {
+    console.log("Meeting ID:", meetingId);
+  }, [meetingId]);
 
   // Query for meeting details with retry logic
   const { data: meeting, isLoading } = useQuery<Meeting>({
@@ -78,6 +83,13 @@ export default function MeetingDetails() {
     retry: MAX_RETRIES,
     retryDelay: (attemptIndex) => Math.min(RETRY_DELAY * Math.pow(2, attemptIndex), 30000),
   });
+  
+  // Update notes when meeting data is loaded
+  useEffect(() => {
+    if (meeting && meeting.notes) {
+      setNotes(meeting.notes);
+    }
+  }, [meeting]);
 
   // Save notes mutation with retry logic
   const saveNotes = useMutation({

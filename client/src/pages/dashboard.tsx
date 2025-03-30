@@ -11,6 +11,7 @@ import { VoiceAssistant } from "@/components/voice-assistant";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useWebSocket } from "@/hooks/websocket-provider";
 import { mockMeetings, mockTasks, mockNotes } from "@/lib/mockData";
+import { useQuery } from "@tanstack/react-query";
 
 interface TaskType {
   id: number;
@@ -47,11 +48,8 @@ export default function Dashboard() {
     fetch('/api/notes').then(res => res.json())
   );
   
+  // Use the loading states from the queries directly
   const isLoading = meetingsLoading || tasksLoading || notesLoading;
-  
-  const meetingsLoading = isLoading;
-  const tasksLoading = isLoading;
-  const notesLoading = isLoading;
   
   // Log connection status
   useEffect(() => {

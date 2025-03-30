@@ -35,20 +35,19 @@ export default function Dashboard() {
   const [isVoiceAssistantEnabled, setIsVoiceAssistantEnabled] = useState(false);
   const { isConnected } = useWebSocket();
   
-  // Use mock data directly instead of API queries in Replit environment
-  const [meetings, setMeetings] = useState(mockMeetings);
-  const [tasks, setTasks] = useState(mockTasks);
-  const [recentNotes, setRecentNotes] = useState(mockNotes);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data: meetings = [], isLoading: meetingsLoading } = useQuery(['meetings'], () => 
+    fetch('/api/meetings').then(res => res.json())
+  );
   
-  // Simulate data loading
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 800);
-    
-    return () => clearTimeout(timer);
-  }, []);
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery(['tasks'], () => 
+    fetch('/api/tasks').then(res => res.json())
+  );
+  
+  const { data: recentNotes = [], isLoading: notesLoading } = useQuery(['notes'], () => 
+    fetch('/api/notes').then(res => res.json())
+  );
+  
+  const isLoading = meetingsLoading || tasksLoading || notesLoading;
   
   const meetingsLoading = isLoading;
   const tasksLoading = isLoading;

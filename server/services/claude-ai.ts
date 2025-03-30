@@ -96,13 +96,36 @@ function extractTextFromResponse(response: any): string {
   throw new Error('Invalid response format: Expected text content');
 }
 
-// Process and validate Claude responses with error handling
+// Add a delay function to help with rate limiting
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Keep track of the last API call time
+let lastApiCallTime = 0;
+const MIN_TIME_BETWEEN_CALLS = 2000; // 2 seconds between API calls
+
+// Process and validate Claude responses with error handling and rate limiting
 async function processClaudeResponse<T>(
   responsePromise: Promise<any>, 
   validationFunction?: (data: any) => any,
   defaultValue?: T
 ): Promise<T> {
   try {
+    // Apply rate limiting
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCallTime;
+    
+    if (timeSinceLastCall < MIN_TIME_BETWEEN_CALLS) {
+      const waitTime = MIN_TIME_BETWEEN_CALLS - timeSinceLastCall;
+      console.log(`Rate limiting: Waiting ${waitTime}ms before next Claude API call`);
+      await delay(waitTime);
+    }
+    
+    // Update the last API call time
+    lastApiCallTime = Date.now();
+    
+    // Make the API call
     const response = await responsePromise;
     const content = extractTextFromResponse(response);
     

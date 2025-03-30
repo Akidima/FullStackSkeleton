@@ -44,15 +44,14 @@ export function setupWebSocket(server: Server) {
   try {
     // Configure WebSocket server with permissive settings for development
     const wsOptions = { 
-      server,
+      server, // Attach to the existing HTTP server
       path: '/ws',
       perMessageDeflate: false,
       clientTracking: true,
       maxPayload: 1024 * 1024 * 5,
       heartbeatInterval: 30000,
-      verifyClient: () => true, // Allow all connections for now
-      host: '0.0.0.0',
-      port: 5000
+      verifyClient: () => true // Allow all connections for now
+      // Removed conflicting host and port options
     };
 
     wss = new WebSocketServer(wsOptions);

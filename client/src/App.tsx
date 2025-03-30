@@ -19,7 +19,7 @@ import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { Layout } from "@/components/layout";
 import { Loader2 } from "lucide-react";
-import { WebSocketProvider } from "@/hooks/websocket-provider";
+import { WebSocketProvider } from "@/hooks/mock-websocket-provider";
 
 
 // Loading fallback component
@@ -102,10 +102,22 @@ function App() {
   const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
-    // Simulate an async operation to fetch data or check authentication
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
+    // Initialize data and check authentication
+    const initializeApp = async () => {
+      try {
+        // Anything that needs to be initialized before showing the app
+        // No need to initialize mock data here as it's done in queryClient.tsx
+
+        // Small delay for better user experience with the loading screen
+        await new Promise(resolve => setTimeout(resolve, 800));
+      } catch (error) {
+        console.error('Error initializing app:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeApp();
   }, []);
 
   if (isLoading) {

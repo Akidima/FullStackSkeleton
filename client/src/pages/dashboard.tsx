@@ -1,17 +1,16 @@
 import { useState, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Calendar, CheckCircle, Clock, AlertCircle, Wifi, WifiOff } from "lucide-react";
-import { Meeting, Task } from "@shared/schema"; 
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { VoiceAssistant } from "@/components/voice-assistant";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useWebSocket } from "@/hooks/websocket-provider";
+import { mockMeetings, mockTasks, mockNotes } from "@/lib/mockData";
 
 interface TaskType {
   id: number;
@@ -34,35 +33,33 @@ interface NoteType {
 export default function Dashboard() {
   const [activeSection, setActiveSection] = useState<string>("meetings");
   const [isVoiceAssistantEnabled, setIsVoiceAssistantEnabled] = useState(false);
-  const queryClient = useQueryClient();
-  const { isConnected, connectionState } = useWebSocket();
-
-  // Queries with proper typing and error handling
-  const { data: meetings = [], isLoading: meetingsLoading } = useQuery<Meeting[]>({
-    queryKey: ["/api/meetings"],
-    // Add retry and longer staleTime to handle potential connectivity issues
-    retry: 3,
-    staleTime: 30000
-  });
-
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery<TaskType[]>({
-    queryKey: ["/api/tasks"],
-    retry: 3,
-    staleTime: 30000
-  });
+  const { isConnected } = useWebSocket();
   
-  // WebSocket connection status effect
+  // Use mock data directly instead of API queries in Replit environment
+  const [meetings, setMeetings] = useState(mockMeetings);
+  const [tasks, setTasks] = useState(mockTasks);
+  const [recentNotes, setRecentNotes] = useState(mockNotes);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Simulate data loading
   useEffect(() => {
-    if (connectionState === 'connected') {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 800);
+    
+    return () => clearTimeout(timer);
+  }, []);
+  
+  const meetingsLoading = isLoading;
+  const tasksLoading = isLoading;
+  const notesLoading = isLoading;
+  
+  // Log connection status
+  useEffect(() => {
+    if (isConnected) {
       console.log('WebSocket connected in Dashboard');
     }
-  }, [connectionState]);
-
-  const { data: recentNotes = [], isLoading: notesLoading } = useQuery<NoteType[]>({
-    queryKey: ["/api/meetings/notes"],
-    retry: 3,
-    staleTime: 30000
-  });
+  }, [isConnected]);
 
   const upcomingMeetings = meetings
     .filter(m => new Date(m.date) > new Date())

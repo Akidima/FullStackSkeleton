@@ -9,84 +9,135 @@ const MAX_RECONNECT_DELAY = 30000;
 const RECONNECT_DECAY = 1.5;
 
 export function setupWebSocket(server: Server) {
-  wss = new WebSocketServer({ server, path: '/ws/app' }); // Changed path to avoid conflicts
+  console.log('Initializing WebSocket server on path: /ws/app');
+  
+  try {
+    // Configure WebSocket server with permissive settings for development
+    const wsOptions = { 
+      server, 
+      path: '/ws/app',
+      // Development-friendly options
+      perMessageDeflate: false,
+      clientTracking: true,
+      // Increase max payload size
+      maxPayload: 1024 * 1024 * 5, // 5MB
+      // Increase heartbeat interval
+      heartbeatInterval: 60000,
+      // Allow any origin for development purposes
+      verifyClient: (info: any) => {
+        console.log('WebSocket connection attempt from:', info.origin || 'unknown origin');
+        return true; // Accept all connections in development
+      }
+    };
+    
+    wss = new WebSocketServer(wsOptions);
+    
+    // Handle server-level errors
+    wss.on('error', (error) => {
+      console.error('WebSocket server error:', error.message);
+    });
 
-  wss.on('connection', (ws: WebSocket & { isAlive?: boolean; reconnectAttempts?: number }) => {
-    console.log('Client connected to MeetMate WebSocket');
+    wss.on('connection', (ws: WebSocket & { isAlive?: boolean; reconnectAttempts?: number }) => {
+      console.log('Client connected to MeetMate WebSocket');
 
-    // Initialize client state
-    ws.isAlive = true;
-    ws.reconnectAttempts = 0;
-
-    // Send initial connection success message
-    ws.send(JSON.stringify({
-      type: 'connection:status',
-      status: 'connected',
-      timestamp: new Date().toISOString()
-    }));
-
-    // Setup ping-pong to detect stale connections
-    ws.on('pong', () => {
+      // Initialize client state
       ws.isAlive = true;
-      ws.reconnectAttempts = 0; // Reset reconnect attempts on successful pong
-    });
+      ws.reconnectAttempts = 0;
 
-    ws.on('error', (error) => {
-      console.error('MeetMate WebSocket client error:', {
-        error: error.message,
-        timestamp: new Date().toISOString(),
-        reconnectAttempts: ws.reconnectAttempts
-      });
-    });
-
-    ws.on('close', (code, reason) => {
-      console.log('Client disconnected from MeetMate WebSocket:', {
-        code,
-        reason: reason.toString(),
-        timestamp: new Date().toISOString()
-      });
-      ws.isAlive = false;
-    });
-  });
-
-  // Setup interval to check for stale connections with backoff
-  const interval = setInterval(() => {
-    wss.clients.forEach((ws: WebSocket & { isAlive?: boolean; reconnectAttempts?: number }) => {
-      if (ws.isAlive === false) {
-        ws.reconnectAttempts = (ws.reconnectAttempts || 0) + 1;
-        const backoffDelay = Math.min(
-          INITIAL_RECONNECT_DELAY * Math.pow(RECONNECT_DECAY, ws.reconnectAttempts),
-          MAX_RECONNECT_DELAY
-        );
-
-        console.log('Terminating stale MeetMate WebSocket connection:', {
-          reconnectAttempts: ws.reconnectAttempts,
-          backoffDelay,
-          timestamp: new Date().toISOString()
-        });
-
-        return ws.terminate();
-      }
-
-      ws.isAlive = false;
+      // Send initial connection success message
       try {
-        ws.ping();
-      } catch (error) {
-        console.error('Error pinging MeetMate WebSocket client:', {
+        ws.send(JSON.stringify({
+          type: 'connection:status',
+          status: 'connected',
+          timestamp: new Date().toISOString()
+        }));
+      } catch (err) {
+        console.error('Error sending initial WebSocket message:', err);
+      }
+
+      // Handle incoming messages
+      ws.on('message', (message) => {
+        try {
+          console.log('Received WebSocket message:', message.toString());
+          // Echo message back to verify connection is working
+          ws.send(JSON.stringify({
+            type: 'echo',
+            message: message.toString(),
+            timestamp: new Date().toISOString()
+          }));
+        } catch (err) {
+          console.error('Error handling WebSocket message:', err);
+        }
+      });
+
+      // Setup ping-pong to detect stale connections
+      ws.on('pong', () => {
+        ws.isAlive = true;
+        ws.reconnectAttempts = 0; // Reset reconnect attempts on successful pong
+      });
+
+      ws.on('error', (error) => {
+        console.error('MeetMate WebSocket client error:', {
           error: error.message,
+          timestamp: new Date().toISOString(),
+          reconnectAttempts: ws.reconnectAttempts
+        });
+      });
+
+      ws.on('close', (code, reason) => {
+        console.log('Client disconnected from MeetMate WebSocket:', {
+          code,
+          reason: reason.toString() || 'No reason provided',
           timestamp: new Date().toISOString()
         });
-      }
+        ws.isAlive = false;
+      });
     });
-  }, 30000);
 
-  // Cleanup interval on server close
-  wss.on('close', () => {
-    clearInterval(interval);
-    console.log('MeetMate WebSocket server closed');
-  });
+    // Setup interval to check for stale connections with backoff
+    const interval = setInterval(() => {
+      wss.clients.forEach((ws: WebSocket & { isAlive?: boolean; reconnectAttempts?: number }) => {
+        if (ws.isAlive === false) {
+          ws.reconnectAttempts = (ws.reconnectAttempts || 0) + 1;
+          const backoffDelay = Math.min(
+            INITIAL_RECONNECT_DELAY * Math.pow(RECONNECT_DECAY, ws.reconnectAttempts),
+            MAX_RECONNECT_DELAY
+          );
 
-  return wss;
+          console.log('Terminating stale MeetMate WebSocket connection:', {
+            reconnectAttempts: ws.reconnectAttempts,
+            backoffDelay,
+            timestamp: new Date().toISOString()
+          });
+
+          return ws.terminate();
+        }
+
+        ws.isAlive = false;
+        try {
+          ws.ping();
+        } catch (error) {
+          console.error('Error pinging MeetMate WebSocket client:', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            timestamp: new Date().toISOString()
+          });
+        }
+      });
+    }, 30000);
+
+    // Cleanup interval on server close
+    wss.on('close', () => {
+      clearInterval(interval);
+      console.log('MeetMate WebSocket server closed');
+    });
+
+    console.log('WebSocket server initialized successfully');
+    return wss;
+  } catch (error) {
+    console.error('Failed to initialize WebSocket server:', 
+      error instanceof Error ? error.message : 'Unknown error');
+    throw error;
+  }
 }
 
 export function broadcastMeetingUpdate(type: 'create' | 'update' | 'delete' | 'notes', meetingId: number) {

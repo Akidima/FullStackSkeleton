@@ -8,6 +8,48 @@ import { Mic, MicOff, Loader2, Globe, Wifi, WifiOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useWebSocketSimple } from "@/hooks/use-websocket-simple";
 
+// Define SpeechRecognition types since TypeScript doesn't include them by default
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  readonly length: number;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  readonly isFinal: boolean;
+  readonly length: number;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  readonly transcript: string;
+  readonly confidence: number;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onaudioend: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onaudiostart: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any) | null;
+  onnomatch: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null;
+  onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
 interface VoiceAssistantProps {
   onCommand?: (command: string) => void;
   onTranscript?: (transcript: string) => void;
@@ -86,8 +128,22 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
 
       // Initialize speech recognition
       setLoadingStatus("Initializing voice recognition...");
-      const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-      const recognizer = new SpeechRecognition();
+      
+      // Access the SpeechRecognition constructor with proper type handling
+      const windowWithSpeech = window as unknown as {
+        webkitSpeechRecognition?: new () => SpeechRecognition;
+        SpeechRecognition?: new () => SpeechRecognition;
+      };
+      
+      const SpeechRecognitionConstructor = 
+        windowWithSpeech.webkitSpeechRecognition || 
+        windowWithSpeech.SpeechRecognition;
+        
+      if (!SpeechRecognitionConstructor) {
+        throw new Error('Speech recognition is not supported in your browser');
+      }
+      
+      const recognizer = new SpeechRecognitionConstructor();
 
       recognizer.continuous = true;
       recognizer.interimResults = true;

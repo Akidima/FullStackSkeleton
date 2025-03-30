@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { VoiceAssistant } from "@/components/voice-assistant";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { useWebSocket } from "@/hooks/websocket-provider";
+import { useMockWebSocket } from "@/hooks/mock-websocket-provider";
 import { mockMeetings, mockTasks, mockNotes } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
 
@@ -34,19 +34,22 @@ interface NoteType {
 export default function Dashboard() {
   const [activeSection, setActiveSection] = useState<string>("meetings");
   const [isVoiceAssistantEnabled, setIsVoiceAssistantEnabled] = useState(false);
-  const { isConnected } = useWebSocket();
+  const { isConnected } = useMockWebSocket();
   
-  const { data: meetings = [], isLoading: meetingsLoading } = useQuery(['meetings'], () => 
-    fetch('/api/meetings').then(res => res.json())
-  );
+  const { data: meetings = mockMeetings, isLoading: meetingsLoading } = useQuery({ 
+    queryKey: ['meetings'],
+    queryFn: () => fetch('/api/meetings').then(res => res.json())
+  });
   
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery(['tasks'], () => 
-    fetch('/api/tasks').then(res => res.json())
-  );
+  const { data: tasks = mockTasks, isLoading: tasksLoading } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => fetch('/api/tasks').then(res => res.json())
+  });
   
-  const { data: recentNotes = [], isLoading: notesLoading } = useQuery(['notes'], () => 
-    fetch('/api/notes').then(res => res.json())
-  );
+  const { data: recentNotes = mockNotes, isLoading: notesLoading } = useQuery({
+    queryKey: ['notes'],
+    queryFn: () => fetch('/api/notes').then(res => res.json())
+  });
   
   // Use the loading states from the queries directly
   const isLoading = meetingsLoading || tasksLoading || notesLoading;

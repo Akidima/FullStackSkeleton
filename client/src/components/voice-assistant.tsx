@@ -55,6 +55,8 @@ interface VoiceAssistantProps {
   onCommand?: (command: string) => void;
   onTranscript?: (transcript: string) => void;
   isActive?: boolean;
+  userId?: number; // User ID for custom shortcuts
+  currentPage?: string; // Current page for context-aware commands
 }
 
 // Rate limiting configuration
@@ -76,7 +78,7 @@ const SUPPORTED_LANGUAGES = {
   'ru-RU': 'Russian'
 } as const;
 
-export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: VoiceAssistantProps) {
+export function VoiceAssistant({ onCommand, onTranscript, isActive = false, userId, currentPage }: VoiceAssistantProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("");
@@ -181,7 +183,9 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
             const response = await axios.post('/api/voice/command', {
               transcript: transcriptText,
               language: selectedLanguage,
-              confidence: lastResult[0].confidence
+              confidence: lastResult[0].confidence,
+              userId: userId,
+              currentPage: currentPage
             });
             
             // Remove processing announcement
@@ -314,7 +318,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
       setLoadingStatus("");
       setIsInitialized(false);
     }
-  }, [isActive, onCommand, onTranscript, selectedLanguage, getBackoffDelay]);
+  }, [isActive, onCommand, onTranscript, selectedLanguage, getBackoffDelay, userId, currentPage]);
 
   // Initialize or reinitialize recognition when language changes
   useEffect(() => {

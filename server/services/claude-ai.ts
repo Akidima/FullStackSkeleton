@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { Meeting } from '@shared/schema';
+import { Meeting, VoiceCommandShortcut } from '@shared/schema';
 import * as aiValidator from './ai-validator';
+import { storage } from '../storage';
 
 // Initialize the Anthropic client with the API key
 const anthropic = new Anthropic({
@@ -30,6 +31,53 @@ const getModelForTask = (task: string, requiresHighAccuracy: boolean = true): st
   // Default to Haiku for most tasks
   return MODELS.HAIKU;
 };
+
+// Calculate string similarity for voice command matching
+function calculateStringSimilarity(str1: string, str2: string): number {
+  if (str1 === str2) return 1.0; // Exact match
+  if (str1.length === 0 || str2.length === 0) return 0.0;
+  
+  // Simple contain check for short commands
+  if (str1.includes(str2) || str2.includes(str1)) {
+    // If one is a substring of the other, consider it a high match
+    const ratio = Math.min(str1.length, str2.length) / Math.max(str1.length, str2.length);
+    return 0.8 + (ratio * 0.2); // Scale between 0.8 and 1.0 based on length ratio
+  }
+  
+  // Basic Levenshtein distance calculation
+  const len1 = str1.length;
+  const len2 = str2.length;
+  
+  // Create matrix of distances
+  const matrix: number[][] = [];
+  for (let i = 0; i <= len1; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= len2; j++) {
+    matrix[0][j] = j;
+  }
+  
+  // Fill the matrix
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1, // deletion
+        matrix[i][j - 1] + 1, // insertion
+        matrix[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  
+  // Calculate similarity score (0 to 1)
+  // Convert edit distance to similarity ratio
+  const distance = matrix[len1][len2];
+  const maxLen = Math.max(len1, len2);
+  const similarity = 1 - (distance / maxLen);
+  
+  return similarity;
+}
 
 // Helper function to extract text content from Claude response
 function extractTextFromResponse(response: any): string {
@@ -447,6 +495,78 @@ export async function processVoiceCommand(transcript: string, context: any = {})
   
   // Get confidence score from context if available
   const recognitionConfidence = context.confidence || 0.7; // Default reasonable confidence
+  
+  // Get user ID from context if available (for custom shortcuts)
+  const userId = context.userId ? Number(context.userId) : null;
+  
+  // Check for custom voice command shortcuts first (both user-specific and default shortcuts)
+  try {
+    // Get user-specific shortcuts if userId is provided
+    let shortcuts: VoiceCommandShortcut[] = [];
+    if (userId) {
+      shortcuts = await storage.getVoiceCommandShortcuts(userId);
+    }
+    
+    // Get default shortcuts (for all users) if no user-specific shortcuts match
+    if (shortcuts.length === 0) {
+      shortcuts = await storage.getDefaultVoiceCommandShortcuts();
+    }
+    
+    // Find the best matching shortcut using string similarity
+    let bestMatch = null;
+    let bestScore = 0.7; // Minimum similarity threshold
+    
+    for (const shortcut of shortcuts) {
+      if (!shortcut.isEnabled) continue;
+      
+      // Calculate string similarity
+      const similarity = calculateStringSimilarity(
+        normalizedTranscript.toLowerCase(), 
+        shortcut.phrase.toLowerCase()
+      );
+      
+      if (similarity > bestScore) {
+        bestScore = similarity;
+        bestMatch = shortcut;
+      }
+    }
+    
+    // If we found a matching shortcut, use it
+    if (bestMatch) {
+      console.log(`Voice shortcut matched: "${bestMatch.phrase}" with score ${bestScore}`);
+      
+      // Parse the parameters
+      let params = {};
+      try {
+        params = typeof bestMatch.parameters === 'string' 
+          ? JSON.parse(bestMatch.parameters) 
+          : bestMatch.parameters;
+      } catch (e) {
+        console.error('Failed to parse shortcut parameters:', e);
+      }
+      
+      // Return the shortcut action
+      return {
+        understood: true,
+        commandType: bestMatch.action,
+        params,
+        processedCommand: bestMatch.phrase,
+        userFeedback: `Executing shortcut: ${bestMatch.name}`,
+        confidence: bestScore,
+        alternativeInterpretations: [],
+        timestamp: new Date().toISOString(),
+        originalTranscript: normalizedTranscript,
+        speechContext: {
+          languageCode: languageCode,
+          recognitionConfidence: recognitionConfidence
+        },
+        shortcutId: bestMatch.id
+      };
+    }
+  } catch (error) {
+    console.error('Error checking voice command shortcuts:', error);
+    // Continue with normal command processing if there's an error
+  }
   
   // Prepare a comprehensive guide to common voice commands and their expected responses
   const commandExamples = {

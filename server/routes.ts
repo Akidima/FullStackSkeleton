@@ -3,7 +3,12 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupWebSocket, broadcastMeetingUpdate, broadcastRegistrationAttempt, broadcastSystemStatus, wss } from './websocket';
 import { WebSocketServer, WebSocket } from 'ws';
-import { insertMeetingSchema, updateMeetingSchema } from "@shared/schema";
+import { 
+  insertMeetingSchema, 
+  updateMeetingSchema,
+  insertVoiceCommandShortcutSchema,
+  updateVoiceCommandShortcutSchema 
+} from "@shared/schema";
 import { ZodError } from "zod";
 import { errorHandler, asyncHandler } from "./middleware/errorHandler";
 import { NotFoundError, ValidationError } from "./errors/AppError";
@@ -1218,10 +1223,155 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
   
+  // Voice Command Shortcuts API
+  app.get("/api/voice-command-shortcuts", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const userId = Number(req.user.id);
+      const shortcuts = await storage.getVoiceCommandShortcuts(userId);
+      
+      res.json(shortcuts);
+    } catch (error) {
+      console.error("Error fetching voice command shortcuts:", error);
+      res.status(500).json({ error: "Failed to fetch voice command shortcuts" });
+    }
+  }));
+
+  app.get("/api/voice-command-shortcuts/default", asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const shortcuts = await storage.getDefaultVoiceCommandShortcuts();
+      res.json(shortcuts);
+    } catch (error) {
+      console.error("Error fetching default voice command shortcuts:", error);
+      res.status(500).json({ error: "Failed to fetch default voice command shortcuts" });
+    }
+  }));
+
+  app.get("/api/voice-command-shortcuts/:id", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const shortcutId = Number(req.params.id);
+      const shortcut = await storage.getVoiceCommandShortcut(shortcutId);
+      
+      if (!shortcut) {
+        return res.status(404).json({ error: "Voice command shortcut not found" });
+      }
+      
+      // Only allow access to the user's own shortcuts or default shortcuts
+      if (shortcut.userId !== req.user.id && !shortcut.isDefault) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      res.json(shortcut);
+    } catch (error) {
+      console.error(`Error fetching voice command shortcut ${req.params.id}:`, error);
+      res.status(500).json({ error: "Failed to fetch voice command shortcut" });
+    }
+  }));
+
+  app.post("/api/voice-command-shortcuts", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const shortcutData = insertVoiceCommandShortcutSchema.parse({
+        ...req.body,
+        userId: Number(req.user.id),
+        isDefault: false
+      });
+      
+      const shortcut = await storage.createVoiceCommandShortcut(shortcutData);
+      
+      res.status(201).json(shortcut);
+    } catch (error) {
+      console.error("Error creating voice command shortcut:", error);
+      if (error instanceof ZodError) {
+        throw new ValidationError("Invalid voice command shortcut data", error.errors);
+      }
+      throw error;
+    }
+  }));
+
+  app.patch("/api/voice-command-shortcuts/:id", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const shortcutId = Number(req.params.id);
+      const shortcut = await storage.getVoiceCommandShortcut(shortcutId);
+      
+      if (!shortcut) {
+        return res.status(404).json({ error: "Voice command shortcut not found" });
+      }
+      
+      // Only allow users to update their own shortcuts
+      if (shortcut.userId !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      // Don't allow updating userId or isDefault
+      const { userId, isDefault, ...updateData } = updateVoiceCommandShortcutSchema.parse(req.body);
+      
+      const updatedShortcut = await storage.updateVoiceCommandShortcut(shortcutId, updateData);
+      
+      res.json(updatedShortcut);
+    } catch (error) {
+      console.error(`Error updating voice command shortcut ${req.params.id}:`, error);
+      if (error instanceof ZodError) {
+        throw new ValidationError("Invalid voice command shortcut data", error.errors);
+      }
+      throw error;
+    }
+  }));
+
+  app.delete("/api/voice-command-shortcuts/:id", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const shortcutId = Number(req.params.id);
+      const shortcut = await storage.getVoiceCommandShortcut(shortcutId);
+      
+      if (!shortcut) {
+        return res.status(404).json({ error: "Voice command shortcut not found" });
+      }
+      
+      // Only allow users to delete their own shortcuts
+      if (shortcut.userId !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      // Don't allow deleting default shortcuts
+      if (shortcut.isDefault) {
+        return res.status(403).json({ error: "Cannot delete default shortcuts" });
+      }
+      
+      const success = await storage.deleteVoiceCommandShortcut(shortcutId);
+      
+      if (success) {
+        res.status(200).json({ success: true, message: "Voice command shortcut deleted successfully" });
+      } else {
+        res.status(500).json({ error: "Failed to delete voice command shortcut" });
+      }
+    } catch (error) {
+      console.error(`Error deleting voice command shortcut ${req.params.id}:`, error);
+      throw error;
+    }
+  }));
+
   // Add Voice Command Processing API
   app.post("/api/voice/command", voiceRecognitionLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
-      const { transcript, language, confidence = 0 } = req.body;
+      const { transcript, language, confidence = 0, userId, currentPage } = req.body;
       
       if (!transcript || typeof transcript !== 'string') {
         throw new ValidationError("Voice transcript is required", [
@@ -1234,6 +1384,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         language: language || 'en-US',
         confidence: confidence,
         timestamp: new Date().toISOString(),
+        userId: userId, // Pass user ID for custom shortcuts
+        currentPage: currentPage, // Pass current page for context-aware commands
         clientInfo: {
           userAgent: req.headers['user-agent'],
           ip: req.ip

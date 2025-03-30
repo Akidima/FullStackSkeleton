@@ -19,6 +19,23 @@ export interface VoiceCommand {
   }
 }
 
+// Add table for custom voice command shortcuts
+export const voiceCommandShortcuts = pgTable("voice_command_shortcuts", {
+  id: serial("id").primaryKey(),
+  userId: serial("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(), // User-friendly name
+  phrase: text("phrase").notNull(), // The voice command phrase
+  action: text("action").notNull(), // Action to perform (e.g., "create_meeting", "join_meeting")
+  parameters: jsonb("parameters").default({}), // e.g. { "title": "Quick Meeting", "duration": 30 }
+  isEnabled: boolean("is_enabled").default(true),
+  isDefault: boolean("is_default").default(false), // If true, this is a system-provided shortcut
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  userIdIdx: index("voice_shortcuts_user_id_idx").on(table.userId),
+  phraseIdx: index("voice_shortcuts_phrase_idx").on(table.phrase),
+}));
+
 // Users table with improved indexing and verification fields
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -305,7 +322,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   userAvailability: many(userAvailability),
   meetingPreferences: many(meetingPreferences),
   integrationSettings: many(userIntegrationSettings),
-  notifications: many(userNotifications)
+  notifications: many(userNotifications),
+  voiceCommandShortcuts: many(voiceCommandShortcuts)
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
@@ -424,6 +442,14 @@ export const taskNotificationsRelations = relations(taskNotifications, ({ one })
 export const userIntegrationSettingsRelations = relations(userIntegrationSettings, ({ one }) => ({
   user: one(users, {
     fields: [userIntegrationSettings.userId],
+    references: [users.id],
+  }),
+}));
+
+// Add relation for voice command shortcuts
+export const voiceCommandShortcutsRelations = relations(voiceCommandShortcuts, ({ one }) => ({
+  user: one(users, {
+    fields: [voiceCommandShortcuts.userId],
     references: [users.id],
   }),
 }));
@@ -606,6 +632,45 @@ export const insertUserNotificationSchema = createInsertSchema(userNotifications
     updatedAt: true,
   });
 
+// Add schema for voice command shortcuts
+export const insertVoiceCommandShortcutSchema = createInsertSchema(voiceCommandShortcuts)
+  .extend({
+    action: z.enum([
+      'create_meeting',
+      'join_meeting',
+      'add_task',
+      'toggle_voice_assistant',
+      'navigate_to',
+      'summarize_meeting',
+      'set_reminder',
+      'cancel_meeting',
+      'custom_api_call'
+    ]),
+    parameters: z.record(z.string(), z.any()).default({})
+  })
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true
+  });
+
+export const updateVoiceCommandShortcutSchema = createInsertSchema(voiceCommandShortcuts)
+  .partial()
+  .extend({
+    action: z.enum([
+      'create_meeting',
+      'join_meeting',
+      'add_task',
+      'toggle_voice_assistant',
+      'navigate_to',
+      'summarize_meeting',
+      'set_reminder',
+      'cancel_meeting',
+      'custom_api_call'
+    ]).optional(),
+    parameters: z.record(z.string(), z.any()).optional()
+  });
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -646,3 +711,6 @@ export type UserIntegrationSettings = typeof userIntegrationSettings.$inferSelec
 export type InsertUserIntegrationSettings = z.infer<typeof insertUserIntegrationSettingsSchema>;
 export type UserNotifications = typeof userNotifications.$inferSelect;
 export type InsertUserNotifications = z.infer<typeof insertUserNotificationSchema>;
+export type VoiceCommandShortcut = typeof voiceCommandShortcuts.$inferSelect;
+export type InsertVoiceCommandShortcut = z.infer<typeof insertVoiceCommandShortcutSchema>;
+export type UpdateVoiceCommandShortcut = z.infer<typeof updateVoiceCommandShortcutSchema>;

@@ -135,6 +135,8 @@ export default function Dashboard() {
               <VoiceAssistant
                 isActive={true}
                 onCommand={handleVoiceCommand}
+                userId={1} // Replace with actual user ID from auth context
+                currentPage="dashboard"
               />
             )}
           </ErrorBoundary>

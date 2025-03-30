@@ -8,6 +8,13 @@ import {
   meetingOutcomes,
   calendarEvents,
   userIntegrationSettings,
+  voiceCommandShortcuts,
+  registrationAttempts,
+  securityRecommendations,
+  userPreferences,
+  userNotifications,
+  userAvailability,
+  meetingPreferences,
   type Meeting,
   type InsertMeeting,
   type User,
@@ -26,18 +33,24 @@ import {
   type InsertCalendarEvent,
   type UserIntegrationSettings,
   type InsertUserIntegrationSettings,
-} from "@shared/schema";
-import { db } from "./db";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
-
-import {
-  userPreferences,
-  userNotifications,
+  type RegistrationAttempt,
+  type InsertRegistrationAttempt,
+  type SecurityRecommendation,
+  type InsertSecurityRecommendation,
   type UserPreferences,
   type InsertUserPreferences,
   type UserNotifications,
   type InsertUserNotifications,
+  type UserAvailability,
+  type InsertUserAvailability,
+  type MeetingPreference,
+  type InsertMeetingPreference,
+  type VoiceCommandShortcut,
+  type InsertVoiceCommandShortcut,
+  type UpdateVoiceCommandShortcut,
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, and, gte, lte, desc } from "drizzle-orm";
 
 export interface IStorage {
   // Meeting operations
@@ -116,6 +129,14 @@ export interface IStorage {
   // Integration settings operations
   getUserIntegrationSettings(userId: number): Promise<UserIntegrationSettings | undefined>;
   updateUserIntegrationSettings(userId: number, settings: Partial<InsertUserIntegrationSettings>): Promise<UserIntegrationSettings>;
+
+  // Voice command shortcuts operations
+  getVoiceCommandShortcuts(userId: number): Promise<VoiceCommandShortcut[]>;
+  getVoiceCommandShortcut(id: number): Promise<VoiceCommandShortcut | undefined>;
+  createVoiceCommandShortcut(shortcut: InsertVoiceCommandShortcut): Promise<VoiceCommandShortcut>;
+  updateVoiceCommandShortcut(id: number, shortcut: UpdateVoiceCommandShortcut): Promise<VoiceCommandShortcut>;
+  deleteVoiceCommandShortcut(id: number): Promise<boolean>;
+  getDefaultVoiceCommandShortcuts(): Promise<VoiceCommandShortcut[]>;
 
   // Add new methods for user settings
   getUser(id: number): Promise<User | undefined>;
@@ -975,6 +996,94 @@ export class DatabaseStorage implements IStorage {
       }
     } catch (error) {
       console.error(`Error updating notifications for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  // Voice command shortcuts operations
+  async getVoiceCommandShortcuts(userId: number): Promise<VoiceCommandShortcut[]> {
+    try {
+      return await db
+        .select()
+        .from(voiceCommandShortcuts)
+        .where(eq(voiceCommandShortcuts.userId, userId))
+        .orderBy(voiceCommandShortcuts.name);
+    } catch (error) {
+      console.error(`Error fetching voice command shortcuts for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  async getVoiceCommandShortcut(id: number): Promise<VoiceCommandShortcut | undefined> {
+    try {
+      const [shortcut] = await db
+        .select()
+        .from(voiceCommandShortcuts)
+        .where(eq(voiceCommandShortcuts.id, id));
+      return shortcut;
+    } catch (error) {
+      console.error(`Error fetching voice command shortcut ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async createVoiceCommandShortcut(shortcut: InsertVoiceCommandShortcut): Promise<VoiceCommandShortcut> {
+    try {
+      const [createdShortcut] = await db
+        .insert(voiceCommandShortcuts)
+        .values(shortcut)
+        .returning();
+      return createdShortcut;
+    } catch (error) {
+      console.error('Error creating voice command shortcut:', error);
+      throw error;
+    }
+  }
+
+  async updateVoiceCommandShortcut(
+    id: number,
+    shortcut: UpdateVoiceCommandShortcut
+  ): Promise<VoiceCommandShortcut> {
+    try {
+      const [updatedShortcut] = await db
+        .update(voiceCommandShortcuts)
+        .set(shortcut)
+        .where(eq(voiceCommandShortcuts.id, id))
+        .returning();
+      
+      if (!updatedShortcut) {
+        throw new Error('Voice command shortcut not found');
+      }
+      
+      return updatedShortcut;
+    } catch (error) {
+      console.error(`Error updating voice command shortcut ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async deleteVoiceCommandShortcut(id: number): Promise<boolean> {
+    try {
+      const [deletedShortcut] = await db
+        .delete(voiceCommandShortcuts)
+        .where(eq(voiceCommandShortcuts.id, id))
+        .returning();
+      return !!deletedShortcut;
+    } catch (error) {
+      console.error(`Error deleting voice command shortcut ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async getDefaultVoiceCommandShortcuts(): Promise<VoiceCommandShortcut[]> {
+    try {
+      return await db
+        .select()
+        .from(voiceCommandShortcuts)
+        .where(eq(voiceCommandShortcuts.isDefault, true))
+        .orderBy(voiceCommandShortcuts.name);
+    } catch (error) {
+      console.error('Error fetching default voice command shortcuts:', error);
       throw error;
     }
   }

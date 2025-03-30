@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -20,6 +20,175 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
   const { toast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
   const [view, setView] = useState('timeGridWeek');
+  const calendarRef = useRef<any>(null);
+  
+  // Check room availability - defined early to avoid reference before declaration
+  const checkRoomAvailability = async (startTime: Date, endTime: Date): Promise<boolean> => {
+    try {
+      const response = await fetch(
+        `/api/rooms/available?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to check room availability');
+      }
+
+      const availableRooms = await response.json();
+      return availableRooms.length > 0;
+    } catch (error) {
+      console.error('Error checking room availability:', error);
+      return false;
+    }
+  };
+  
+  // Manual event creation for cases where select doesn't work
+  const createManualEvent = useCallback(async (date: Date) => {
+    console.log("Creating manual event at:", date);
+    // Default to a 1-hour meeting
+    const startTime = date;
+    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+    
+    try {
+      // First check if rooms are available
+      const isRoomAvailable = await checkRoomAvailability(startTime, endTime);
+
+      if (!isRoomAvailable) {
+        throw new Error('No rooms available for this time slot');
+      }
+
+      const availableRoomsResponse = await fetch(
+        `/api/rooms/available?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}`
+      );
+      
+      if (!availableRoomsResponse.ok) {
+        throw new Error('Failed to check room availability');
+      }
+      
+      const availableRooms = await availableRoomsResponse.json();
+      
+      if (!availableRooms.length) {
+        throw new Error('No rooms available for this time slot');
+      }
+
+      // Create the meeting with the first available room
+      const response = await fetch('/api/meetings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: 'New Meeting',
+          date: startTime.toISOString(),
+          roomId: availableRooms[0].id,
+          userId: user?.id
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to create meeting');
+      }
+
+      const newMeeting = await response.json();
+      console.log("Meeting created successfully:", newMeeting);
+      
+      // Notify parent component
+      onEventCreate?.(newMeeting);
+
+      toast({
+        title: "Success",
+        description: "Meeting created successfully",
+      });
+    } catch (error: any) {
+      console.error("Error creating meeting:", error);
+      showErrorToast(error, () => createManualEvent(date));
+    }
+  }, [user, onEventCreate, toast, checkRoomAvailability]);
+
+  // Effect to handle direct calendar API access when needed
+  useEffect(() => {
+    if (!calendarRef.current) return;
+    
+    console.log("Calendar API initialized");
+    
+    // Function to handle a click on a time slot
+    const handleTimeSlotClick = (e: MouseEvent) => {
+      e.stopPropagation(); // Prevent other handlers from firing
+      
+      // Get a reference to the calendar API
+      const calendarApi = calendarRef.current?.getApi();
+      if (!calendarApi) return;
+      
+      // Get the clicked element and find the cell
+      const target = e.target as HTMLElement;
+      const cell = target.closest('.fc-timegrid-slot-lane') as HTMLElement;
+      if (!cell) return;
+      
+      // Extract the date information
+      const day = cell.closest('.fc-day');
+      if (!day) return;
+      
+      const dateAttr = day.getAttribute('data-date');
+      if (!dateAttr) return;
+      
+      // Extract the time information
+      const timeRow = cell.closest('tr');
+      if (!timeRow) return;
+      
+      const timeAttr = timeRow.getAttribute('data-time');
+      if (!timeAttr) return;
+      
+      // Parse the date and time
+      const [year, month, dayNum] = dateAttr.split('-').map(n => parseInt(n));
+      const [hours, minutes] = timeAttr.split(':').map(n => parseInt(n));
+      
+      // Create the date object
+      const clickDate = new Date(year, month - 1, dayNum, hours, minutes);
+      console.log("Direct cell click detected:", clickDate);
+      
+      // Create the event
+      createManualEvent(clickDate);
+    };
+    
+    // Apply handlers to all the time cells
+    const calendarEl = calendarRef.current.elRef.current;
+    if (calendarEl) {
+      // First, remove any existing handlers
+      const container = calendarEl.querySelector('.fc-timegrid-slots');
+      if (container) {
+        container.removeEventListener('click', handleTimeSlotClick as EventListener);
+        
+        // Add the event listener to the container to use event delegation
+        container.addEventListener('click', handleTimeSlotClick as EventListener);
+        
+        // Make the slots look clickable
+        const cells = calendarEl.querySelectorAll('.fc-timegrid-slot-lane');
+        cells.forEach((cell: HTMLElement) => {
+          cell.style.cursor = 'pointer';
+        });
+        
+        // Add a helper message
+        const header = calendarEl.querySelector('.fc-header-toolbar');
+        if (header) {
+          const helpText = document.createElement('div');
+          helpText.textContent = 'Click on a time slot to create a meeting';
+          helpText.style.fontSize = '0.8rem';
+          helpText.style.color = 'var(--muted-foreground)';
+          helpText.style.textAlign = 'center';
+          helpText.style.marginTop = '0.5rem';
+          header.appendChild(helpText);
+        }
+      }
+    }
+    
+    // Cleanup function to remove event listeners when component unmounts
+    return () => {
+      if (calendarEl) {
+        const container = calendarEl.querySelector('.fc-timegrid-slots');
+        if (container) {
+          container.removeEventListener('click', handleTimeSlotClick as EventListener);
+        }
+      }
+    };
+  }, [calendarRef.current, createManualEvent]);
 
   // Query meetings
   const { data: meetings = [], isLoading } = useQuery<Meeting[]>({
@@ -52,24 +221,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     }), [meetings, user]
   );
 
-  // Check room availability
-  const checkRoomAvailability = async (startTime: Date, endTime: Date): Promise<boolean> => {
-    try {
-      const response = await fetch(
-        `/api/rooms/available?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}`
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to check room availability');
-      }
-
-      const availableRooms = await response.json();
-      return availableRooms.length > 0;
-    } catch (error) {
-      console.error('Error checking room availability:', error);
-      return false;
-    }
-  };
+  // The checkRoomAvailability function is already defined at the top of the component
 
   // Handle event changes (drag & drop or resize)
   const handleEventChange = useCallback(async (changeInfo: any) => {
@@ -283,6 +435,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
         className="h-[700px] bg-background rounded-lg border p-4"
       >
         <FullCalendar
+          ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="timeGridWeek"
           headerToolbar={{
@@ -310,6 +463,25 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
             minute: '2-digit',
             hour12: true
           }}
+          // Ensure interaction plugin is properly initialized
+          droppable={true}
+          fixedWeekCount={false}
+          handleWindowResize={true}
+          selectLongPressDelay={500}
+          // Make sure we allow selection from any part of the calendar
+          selectAllow={() => true}
+          // Explicitly enable editing features
+          eventStartEditable={true}
+          eventDurationEditable={true}
+          // Make time slots more obvious
+          slotEventOverlap={false}
+          nowIndicator={true}
+          // Help users understand where they can drag
+          eventDragMinDistance={10}
+          // Fix for touch devices
+          longPressDelay={100}
+          eventLongPressDelay={100}
+          selectMinDistance={3}
           eventDidMount={(info) => {
             info.el.title = `${info.event.title}\n${format(info.event.start!, 'PPp')}`;
 

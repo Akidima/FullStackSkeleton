@@ -1,14 +1,5 @@
-import { pipeline } from '@xenova/transformers';
 import type { Meeting } from '@shared/schema';
-
-let summarizationModel: any = null;
-
-async function initializeModel() {
-  if (!summarizationModel) {
-    summarizationModel = await pipeline('summarization', 'Xenova/bart-large-cnn');
-  }
-  return summarizationModel;
-}
+import * as claudeAI from './claude-ai';
 
 interface MeetingSummaryDetails {
   summary: string;
@@ -23,8 +14,6 @@ interface MeetingSummaryDetails {
 
 export async function generateMeetingInsights(meeting: Meeting): Promise<MeetingSummaryDetails> {
   try {
-    const model = await initializeModel();
-
     const textToSummarize = [
       meeting.description,
       meeting.agenda,
@@ -44,51 +33,69 @@ export async function generateMeetingInsights(meeting: Meeting): Promise<Meeting
       };
     }
 
-    const summaryResult = await model(textToSummarize, {
-      max_length: 150,
-      min_length: 40,
-      temperature: 0.7,
-    });
-
-    const notes = meeting.notes || '';
-
-    const keyPoints = notes.split('\n')
-      .filter(line => /^[•\-\*]\s/.test(line))
-      .map(line => line.replace(/^[•\-\*]\s/, '').trim());
-
-    const decisions = notes.split('\n')
-      .filter(line => /^(?:decision|decided|agreed):?/i.test(line))
-      .map(line => line.replace(/^(?:decision|decided|agreed):?/i, '').trim());
-
-    const actionItems = notes.split('\n')
-      .filter(line => /^(?:action|task|todo):?/i.test(line))
-      .map(line => line.replace(/^(?:action|task|todo):?/i, '').trim());
-
-    const sentimentKeywords = {
-      positive: ['agree', 'good', 'great', 'success', 'achieve', 'improve', 'resolved', 'completed', 'progress'],
-      negative: ['disagree', 'bad', 'fail', 'issue', 'problem', 'concern', 'delayed', 'blocked', 'risk']
-    };
-
-    const words = notes.toLowerCase().split(/\W+/);
-    const positiveCount = words.filter(word => sentimentKeywords.positive.includes(word)).length;
-    const negativeCount = words.filter(word => sentimentKeywords.negative.includes(word)).length;
-    const totalSentimentWords = positiveCount + negativeCount;
-
-    const sentimentScore = totalSentimentWords ? positiveCount / totalSentimentWords : 0.5;
-
+    // Use Claude AI to generate insights
+    const claudeResponse = await claudeAI.generateMeetingInsights(meeting);
+    
+    // Process sentiment
+    let sentimentOverall: 'positive' | 'neutral' | 'negative' = 'neutral';
+    let sentimentScore = 0.5;
+    
+    // Calculate sentiment based on the content of suggestions
+    if (claudeResponse.suggestions) {
+      const suggestionText = claudeResponse.suggestions.join(' ').toLowerCase();
+      const positiveTerms = ['improve', 'good', 'effective', 'productive', 'successful'];
+      const negativeTerms = ['issue', 'problem', 'concern', 'ineffective', 'inefficient'];
+      
+      let positiveMatches = 0;
+      let negativeMatches = 0;
+      
+      positiveTerms.forEach(term => {
+        if (suggestionText.includes(term)) positiveMatches++;
+      });
+      
+      negativeTerms.forEach(term => {
+        if (suggestionText.includes(term)) negativeMatches++;
+      });
+      
+      const totalMatches = positiveMatches + negativeMatches;
+      if (totalMatches > 0) {
+        sentimentScore = positiveMatches / totalMatches;
+        sentimentOverall = sentimentScore > 0.6 ? 'positive' : sentimentScore < 0.4 ? 'negative' : 'neutral';
+      }
+    }
+    
+    // Extract actionItems - convert array of objects to array of strings if needed
+    let actionItems: string[] = [];
+    if (claudeResponse.actionItems) {
+      if (Array.isArray(claudeResponse.actionItems)) {
+        if (typeof claudeResponse.actionItems[0] === 'string') {
+          actionItems = claudeResponse.actionItems as string[];
+        } else if (typeof claudeResponse.actionItems[0] === 'object') {
+          // Handle object format from Claude's JSON response
+          actionItems = (claudeResponse.actionItems as any[]).map(item => {
+            if (item.task) return `${item.task}${item.assignee ? ' - ' + item.assignee : ''}`;
+            return JSON.stringify(item);
+          });
+        }
+      }
+    }
+    
+    // Extract decisions
+    let decisions: string[] = claudeResponse.decisions || [];
+    
     return {
-      summary: summaryResult[0].summary_text,
-      keyPoints,
+      summary: claudeResponse.summary,
+      keyPoints: claudeResponse.keyPoints || [],
       actionItems,
       decisions,
       sentiment: {
-        overall: sentimentScore > 0.6 ? 'positive' : sentimentScore < 0.4 ? 'negative' : 'neutral',
+        overall: sentimentOverall,
         score: sentimentScore
       }
     };
   } catch (error) {
-    console.error('MeetMate summarization error:', error);
-    throw new Error('Failed to generate meeting insights');
+    console.error('MeetMate summarization error with Claude:', error);
+    throw new Error('Failed to generate meeting insights with Claude AI');
   }
 }
 
@@ -106,10 +113,10 @@ export async function batchSummarize(meetings: Meeting[]): Promise<Record<number
         summaries[meeting.id] = await generateMeetingInsights(meeting);
         break;
       } catch (error) {
-        console.error(`Failed to summarize MeetMate meeting ${meeting.id}:`, error);
+        console.error(`Failed to summarize MeetMate meeting ${meeting.id} with Claude AI:`, error);
         if (retries === MAX_RETRIES - 1) {
           summaries[meeting.id] = {
-            summary: "Failed to generate summary.",
+            summary: "Failed to generate summary with Claude AI.",
             keyPoints: [],
             actionItems: [],
             decisions: [],

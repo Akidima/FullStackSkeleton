@@ -10,7 +10,7 @@ const MAX_RETRY_DELAY = 30000;
 const RETRY_BACKOFF_FACTOR = 1.5;
 const MAX_RETRIES = 5;
 
-export function useWebSocket() {
+export function useWebSocketSimple() {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const wsRef = useRef<WebSocket | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout>();
@@ -87,7 +87,8 @@ export function useWebSocket() {
             case 'meeting:update':
             case 'meeting:create':
             case 'meeting:delete':
-              // Trigger query invalidation or state update
+              // Will be handled by components that need this data
+              console.log('Meeting update received:', data);
               break;
             default:
               console.log('Received message:', data);
@@ -103,6 +104,14 @@ export function useWebSocket() {
       setConnectionState('error');
     }
   }, [getBackoffDelay]);
+
+  const send = useCallback((data: any) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(data));
+      return true;
+    }
+    return false;
+  }, []);
 
   // Initialize connection
   useEffect(() => {
@@ -122,5 +131,7 @@ export function useWebSocket() {
   return {
     connectionState,
     isConnected: connectionState === 'connected',
+    send,
+    socket: wsRef.current
   };
 }

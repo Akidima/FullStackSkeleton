@@ -1,16 +1,17 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Calendar, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { Plus, Calendar, CheckCircle, Clock, AlertCircle, Wifi, WifiOff } from "lucide-react";
 import { Meeting, Task } from "@shared/schema"; 
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { VoiceAssistant } from "@/components/voice-assistant";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { useWebSocketSimple } from "@/hooks/use-websocket-simple";
 
 interface TaskType {
   id: number;
@@ -29,6 +30,8 @@ interface NoteType {
 export default function Dashboard() {
   const [activeSection, setActiveSection] = useState<string>("meetings");
   const [isVoiceAssistantEnabled, setIsVoiceAssistantEnabled] = useState(false);
+  const queryClient = useQueryClient();
+  const { isConnected, connectionState } = useWebSocketSimple();
 
   // Queries with proper typing
   const { data: meetings = [], isLoading: meetingsLoading } = useQuery<Meeting[]>({
@@ -38,6 +41,13 @@ export default function Dashboard() {
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<TaskType[]>({
     queryKey: ["/api/tasks"],
   });
+  
+  // WebSocket connection status effect
+  useEffect(() => {
+    if (connectionState === 'connected') {
+      console.log('WebSocket connected in Dashboard');
+    }
+  }, [connectionState]);
 
   const { data: recentNotes = [], isLoading: notesLoading } = useQuery<NoteType[]>({
     queryKey: ["/api/meetings/notes"],
@@ -88,8 +98,19 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground mt-2">
+          <p className="text-muted-foreground mt-2 flex items-center gap-2">
             Welcome to MeetMate! Here's what's happening today.
+            {isConnected ? (
+              <span className="inline-flex items-center text-sm text-green-500">
+                <Wifi className="h-3 w-3 mr-1" />
+                <span className="sr-only md:not-sr-only md:inline">Connected</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center text-sm text-amber-500">
+                <WifiOff className="h-3 w-3 mr-1" />
+                <span className="sr-only md:not-sr-only md:inline">Offline</span>
+              </span>
+            )}
           </p>
         </div>
         <div className="flex gap-4 items-center">

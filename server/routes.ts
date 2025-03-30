@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { setupWebSocket } from './websocket';
 import { insertMeetingSchema, updateMeetingSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import { errorHandler, asyncHandler } from "./middleware/errorHandler";
@@ -952,7 +953,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register error handler last
   app.use(errorHandler);
 
-  return createServer(app);
+  // Create HTTP server
+  const httpServer = createServer(app);
+  
+  // Set up WebSocket
+  setupWebSocket(httpServer);
+  
+  return httpServer;
 }
 
 // Fix the syntax error in the validateMeetingId function

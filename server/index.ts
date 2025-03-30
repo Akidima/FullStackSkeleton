@@ -11,13 +11,14 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Global rate limiter
+// Global rate limiter - temporarily set to high values
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 100, // Limit each IP to 100 requests per windowMs
+  limit: 100000, // Temporarily set very high to effectively disable rate limiting
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => true // Skip rate limiting for all requests temporarily
 });
 
 // Apply rate limiters

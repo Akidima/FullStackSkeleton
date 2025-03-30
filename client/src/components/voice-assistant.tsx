@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mic, MicOff, Loader2, Globe } from "lucide-react";
+import { Mic, MicOff, Loader2, Globe, Wifi, WifiOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useWebSocketSimple } from "@/hooks/use-websocket-simple";
 
 interface VoiceAssistantProps {
   onCommand?: (command: string) => void;
@@ -40,6 +41,7 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
   const [initError, setInitError] = useState<string | null>(null);
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState<keyof typeof SUPPORTED_LANGUAGES>('en-US');
+  const { isConnected } = useWebSocketSimple();
 
   const retryCount = useRef(0);
   const lastInitAttempt = useRef(0);
@@ -270,6 +272,19 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
               {loadingStatus || "Initializing"}
             </Badge>
           )}
+          <div className="ml-auto flex items-center">
+            {isConnected ? (
+              <span className="text-xs flex items-center text-green-500" title="Real-time connection active">
+                <Wifi className="h-3 w-3 mr-1" />
+                <span className="sr-only md:not-sr-only">Connected</span>
+              </span>
+            ) : (
+              <span className="text-xs flex items-center text-amber-500" title="No real-time connection">
+                <WifiOff className="h-3 w-3 mr-1" />
+                <span className="sr-only md:not-sr-only">Offline</span>
+              </span>
+            )}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>

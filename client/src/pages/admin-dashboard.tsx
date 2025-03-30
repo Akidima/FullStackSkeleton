@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -15,15 +15,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import type { RegistrationAttempt } from "@shared/schema";
+import { useWebSocketSimple } from "@/hooks/use-websocket-simple";
+import { Badge } from "@/components/ui/badge";
+import { Wifi, WifiOff } from "lucide-react";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
   const [filterType, setFilterType] = useState<"none" | "ip" | "email">("none");
   const [filterValue, setFilterValue] = useState("");
+  const { isConnected, connectionState } = useWebSocketSimple();
+  const queryClient = useQueryClient();
+
+  // Set up WebSocket listener to refresh data when new registration attempts occur
+  useEffect(() => {
+    if (connectionState === 'connected') {
+      console.log('Admin dashboard connected to WebSocket');
+      toast({
+        title: "Real-time updates enabled",
+        description: "You'll see new registration attempts instantly",
+        variant: "default"
+      });
+    }
+  }, [connectionState, toast]);
 
   const { data: attempts, isLoading, error } = useQuery<RegistrationAttempt[]>({
     queryKey: [
@@ -57,7 +74,22 @@ export default function AdminDashboard() {
 
   return (
     <div className="container mx-auto py-10">
-      <h1 className="text-2xl font-bold mb-6">Registration Attempts Dashboard</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Registration Attempts Dashboard</h1>
+        <div className="flex items-center gap-2">
+          {isConnected ? (
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 flex items-center gap-1">
+              <Wifi className="h-3 w-3" />
+              <span>Live updates</span>
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">
+              <WifiOff className="h-3 w-3" />
+              <span>Offline mode</span>
+            </Badge>
+          )}
+        </div>
+      </div>
 
       <div className="flex gap-4 mb-6">
         <Select

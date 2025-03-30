@@ -19,6 +19,8 @@ import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { Layout } from "@/components/layout";
 import { Loader2 } from "lucide-react";
+import { WebSocketProvider } from "@/hooks/use-websocket-simple";
+
 
 // Loading fallback component
 function LoadingFallback() {
@@ -114,8 +116,10 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <Router />
-          <Toaster />
+          <WebSocketProvider>
+            <Router />
+            <Toaster />
+          </WebSocketProvider>
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>

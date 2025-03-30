@@ -1325,14 +1325,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         res.json({ 
           status: 'active',
-          path: "/ws/app",
+          path: "/ws",
           connections: activeConnections,
           timestamp: new Date().toISOString()
         });
       } else {
         res.json({ 
           status: 'inactive',
-          path: "/ws/app",
+          path: "/ws",
           message: 'WebSocket server not initialized',
           timestamp: new Date().toISOString()
         });
@@ -1348,7 +1348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
   
   // Set up WebSocket with improved logging
-  console.log('Initializing WebSocket server on path: /ws/app');
+  console.log('Initializing WebSocket server on path: /ws');
   setupWebSocket(httpServer);
   
   return httpServer;

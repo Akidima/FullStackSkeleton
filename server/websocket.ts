@@ -10,13 +10,13 @@ const MAX_RECONNECT_DELAY = 30000;
 const RECONNECT_DECAY = 1.5;
 
 export function setupWebSocket(server: Server) {
-  console.log('Initializing WebSocket server on path: /ws/app');
+  console.log('Initializing WebSocket server on path: /ws');
   
   try {
     // Configure WebSocket server with permissive settings for development
     const wsOptions = { 
       server, 
-      path: '/ws/app',
+      path: '/ws',
       // Development-friendly options
       perMessageDeflate: false,
       clientTracking: true,

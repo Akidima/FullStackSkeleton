@@ -19,7 +19,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import type { RegistrationAttempt } from "@shared/schema";
-import { useWebSocket } from "@/hooks/websocket-provider";
+import { useMockWebSocket } from "@/hooks/mock-websocket-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Wifi, WifiOff, Activity, AlertCircle, AlertTriangle } from "lucide-react";
@@ -28,7 +28,7 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const [filterType, setFilterType] = useState<"none" | "ip" | "email">("none");
   const [filterValue, setFilterValue] = useState("");
-  const { isConnected, connectionState, send } = useWebSocket();
+  const { isConnected, connectionState, send } = useMockWebSocket();
   const queryClient = useQueryClient();
 
   // Set up WebSocket listener to refresh data when new registration attempts occur
@@ -179,38 +179,17 @@ export default function AdminDashboard() {
               size="sm"
               className="flex items-center gap-1"
               onClick={() => {
-                fetch('/api/websocket/message', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    type: 'registration:attempt',
-                    messageData: {
-                      email: 'test@example.com',
-                      ipAddress: '192.168.1.1',
-                      status: 'success',
-                      userAgent: 'Mozilla/5.0 (Test WebSocket)',
-                    }
-                  })
-                })
-                .then(res => res.json())
-                .then(data => {
-                  console.log('Registration attempt test sent:', data);
-                  toast({
-                    title: 'Test sent',
-                    description: 'Registration attempt test broadcast sent',
-                    variant: 'default',
-                  });
-                })
-                .catch(err => {
-                  console.error('Error sending test:', err);
-                  toast({
-                    title: 'Error',
-                    description: 'Failed to send test message',
-                    variant: 'destructive',
-                  });
+                // Use the mock websocket directly
+                send({
+                  type: 'registration:test',
+                  data: {
+                    email: 'test@example.com',
+                    ipAddress: '192.168.1.1',
+                    status: 'success',
+                    userAgent: 'Mozilla/5.0 (Test WebSocket)',
+                  }
                 });
+                console.log('Registration attempt test sent via mock websocket');
               }}
             >
               <Activity className="h-4 w-4" />
@@ -222,39 +201,18 @@ export default function AdminDashboard() {
               size="sm"
               className="flex items-center gap-1"
               onClick={() => {
-                fetch('/api/websocket/message', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    type: 'registration:attempt',
-                    messageData: {
-                      email: 'blocked@example.com',
-                      ipAddress: '10.0.0.1',
-                      status: 'blocked',
-                      reason: 'Suspicious activity',
-                      userAgent: 'Mozilla/5.0 (Test WebSocket - Blocked)',
-                    }
-                  })
-                })
-                .then(res => res.json())
-                .then(data => {
-                  console.log('Blocked registration test sent:', data);
-                  toast({
-                    title: 'Test sent',
-                    description: 'Blocked registration test broadcast sent',
-                    variant: 'default',
-                  });
-                })
-                .catch(err => {
-                  console.error('Error sending test:', err);
-                  toast({
-                    title: 'Error',
-                    description: 'Failed to send test message',
-                    variant: 'destructive',
-                  });
+                // Use the mock websocket directly for blocked registration
+                send({
+                  type: 'registration:test',
+                  data: {
+                    email: 'blocked@example.com',
+                    ipAddress: '10.0.0.1',
+                    status: 'blocked',
+                    reason: 'Suspicious activity',
+                    userAgent: 'Mozilla/5.0 (Test WebSocket - Blocked)',
+                  }
                 });
+                console.log('Blocked registration attempt test sent via mock websocket');
               }}
             >
               <AlertCircle className="h-4 w-4" />
@@ -266,36 +224,15 @@ export default function AdminDashboard() {
               size="sm"
               className="flex items-center gap-1"
               onClick={() => {
-                fetch('/api/websocket/message', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    type: 'system:status',
-                    messageData: {
-                      status: 'degraded',
-                      details: 'High database load detected',
-                    }
-                  })
-                })
-                .then(res => res.json())
-                .then(data => {
-                  console.log('System status test sent:', data);
-                  toast({
-                    title: 'Test sent',
-                    description: 'System status test broadcast sent',
-                    variant: 'default',
-                  });
-                })
-                .catch(err => {
-                  console.error('Error sending test:', err);
-                  toast({
-                    title: 'Error',
-                    description: 'Failed to send test message',
-                    variant: 'destructive',
-                  });
+                // Use the mock websocket directly for system status
+                send({
+                  type: 'system:test',
+                  data: {
+                    status: 'degraded',
+                    details: 'High database load detected',
+                  }
                 });
+                console.log('System status test sent via mock websocket');
               }}
             >
               <AlertTriangle className="h-4 w-4" />

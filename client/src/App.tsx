@@ -15,6 +15,7 @@ import SignUp from "@/pages/signup";
 import CalendarView from "@/pages/calendar-view";
 import ProfileSettings from "@/pages/profile-settings";
 import AnalyticsDashboard from "@/pages/analytics-dashboard";
+import AdminDashboard from "@/pages/admin-dashboard";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { Layout } from "@/components/layout";
@@ -93,6 +94,13 @@ function Router() {
           </Layout>
         </ProtectedRoute>
       )} />
+      <Route path="/admin/dashboard" component={() => (
+        <ProtectedRoute>
+          <Layout>
+            <AdminDashboard />
+          </Layout>
+        </ProtectedRoute>
+      )} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -126,14 +134,9 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <WebSocketProvider>
-            <Router />
-            <Toaster />
-          </WebSocketProvider>
-        </AuthProvider>
-      </QueryClientProvider>
+      <AuthProvider>
+        <Router />
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

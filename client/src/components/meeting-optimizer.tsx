@@ -36,25 +36,38 @@ export function MeetingOptimizer() {
   const { data, isLoading, error } = useQuery<OptimizationResponse>({
     queryKey: ['/api/meetings/optimization-suggestions'],
     queryFn: async () => {
+      console.log('Fetching optimization suggestions...');
       return await withRetry(async () => {
-        const response = await fetch('/api/meetings/optimization-suggestions', {
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
+        try {
+          const response = await fetch('/api/meetings/optimization-suggestions', {
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
 
-        if (!response.ok) {
-          if (response.status === 429) {
-            throw new Error('Rate limit exceeded');
+          console.log('Optimization API response status:', response.status);
+          
+          if (!response.ok) {
+            if (response.status === 429) {
+              console.error('Rate limit exceeded for optimization API');
+              throw new Error('Rate limit exceeded');
+            }
+            if (response.status === 503) {
+              console.error('AI service unavailable for optimization API');
+              throw new Error('AI service unavailable');
+            }
+            console.error('Failed optimization API request with status:', response.status);
+            throw new Error('Failed to load optimization suggestions');
           }
-          if (response.status === 503) {
-            throw new Error('AI service unavailable');
-          }
-          throw new Error('Failed to load optimization suggestions');
+
+          const data = await response.json();
+          console.log('Optimization API response data:', data);
+          return data;
+        } catch (err) {
+          console.error('Error in optimization API request:', err);
+          throw err;
         }
-
-        return response.json();
       }, 5, 2000); // Increased initial retry delay to 2s
     },
     staleTime: 15 * 60 * 1000, // Consider data fresh for 15 minutes

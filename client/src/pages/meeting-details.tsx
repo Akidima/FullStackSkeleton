@@ -402,21 +402,20 @@ export default function MeetingDetails() {
                 )}
               </div>
 
-              {/* Summary Section */}
-              {meeting.summary && (
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-semibold">Summary</h3>
-                    <ShareButtons
-                      title={meeting.title}
-                      summary={meeting.summary}
-                      notes={notes}
-                      url={window.location.href}
-                    />
-                  </div>
-                  <p className="text-muted-foreground">{meeting.summary}</p>
-                </div>
-              )}
+              {/* Notes and Decisions Section */}
+              <MeetingNotesView 
+                notes={notes}
+                decisions={meeting.decisions}
+                summary={meeting.summary}
+              />
+              <div className="flex justify-end mt-4">
+                <ShareButtons
+                  title={meeting.title}
+                  summary={meeting.summary}
+                  notes={notes}
+                  url={window.location.href}
+                />
+              </div>
 
               {/* Action Items */}
               <div className="space-y-2">

@@ -18,9 +18,10 @@ import { Meeting } from "@shared/schema";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from "@/components/ui/loading-skeleton";
-import { useWebSocket } from "@/hooks/use-websocket";
+import { useMockWebSocket } from "@/hooks/mock-websocket-provider";
 import { TaskManager } from "@/components/task-manager";
 import { ShareButtons } from "@/components/share-buttons";
+import { MeetingNotesView } from "@/components/meeting-notes-view";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,7 +64,7 @@ export default function MeetingDetails() {
   const [, setLocation] = useLocation();
   const meetingId = params?.id ? parseInt(params.id, 10) : null;
   const queryClient = useQueryClient();
-  const socket = useWebSocket();
+  const socket = useMockWebSocket();
   const { toast } = useToast();
   const [notes, setNotes] = useState("");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -161,12 +162,12 @@ export default function MeetingDetails() {
         description: "Meeting summary has been generated successfully.",
       });
       // Broadcast summary update to other participants
-      if (socket?.socket?.readyState === WebSocket.OPEN) {
-        socket.socket.send(JSON.stringify({
+      if (socket.send) {
+        socket.send({
           type: 'meeting:summary',
           meetingId,
           summary: data.summary
-        }));
+        });
       }
     },
     onError: (error) => {
@@ -222,51 +223,58 @@ export default function MeetingDetails() {
     setIsCollaborating(true);
 
     // Broadcast note changes to other participants
-    if (socket?.socket?.readyState === WebSocket.OPEN) {
-      socket.socket.send(JSON.stringify({
+    if (socket.send) {
+      socket.send({
         type: 'meeting:notes',
         meetingId,
         notes: newNotes
-      }));
+      });
     }
   };
 
   // WebSocket effect for real-time collaboration
   useEffect(() => {
-    if (!socket?.socket || !meetingId) return;
+    if (!socket || !meetingId) return;
 
-    const ws = socket.socket;
+    // Set up a listener for websocket messages using window event
+    const handleWebsocketMessage = (event: any) => {
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        
+        if (data.type === 'meeting:notes' && data.meetingId === meetingId) {
+          if (!isCollaborating) {
+            setNotes(data.notes);
+          }
+        } else if (data.type === 'meeting:summary' && data.meetingId === meetingId) {
+          queryClient.invalidateQueries({ queryKey: [`/api/meetings/${meetingId}`] });
+        }
+      } catch (err) {
+        console.error('Error processing message in meeting details:', err);
+      }
+    };
 
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
+    // Send join message through the socket.send method
+    if (socket.send) {
+      socket.send({
         type: 'meeting:join',
         meetingId
-      }));
+      });
     }
 
-    const handleMessage = (event: MessageEvent) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'meeting:notes' && data.meetingId === meetingId) {
-        if (!isCollaborating) {
-          setNotes(data.notes);
-        }
-      } else if (data.type === 'meeting:summary' && data.meetingId === meetingId) {
-        queryClient.invalidateQueries({ queryKey: [`/api/meetings/${meetingId}`] });
-      }
-    };
+    // Use window event for the mock websocket
+    window.addEventListener('websocket-message', handleWebsocketMessage);
 
-    ws.addEventListener('message', handleMessage);
-
+    // Clean up function
     return () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
+      if (socket.send) {
+        socket.send({
           type: 'meeting:leave',
           meetingId
-        }));
+        });
       }
-      ws.removeEventListener('message', handleMessage);
+      window.removeEventListener('websocket-message', handleWebsocketMessage);
     };
-  }, [socket?.socket, meetingId, queryClient, isCollaborating]);
+  }, [socket, meetingId, queryClient, isCollaborating]);
 
   if (isLoading || !meeting) {
     return (
@@ -405,14 +413,14 @@ export default function MeetingDetails() {
               {/* Notes and Decisions Section */}
               <MeetingNotesView 
                 notes={notes}
-                decisions={meeting.decisions}
+                decisions={undefined}
                 summary={meeting.summary}
               />
               <div className="flex justify-end mt-4">
                 <ShareButtons
                   title={meeting.title}
-                  summary={meeting.summary}
-                  notes={notes}
+                  summary={meeting.summary || undefined}
+                  notes={notes || undefined}
                   url={window.location.href}
                 />
               </div>
@@ -420,7 +428,7 @@ export default function MeetingDetails() {
               {/* Action Items */}
               <div className="space-y-2">
                 <h3 className="font-semibold">Action Items</h3>
-                <TaskManager meetingId={meetingId} />
+                <TaskManager meetingId={meetingId || undefined} />
               </div>
 
               {/* Meeting Controls */}

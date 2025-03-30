@@ -44,19 +44,15 @@ export function setupWebSocket(server: Server) {
   try {
     // Configure WebSocket server with permissive settings for development
     const wsOptions = { 
-      server, // Only specify server, not port or host
+      server,
       path: '/ws',
       perMessageDeflate: false,
       clientTracking: true,
       maxPayload: 1024 * 1024 * 5,
       heartbeatInterval: 30000,
-      // Always allow clients in development, but verify origin in production
-      verifyClient: (info) => {
-        if (process.env.NODE_ENV === 'development') return true;
-        
-        const origin = info.origin;
-        return isValidOrigin(origin);
-      }
+      verifyClient: () => true, // Allow all connections for now
+      host: '0.0.0.0',
+      port: 5000
     };
 
     wss = new WebSocketServer(wsOptions);

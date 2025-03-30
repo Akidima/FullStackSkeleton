@@ -71,7 +71,11 @@ export async function apiRequest(
     }
 
     if (!response.ok) {
-      await throwIfResNotOk(response);
+      const errorData = await response.json().catch(() => ({}));
+      const error = new Error(errorData.message || 'Request failed');
+      error.status = response.status;
+      error.data = errorData;
+      throw error;
     }
 
     return response;

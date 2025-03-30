@@ -47,7 +47,7 @@ export function MeetingOptimizer() {
           });
 
           console.log('Optimization API response status:', response.status);
-          
+
           if (!response.ok) {
             if (response.status === 429) {
               console.error('Rate limit exceeded for optimization API');

@@ -291,3 +291,57 @@ export function broadcastSystemStatus(status: 'healthy' | 'degraded' | 'outage',
     timestamp: new Date().toISOString()
   });
 }
+
+// Broadcast voice command processing results
+export function broadcastVoiceCommand(userId: number, commandResponse: {
+  understood: boolean;
+  commandType: string;
+  processedCommand: string;
+  params: Record<string, any>;
+  userFeedback: string;
+  confidence: number;
+  alternativeInterpretations?: string[];
+}) {
+  if (!wss?.clients) {
+    console.log('MeetMate WebSocket server not initialized for voice command broadcast');
+    return;
+  }
+
+  const message = JSON.stringify({
+    type: 'voice:command',
+    userId,
+    command: commandResponse,
+    timestamp: new Date().toISOString()
+  });
+
+  let successCount = 0;
+  let errorCount = 0;
+
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+        successCount++;
+      } catch (err: any) {
+        errorCount++;
+        console.error('Error broadcasting voice command:', {
+          error: err?.message || 'Unknown error',
+          userId,
+          commandType: commandResponse.commandType,
+          understood: commandResponse.understood,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+  });
+
+  console.log('Voice command broadcast complete:', {
+    userId,
+    commandType: commandResponse.commandType,
+    understood: commandResponse.understood,
+    confidence: commandResponse.confidence,
+    successCount,
+    errorCount,
+    timestamp: new Date().toISOString()
+  });
+}

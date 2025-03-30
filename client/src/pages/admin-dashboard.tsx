@@ -18,16 +18,32 @@ import {
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import type { RegistrationAttempt } from "@shared/schema";
+import type { RegistrationAttempt, VoiceCommand } from "@shared/schema";
 import { useMockWebSocket } from "@/hooks/mock-websocket-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Wifi, WifiOff, Activity, AlertCircle, AlertTriangle } from "lucide-react";
+import { Wifi, WifiOff, Activity, AlertCircle, AlertTriangle, Mic, Headphones } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
   const [filterType, setFilterType] = useState<"none" | "ip" | "email">("none");
   const [filterValue, setFilterValue] = useState("");
+  const [activeTab, setActiveTab] = useState<"registrations" | "voice">("registrations");
+  const [voiceCommands, setVoiceCommands] = useState<Array<{
+    id: string;
+    userId: number;
+    timestamp: string;
+    command: {
+      understood: boolean;
+      commandType: string;
+      processedCommand: string;
+      params: Record<string, any>;
+      userFeedback: string;
+      confidence: number;
+      alternativeInterpretations?: string[];
+    }
+  }>>([]);
   const { isConnected, connectionState, send } = useMockWebSocket();
   const queryClient = useQueryClient();
 
@@ -74,7 +90,7 @@ export default function AdminDashboard() {
     }
   }, [connectionState, toast]);
   
-  // Add effect to listen for "registration" events from WebSocket
+  // Add effect to listen for "registration" and "voice" events from WebSocket
   useEffect(() => {
     const handleSocketMessage = (event: MessageEvent) => {
       try {
@@ -107,6 +123,34 @@ export default function AdminDashboard() {
             });
           }
         }
+        
+        if (data.type === 'voice:command') {
+          console.log('Voice command received via WebSocket:', data);
+          
+          // Add to voice commands list
+          setVoiceCommands(prev => {
+            // Generate a unique ID if not provided
+            const commandId = data.id || `voice-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+            
+            // Add new command at the beginning of the array
+            return [{
+              id: commandId,
+              userId: data.userId || 0,
+              timestamp: data.timestamp || new Date().toISOString(),
+              command: data.command
+            }, ...prev.slice(0, 99)]; // Keep only the latest 100 commands
+          });
+          
+          // Show notification if on voice tab or high priority command
+          if (activeTab === 'voice' || (data.command && !data.command.understood)) {
+            toast({
+              title: `Voice Command ${data.command.understood ? 'Processed' : 'Failed'}`,
+              description: data.command.userFeedback || 'Voice command processed',
+              variant: data.command.understood ? "default" : "destructive",
+              duration: data.command.understood ? 3000 : 5000 // Show longer for errors
+            });
+          }
+        }
       } catch (error) {
         console.error('Error handling WebSocket message:', error);
       }
@@ -119,7 +163,7 @@ export default function AdminDashboard() {
       // Clean up listener on unmount
       window.removeEventListener('websocket-message', handleSocketMessage as EventListener);
     };
-  }, [queryClient, toast]);
+  }, [queryClient, toast, activeTab]);
 
   const { data: attempts, isLoading, error } = useQuery<RegistrationAttempt[]>({
     queryKey: [

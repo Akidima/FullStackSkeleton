@@ -1359,6 +1359,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
   
+  // Add Voice Command Processing API
+  app.post("/api/voice/command", voiceRecognitionLimiter, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const { transcript, language, confidence = 0 } = req.body;
+      
+      if (!transcript || typeof transcript !== 'string') {
+        throw new ValidationError("Voice transcript is required", [
+          { field: "transcript", message: "Voice transcript must be a string" }
+        ]);
+      }
+      
+      // Create context object with additional helpful information
+      const context = {
+        language: language || 'en-US',
+        confidence: confidence,
+        timestamp: new Date().toISOString(),
+        clientInfo: {
+          userAgent: req.headers['user-agent'],
+          ip: req.ip
+        }
+      };
+      
+      // Process the voice command using Claude AI
+      const result = await claudeAI.processVoiceCommand(transcript, context);
+      
+      // Add user feedback if not already included
+      if (!result.userFeedback && result.processedCommand) {
+        result.userFeedback = `I understood: "${result.processedCommand}"`;
+      }
+      
+      // Return the processed command result
+      res.json({
+        ...result,
+        originalTranscript: transcript,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error processing voice command:', error);
+      
+      if (error instanceof ValidationError) {
+        res.status(400).json({
+          status: 'error',
+          message: error.message,
+          details: error.details
+        });
+      } else {
+        // Handle API errors with a friendly message
+        res.status(503).json({
+          status: 'error',
+          message: 'Voice command processing service temporarily unavailable. Please try again in a few moments.',
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+  }));
+
   // Set up WebSocket with improved logging
   console.log('Initializing WebSocket server on path: /ws');
   setupWebSocket(httpServer);

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Mic, MicOff, Loader2, Globe, Wifi, WifiOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useWebSocketSimple } from "@/hooks/use-websocket-simple";
+import axios from "axios";
 
 // Define SpeechRecognition types since TypeScript doesn't include them by default
 interface SpeechRecognitionErrorEvent extends Event {
@@ -159,21 +160,77 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false }: Vo
         console.log('MeetMate voice recognition ended');
       };
 
-      recognizer.onresult = (event) => {
+      recognizer.onresult = async (event) => {
         const lastResult = event.results[event.results.length - 1];
         if (lastResult.isFinal) {
-          const command = lastResult[0].transcript.trim().toLowerCase();
-          console.log(`MeetMate recognized command (${selectedLanguage}):`, command);
-          setTranscript(prev => [...prev, command]);
-          onTranscript?.(command);
-          onCommand?.(command);
-
-          // Announce for screen readers
-          const announcement = document.createElement('div');
-          announcement.setAttribute('aria-live', 'polite');
-          announcement.textContent = `Command recognized in ${SUPPORTED_LANGUAGES[selectedLanguage]}: ${command}`;
-          document.body.appendChild(announcement);
-          setTimeout(() => announcement.remove(), 1000);
+          const transcriptText = lastResult[0].transcript.trim();
+          console.log(`MeetMate recognized speech (${selectedLanguage}):`, transcriptText);
+          
+          // Add to transcript history
+          setTranscript(prev => [...prev, transcriptText]);
+          onTranscript?.(transcriptText);
+          
+          try {
+            // Create a temporary announcement for screen readers that we're processing
+            const processingAnnouncement = document.createElement('div');
+            processingAnnouncement.setAttribute('aria-live', 'polite');
+            processingAnnouncement.textContent = `Processing command: ${transcriptText}`;
+            document.body.appendChild(processingAnnouncement);
+            
+            // Process voice command through Claude AI on server
+            const response = await axios.post('/api/voice/command', {
+              transcript: transcriptText,
+              language: selectedLanguage,
+              confidence: lastResult[0].confidence
+            });
+            
+            // Remove processing announcement
+            document.body.removeChild(processingAnnouncement);
+            
+            if (response.data && response.data.processedCommand) {
+              const aiProcessedCommand = response.data.processedCommand;
+              console.log('Claude AI processed command:', aiProcessedCommand);
+              
+              // Pass the AI-processed command to handlers
+              onCommand?.(aiProcessedCommand);
+              
+              // Provide feedback about the processed command
+              const commandFeedback = response.data.userFeedback || aiProcessedCommand;
+              
+              // Create accessible announcement
+              const announcement = document.createElement('div');
+              announcement.setAttribute('aria-live', 'polite');
+              announcement.textContent = commandFeedback;
+              document.body.appendChild(announcement);
+              setTimeout(() => announcement.remove(), 1500);
+              
+              // Show toast for successful command processing if confidence is high
+              if (response.data.confidenceScore > 0.85) {
+                toast({
+                  title: "Command Recognized",
+                  description: commandFeedback,
+                  duration: 3000
+                });
+              }
+            } else {
+              console.warn('Received empty or invalid response from voice command processing');
+              
+              // Still pass the original transcript as fallback
+              onCommand?.(transcriptText);
+            }
+          } catch (error) {
+            console.error('Error processing voice command with Claude AI:', error);
+            
+            // Fallback to using raw transcript
+            onCommand?.(transcriptText);
+            
+            // Create accessible error announcement
+            const errorAnnouncement = document.createElement('div');
+            errorAnnouncement.setAttribute('aria-live', 'assertive');
+            errorAnnouncement.textContent = `Could not process command with AI. Using raw transcript: ${transcriptText}`;
+            document.body.appendChild(errorAnnouncement);
+            setTimeout(() => errorAnnouncement.remove(), 2000);
+          }
         }
       };
 

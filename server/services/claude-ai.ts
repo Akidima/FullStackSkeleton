@@ -437,9 +437,16 @@ export async function generateMeetingSummary(meeting: Meeting) {
  * @param context Additional context data
  * @returns Structured response with action and parameters
  */
-export async function processVoiceCommand(command: string, context: any = {}) {
-  // Normalize and clean up the voice command
-  const normalizedCommand = command.trim().toLowerCase();
+export async function processVoiceCommand(transcript: string, context: any = {}) {
+  // Normalize and clean up the voice transcript
+  const normalizedTranscript = transcript.trim();
+  
+  // Get the language code from context, defaults to English (en-US)
+  const languageCode = context.language || 'en-US';
+  const languageBase = languageCode.split('-')[0]; // Extract base language (en, es, fr, etc.)
+  
+  // Get confidence score from context if available
+  const recognitionConfidence = context.confidence || 0.7; // Default reasonable confidence
   
   // Prepare a comprehensive guide to common voice commands and their expected responses
   const commandExamples = {
@@ -466,32 +473,36 @@ export async function processVoiceCommand(command: string, context: any = {}) {
       { command: "stop listening", type: "control", params: { action: "stop" } },
       { command: "pause voice assistant", type: "control", params: { action: "pause" } },
       { command: "help me", type: "control", params: { action: "help" } }
+    ],
+    accessibility: [
+      { command: "enable high contrast", type: "accessibility", params: { feature: "highContrast", value: true } },
+      { command: "increase font size", type: "accessibility", params: { feature: "fontSize", value: "larger" } },
+      { command: "read aloud", type: "accessibility", params: { feature: "screenReader", action: "start" } }
     ]
   };
   
-  // Add language context if available in the context object
-  const language = context.language || 'en';
-  
   // Create command dictionary based on language
   const languageCommands = {
-    en: { help: "help", stop: "stop", pause: "pause" },
-    es: { help: "ayuda", stop: "parar", pause: "pausa" },
-    fr: { help: "aide", stop: "arrêter", pause: "pause" },
-    de: { help: "hilfe", stop: "stopp", pause: "pause" },
-    it: { help: "aiuto", stop: "ferma", pause: "pausa" },
-    pt: { help: "ajuda", stop: "parar", pause: "pausa" },
-    zh: { help: "帮助", stop: "停止", pause: "暂停" },
-    ja: { help: "ヘルプ", stop: "停止", pause: "一時停止" },
-    ko: { help: "도움말", stop: "중지", pause: "일시 중지" },
-    ru: { help: "помощь", stop: "стоп", pause: "пауза" }
+    en: { help: "help", stop: "stop", pause: "pause", create: "create", search: "search", show: "show" },
+    es: { help: "ayuda", stop: "parar", pause: "pausa", create: "crear", search: "buscar", show: "mostrar" },
+    fr: { help: "aide", stop: "arrêter", pause: "pause", create: "créer", search: "rechercher", show: "afficher" },
+    de: { help: "hilfe", stop: "stopp", pause: "pause", create: "erstellen", search: "suchen", show: "zeigen" },
+    it: { help: "aiuto", stop: "ferma", pause: "pausa", create: "creare", search: "cercare", show: "mostrare" },
+    pt: { help: "ajuda", stop: "parar", pause: "pausa", create: "criar", search: "procurar", show: "mostrar" },
+    zh: { help: "帮助", stop: "停止", pause: "暂停", create: "创建", search: "搜索", show: "显示" },
+    ja: { help: "ヘルプ", stop: "停止", pause: "一時停止", create: "作成", search: "検索", show: "表示" },
+    ko: { help: "도움말", stop: "중지", pause: "일시 중지", create: "생성", search: "검색", show: "표시" },
+    ru: { help: "помощь", stop: "стоп", pause: "пауза", create: "создать", search: "поиск", show: "показать" }
   };
   
   // Prepare additional context about the current application state
   const appState = {
     currentPage: context.currentPage || 'unknown',
-    availablePages: ['dashboard', 'meetings', 'tasks', 'settings', 'profile', 'analytics'],
-    userPreferences: context.preferences || { language: language },
-    recentActions: context.recentActions || []
+    availablePages: ['dashboard', 'meetings', 'tasks', 'settings', 'profile', 'analytics', 'calendar', 'help'],
+    userPreferences: context.preferences || { language: languageCode, accessibility: { highContrast: false, fontSize: "medium" } },
+    recentActions: context.recentActions || [],
+    clientInfo: context.clientInfo || { userAgent: "unknown", ip: "unknown" },
+    recognitionConfidence: recognitionConfidence
   };
 
   // Create the voice command request - always use the fastest model for responsiveness
@@ -503,12 +514,14 @@ export async function processVoiceCommand(command: string, context: any = {}) {
         role: 'user',
         content: `As an expert voice command interpreter with 95% accuracy, analyze and process this voice command:
           
-          COMMAND: "${normalizedCommand}"
+          TRANSCRIPT: "${normalizedTranscript}"
           
           APPLICATION CONTEXT:
           ${JSON.stringify(appState, null, 2)}
           
-          USER LANGUAGE: ${language}
+          USER LANGUAGE: ${languageBase}
+          LANGUAGE CODE: ${languageCode}
+          RECOGNITION CONFIDENCE: ${recognitionConfidence}
           
           COMMAND EXAMPLES:
           ${JSON.stringify(commandExamples, null, 2)}
@@ -523,6 +536,7 @@ export async function processVoiceCommand(command: string, context: any = {}) {
           4. Be robust to speech recognition errors by considering similar sounding words
           5. Take into account the current application state for context-aware responses
           6. Support multilingual commands using the language context provided
+          7. For accessibility commands, prioritize them highly
           
           VALID COMMAND TYPES:
           - navigate (to specific pages)
@@ -530,17 +544,19 @@ export async function processVoiceCommand(command: string, context: any = {}) {
           - search (for meetings or tasks)
           - filter (meetings or tasks by various criteria)
           - control (voice assistant functions)
+          - accessibility (accessibility features control)
           
           FORMAT:
           Return a valid JSON object with this structure:
           {
             "understood": true/false,
-            "commandType": "navigate|create|search|filter|control|unknown",
+            "commandType": "navigate|create|search|filter|control|accessibility|unknown",
             "params": {
               // Parameters specific to the command type
             },
+            "processedCommand": "A cleaned and structured version of the command",
+            "userFeedback": "A user-friendly message confirming what action is being taken",
             "confidence": number,
-            "message": "Message to display to the user",
             "alternativeInterpretations": [
               {"commandType": string, "params": object, "confidence": number}
             ]
@@ -549,6 +565,8 @@ export async function processVoiceCommand(command: string, context: any = {}) {
           Where:
           - "understood" is true only if confidence is 0.95 or higher
           - "confidence" is between 0 and 1 representing your confidence
+          - "processedCommand" is a cleaned, corrected version of what the user said
+          - "userFeedback" should be a friendly message confirming what was understood
           - "alternativeInterpretations" contains other possible interpretations (if any)
           
           Return only the valid JSON data with no additional text.`
@@ -562,14 +580,27 @@ export async function processVoiceCommand(command: string, context: any = {}) {
     understood: false,
     commandType: 'unknown',
     params: {},
+    processedCommand: normalizedTranscript,
+    userFeedback: `I'm not sure what you're asking for. Could you try rephrasing?`,
     confidence: 0.5,
-    message: `Sorry, I couldn't understand your command. Please try again.`
+    alternativeInterpretations: []
   };
 
-  // Process the response with validation
-  return processClaudeResponse(
+  // Process the response with validation and return enhanced results
+  const result = await processClaudeResponse(
     voiceCommandRequest, 
     aiValidator.validateVoiceCommandResponse,
     defaultCommandResponse
   );
+  
+  // Add timestamp and speech context to the response
+  return {
+    ...result,
+    timestamp: new Date().toISOString(),
+    originalTranscript: normalizedTranscript,
+    speechContext: {
+      languageCode: languageCode,
+      recognitionConfidence: recognitionConfidence
+    }
+  };
 }

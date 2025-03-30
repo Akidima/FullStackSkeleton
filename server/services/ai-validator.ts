@@ -248,34 +248,60 @@ export function validateMeetingSummary(summary: any): any {
  * @returns Validated voice command response
  */
 export function validateVoiceCommandResponse(commandResponse: any): any {
+  // Create a baseline response if the input is invalid
   if (!commandResponse || typeof commandResponse !== 'object') {
     return {
       understood: false,
       commandType: 'unknown',
       params: {},
-      message: 'Unable to process voice command with sufficient accuracy.'
+      processedCommand: '',
+      userFeedback: 'Unable to process voice command with sufficient accuracy.',
+      confidence: 0.5,
+      alternativeInterpretations: []
     };
+  }
+  
+  // Ensure required fields exist
+  if (!commandResponse.params) {
+    commandResponse.params = {};
+  }
+  
+  if (!commandResponse.alternativeInterpretations) {
+    commandResponse.alternativeInterpretations = [];
   }
   
   // Only mark as understood if we have high confidence
   if (commandResponse.confidence && commandResponse.confidence < 0.95) {
     commandResponse.understood = false;
-    commandResponse.message = 'I\'m not entirely certain what you asked. Could you please rephrase?';
-    return commandResponse;
+    
+    // Set user feedback if not already set
+    if (!commandResponse.userFeedback) {
+      commandResponse.userFeedback = 'I\'m not entirely certain what you asked. Could you please rephrase?';
+    }
   }
   
   // Validate command type
-  const validCommandTypes = ['navigate', 'create', 'search', 'filter', 'control'];
+  const validCommandTypes = ['navigate', 'create', 'search', 'filter', 'control', 'accessibility'];
   if (!validCommandTypes.includes(commandResponse.commandType)) {
     commandResponse.understood = false;
     commandResponse.commandType = 'unknown';
-    commandResponse.message = 'I couldn\'t determine a valid command type with sufficient confidence.';
+    
+    if (!commandResponse.userFeedback) {
+      commandResponse.userFeedback = 'I couldn\'t determine a valid command type with sufficient confidence.';
+    }
   }
   
-  // Ensure message is set
-  if (!commandResponse.message || typeof commandResponse.message !== 'string') {
-    commandResponse.message = commandResponse.understood 
-      ? `Processing ${commandResponse.commandType} command.`
+  // Ensure processedCommand exists
+  if (!commandResponse.processedCommand || typeof commandResponse.processedCommand !== 'string') {
+    commandResponse.processedCommand = commandResponse.understood 
+      ? `${commandResponse.commandType} command` 
+      : '';
+  }
+  
+  // Ensure userFeedback exists
+  if (!commandResponse.userFeedback || typeof commandResponse.userFeedback !== 'string') {
+    commandResponse.userFeedback = commandResponse.understood 
+      ? `I'll ${commandResponse.commandType} ${JSON.stringify(commandResponse.params)}` 
       : 'I couldn\'t understand that command with sufficient confidence.';
   }
   

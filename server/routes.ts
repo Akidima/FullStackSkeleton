@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupWebSocket } from './websocket';
+import { setupWebSocket, broadcastMeetingUpdate } from './websocket';
 import { insertMeetingSchema, updateMeetingSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import { errorHandler, asyncHandler } from "./middleware/errorHandler";
@@ -134,6 +134,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Don't fail the whole request if Slack notification fails
       }
 
+      // Broadcast meeting creation via WebSocket
+      broadcastMeetingUpdate('create', meeting.id);
+
       // Handle calendar integration if user has provided token
       if (req.headers.authorization) {
         const token = req.headers.authorization.split(' ')[1];
@@ -216,6 +219,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Broadcast meeting update via WebSocket
+      broadcastMeetingUpdate('update', meetingId);
+
       res.json(updatedMeeting);
     } catch (error) {
       console.error('MeetMate meeting update error:', error);
@@ -255,6 +261,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete the meeting from storage
       await storage.deleteMeeting(meetingId);
 
+      // Broadcast meeting deletion via WebSocket
+      broadcastMeetingUpdate('delete', meetingId);
+
       // Send a proper response
       res.status(200).json({
         success: true,
@@ -285,6 +294,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Send meeting summary to Slack
       await SlackService.sendMeetingSummary(updatedMeeting, summary.summary);
+
+      // Broadcast meeting notes update via WebSocket
+      broadcastMeetingUpdate('notes', meeting.id);
 
       res.json({
         meeting: updatedMeeting,
@@ -956,7 +968,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create HTTP server
   const httpServer = createServer(app);
   
-  // Set up WebSocket
+  // Set up WebSocket with improved logging
+  console.log('Initializing WebSocket server on path: /ws/app');
   setupWebSocket(httpServer);
   
   return httpServer;

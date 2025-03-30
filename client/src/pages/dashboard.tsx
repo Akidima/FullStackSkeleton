@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { VoiceAssistant } from "@/components/voice-assistant";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { useWebSocketSimple } from "@/hooks/use-websocket-simple";
+import { useWebSocket } from "@/hooks/websocket-provider";
 
 interface TaskType {
   id: number;
@@ -31,7 +31,7 @@ export default function Dashboard() {
   const [activeSection, setActiveSection] = useState<string>("meetings");
   const [isVoiceAssistantEnabled, setIsVoiceAssistantEnabled] = useState(false);
   const queryClient = useQueryClient();
-  const { isConnected, connectionState } = useWebSocketSimple();
+  const { isConnected, connectionState } = useWebSocket();
 
   // Queries with proper typing
   const { data: meetings = [], isLoading: meetingsLoading } = useQuery<Meeting[]>({

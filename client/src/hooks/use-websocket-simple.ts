@@ -87,6 +87,7 @@ export function useWebSocketSimple() {
             case 'meeting:update':
             case 'meeting:create':
             case 'meeting:delete':
+            case 'meeting:notes':
               // Will be handled by components that need this data
               console.log('Meeting update received:', data);
               break;

@@ -19,7 +19,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import type { RegistrationAttempt } from "@shared/schema";
-import { useWebSocketSimple } from "@/hooks/use-websocket-simple";
+import { useWebSocket } from "@/hooks/websocket-provider";
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff } from "lucide-react";
 
@@ -27,7 +27,7 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const [filterType, setFilterType] = useState<"none" | "ip" | "email">("none");
   const [filterValue, setFilterValue] = useState("");
-  const { isConnected, connectionState } = useWebSocketSimple();
+  const { isConnected, connectionState } = useWebSocket();
   const queryClient = useQueryClient();
 
   // Set up WebSocket listener to refresh data when new registration attempts occur

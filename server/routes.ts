@@ -1,7 +1,8 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupWebSocket, broadcastMeetingUpdate } from './websocket';
+import { setupWebSocket, broadcastMeetingUpdate, broadcastRegistrationAttempt, broadcastSystemStatus, wss } from './websocket';
+import { WebSocketServer, WebSocket } from 'ws';
 import { insertMeetingSchema, updateMeetingSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import { errorHandler, asyncHandler } from "./middleware/errorHandler";
@@ -18,7 +19,7 @@ import { OutlookCalendarService } from "./services/outlook-calendar";
 import { AsanaService } from "./services/asana";
 import { JiraService } from "./services/jira";
 import { MicrosoftTeamsService } from "./services/microsoft-teams";
-import { ClaudeAIService } from "./services/claude-ai"; 
+import * as claudeAI from "./services/claude-ai";
 
 // Temporarily disable rate limiting for basic functionality
 const authenticatedLimiter = rateLimit({
@@ -181,11 +182,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (insights.length === 0) {
       try {
         const previousOutcomes = await storage.getMeetingOutcomes(meeting.id);
-        const generatedInsights = await ClaudeAIService.generateMeetingInsights(
-          meeting.title,
-          meeting.description || '',
-          previousOutcomes.map(o => o.outcome)
-        );
+        const generatedInsights = await claudeAI.generateMeetingInsights(meeting);
 
         // Store and return the generated insights
         const storedInsights = await Promise.all(
@@ -379,15 +376,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Use Claude AI to generate the summary
-      const summary = await ClaudeAIService.generateMeetingSummary(meeting);
+      const summary = await claudeAI.generateMeetingSummary(meeting);
 
       // Update meeting with summary
       const updatedMeeting = await storage.updateMeeting(meeting.id, {
-        summary
+        summary: summary.summary
       });
 
-      // Also perform notes analysis to extract structured data
-      const analysisResult = await ClaudeAIService.analyzeNotes(meeting.notes || '');
+      // For now, use a placeholder for notes analysis until we implement it in claude-ai.ts
+      const analysisResult = {
+        discussionPoints: summary.topics || [],
+        actionItems: summary.actionItems?.map(item => item.task) || [],
+        decisions: summary.decisions || []
+      };
 
       // Send meeting summary to Slack
       if (updatedMeeting) {
@@ -425,7 +426,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const meetings = await storage.getMeetings();
       
       // Use Claude AI to generate optimization suggestions
-      const suggestionsList = await ClaudeAIService.generateOptimizationSuggestions(meetings);
+      const optimizationResult = await claudeAI.generateMeetingOptimizations(meetings);
+      
+      // Convert to the expected format
+      const suggestionsList = [
+        ...optimizationResult.scheduleSuggestions || [],
+        ...optimizationResult.efficiencyTips || []
+      ];
       
       // Convert to the expected format
       const suggestions = suggestionsList.map(suggestion => ({
@@ -1224,6 +1231,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Create HTTP server
   const httpServer = createServer(app);
+  
+  // Add WebSocket-specific API routes
+  app.post("/api/websocket/message", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const { type, messageData } = req.body;
+      
+      if (!type || typeof type !== 'string') {
+        throw new ValidationError("Invalid message type");
+      }
+      
+      // Handle different message types
+      switch (type) {
+        case 'meeting:update':
+          if (messageData && typeof messageData.meetingId === 'number') {
+            broadcastMeetingUpdate('update', messageData.meetingId);
+            res.json({ success: true, message: "Update broadcast sent" });
+          } else {
+            throw new ValidationError("Invalid meeting ID for update");
+          }
+          break;
+          
+        case 'meeting:notes':
+          if (messageData && typeof messageData.meetingId === 'number') {
+            broadcastMeetingUpdate('notes', messageData.meetingId);
+            res.json({ success: true, message: "Notes update broadcast sent" });
+          } else {
+            throw new ValidationError("Invalid meeting ID for notes update");
+          }
+          break;
+          
+        case 'registration:attempt':
+          if (messageData && 
+              typeof messageData.email === 'string' && 
+              typeof messageData.ipAddress === 'string' && 
+              ['success', 'pending', 'blocked'].includes(messageData.status)) {
+            
+            // Track the attempt in database if needed
+            // await storage.createRegistrationAttempt({
+            //   ...messageData,
+            //   attemptTime: new Date()
+            // });
+            
+            // Broadcast to admin dashboards
+            broadcastRegistrationAttempt({
+              email: messageData.email,
+              ipAddress: messageData.ipAddress,
+              status: messageData.status as 'success' | 'pending' | 'blocked',
+              reason: messageData.reason,
+              userAgent: messageData.userAgent
+            });
+            
+            res.json({ success: true, message: "Registration attempt broadcast sent" });
+          } else {
+            throw new ValidationError("Invalid registration attempt data");
+          }
+          break;
+          
+        case 'system:status':
+          if (messageData && 
+              ['healthy', 'degraded', 'outage'].includes(messageData.status)) {
+            
+            // Broadcast system status
+            broadcastSystemStatus(
+              messageData.status as 'healthy' | 'degraded' | 'outage',
+              messageData.details
+            );
+            
+            res.json({ success: true, message: "System status broadcast sent" });
+          } else {
+            throw new ValidationError("Invalid system status data");
+          }
+          break;
+          
+        default:
+          res.json({ success: false, message: "Unsupported message type" });
+      }
+    } catch (error) {
+      console.error('WebSocket message API error:', error);
+      throw error;
+    }
+  }));
+  
+  // Create a health check endpoint for the WebSocket server
+  app.get("/api/websocket/status", asyncHandler(async (req: Request, res: Response) => {
+    try {
+      // Check if the WebSocket server is running
+      if (wss?.clients) {
+        // Return the number of active connections
+        const activeConnections = [...wss.clients].filter(
+          client => client.readyState === WebSocket.OPEN
+        ).length;
+        
+        res.json({ 
+          status: 'active',
+          path: "/ws/app",
+          connections: activeConnections,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        res.json({ 
+          status: 'inactive',
+          path: "/ws/app",
+          message: 'WebSocket server not initialized',
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('Error checking WebSocket status:', error);
+      res.status(500).json({
+        status: 'error',
+        message: 'Could not determine WebSocket server status',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }));
   
   // Set up WebSocket with improved logging
   console.log('Initializing WebSocket server on path: /ws/app');

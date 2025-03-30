@@ -1,7 +1,8 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
 
-let wss: WebSocketServer;
+// Export wss for status endpoint
+export let wss: WebSocketServer;
 
 // Backoff configuration
 const INITIAL_RECONNECT_DELAY = 1000;
@@ -160,10 +161,10 @@ export function broadcastMeetingUpdate(type: 'create' | 'update' | 'delete' | 'n
       try {
         client.send(message);
         successCount++;
-      } catch (error) {
+      } catch (err: any) {
         errorCount++;
         console.error('Error broadcasting MeetMate meeting update:', {
-          error: error.message,
+          error: err?.message || 'Unknown error',
           meetingId,
           type,
           timestamp: new Date().toISOString()
@@ -175,6 +176,94 @@ export function broadcastMeetingUpdate(type: 'create' | 'update' | 'delete' | 'n
   console.log('MeetMate broadcast complete:', {
     type,
     meetingId,
+    successCount,
+    errorCount,
+    timestamp: new Date().toISOString()
+  });
+}
+
+// Broadcast a user registration attempt to admin dashboards
+export function broadcastRegistrationAttempt(data: { 
+  email: string; 
+  ipAddress: string; 
+  status: 'success' | 'pending' | 'blocked'; 
+  reason?: string;
+  userAgent?: string;
+}) {
+  if (!wss?.clients) {
+    console.log('MeetMate WebSocket server not initialized');
+    return;
+  }
+
+  const message = JSON.stringify({
+    type: 'registration:attempt',
+    ...data,
+    timestamp: new Date().toISOString()
+  });
+
+  let successCount = 0;
+  let errorCount = 0;
+
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+        successCount++;
+      } catch (err: any) {
+        errorCount++;
+        console.error('Error broadcasting registration attempt:', {
+          error: err?.message || 'Unknown error',
+          email: data.email,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+  });
+
+  console.log('Registration attempt broadcast complete:', {
+    email: data.email,
+    status: data.status,
+    successCount,
+    errorCount,
+    timestamp: new Date().toISOString()
+  });
+}
+
+// Broadcast general system status updates
+export function broadcastSystemStatus(status: 'healthy' | 'degraded' | 'outage', details?: string) {
+  if (!wss?.clients) {
+    console.log('MeetMate WebSocket server not initialized');
+    return;
+  }
+
+  const message = JSON.stringify({
+    type: 'system:status',
+    status,
+    details,
+    timestamp: new Date().toISOString()
+  });
+
+  let successCount = 0;
+  let errorCount = 0;
+
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+        successCount++;
+      } catch (err: any) {
+        errorCount++;
+        console.error('Error broadcasting system status:', {
+          error: err?.message || 'Unknown error',
+          status,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+  });
+
+  console.log('System status broadcast complete:', {
+    status,
     successCount,
     errorCount,
     timestamp: new Date().toISOString()

@@ -19,7 +19,7 @@ import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { Layout } from "@/components/layout";
 import { Loader2 } from "lucide-react";
-import { WebSocketProvider } from "@/hooks/mock-websocket-provider";
+import { WebSocketProvider } from "@/hooks/websocket-provider";
 
 
 // Loading fallback component

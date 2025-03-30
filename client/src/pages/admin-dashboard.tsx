@@ -21,26 +21,105 @@ import { useToast } from "@/hooks/use-toast";
 import type { RegistrationAttempt } from "@shared/schema";
 import { useWebSocket } from "@/hooks/websocket-provider";
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Wifi, WifiOff, Activity, AlertCircle, AlertTriangle } from "lucide-react";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
   const [filterType, setFilterType] = useState<"none" | "ip" | "email">("none");
   const [filterValue, setFilterValue] = useState("");
-  const { isConnected, connectionState } = useWebSocket();
+  const { isConnected, connectionState, send } = useWebSocket();
   const queryClient = useQueryClient();
 
   // Set up WebSocket listener to refresh data when new registration attempts occur
   useEffect(() => {
     if (connectionState === 'connected') {
       console.log('Admin dashboard connected to WebSocket');
+      
+      // Only show toast when transitioning from disconnected to connected
+      // to avoid showing on initial page load
+      if (connectionState === 'connected') {
+        toast({
+          title: "Real-time updates enabled",
+          description: "You'll see new registration attempts instantly",
+          variant: "default"
+        });
+      }
+      
+      // Set up an interval to check WebSocket connection status
+      const intervalId = setInterval(() => {
+        fetch('/api/websocket/status')
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === 'active') {
+              // WebSocket server is running correctly
+              console.log('WebSocket server is active:', data);
+            } else {
+              console.warn('WebSocket server status check failed:', data);
+            }
+          })
+          .catch(err => {
+            console.error('Error checking WebSocket status:', err);
+          });
+      }, 60000); // Check every minute
+      
+      // Clean up interval on unmount
+      return () => clearInterval(intervalId);
+    } else if (connectionState === 'error') {
       toast({
-        title: "Real-time updates enabled",
-        description: "You'll see new registration attempts instantly",
-        variant: "default"
+        title: "Connection error",
+        description: "Real-time updates are currently unavailable",
+        variant: "destructive"
       });
     }
   }, [connectionState, toast]);
+  
+  // Add effect to listen for "registration" events from WebSocket
+  useEffect(() => {
+    const handleSocketMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'registration:attempt') {
+          console.log('Registration attempt received via WebSocket:', data);
+          // Refresh the data
+          queryClient.invalidateQueries({ 
+            queryKey: ["/api/admin/registration-attempts"] 
+          });
+          
+          // Show a notification
+          toast({
+            title: "New registration attempt",
+            description: `${data.email || 'Unknown'} from ${data.ipAddress || 'Unknown IP'}`,
+            variant: data.status === 'blocked' ? "destructive" : "default"
+          });
+        }
+        
+        if (data.type === 'system:status') {
+          console.log('System status update received:', data);
+          
+          // Show appropriate notification based on status
+          if (data.status) {
+            toast({
+              title: `System Status: ${data.status.charAt(0).toUpperCase() + data.status.slice(1)}`,
+              description: data.details || "Status update received",
+              variant: data.status === 'healthy' ? "default" : "destructive"
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error handling WebSocket message:', error);
+      }
+    };
+    
+    // Add global event listener for WebSocket messages
+    window.addEventListener('websocket-message', handleSocketMessage as EventListener);
+    
+    return () => {
+      // Clean up listener on unmount
+      window.removeEventListener('websocket-message', handleSocketMessage as EventListener);
+    };
+  }, [queryClient, toast]);
 
   const { data: attempts, isLoading, error } = useQuery<RegistrationAttempt[]>({
     queryKey: [
@@ -91,6 +170,141 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {isConnected && (
+        <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+          <h3 className="text-lg font-medium mb-3">WebSocket Testing</h3>
+          <div className="flex flex-wrap gap-3">
+            <Button 
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1"
+              onClick={() => {
+                fetch('/api/websocket/message', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    type: 'registration:attempt',
+                    messageData: {
+                      email: 'test@example.com',
+                      ipAddress: '192.168.1.1',
+                      status: 'success',
+                      userAgent: 'Mozilla/5.0 (Test WebSocket)',
+                    }
+                  })
+                })
+                .then(res => res.json())
+                .then(data => {
+                  console.log('Registration attempt test sent:', data);
+                  toast({
+                    title: 'Test sent',
+                    description: 'Registration attempt test broadcast sent',
+                    variant: 'default',
+                  });
+                })
+                .catch(err => {
+                  console.error('Error sending test:', err);
+                  toast({
+                    title: 'Error',
+                    description: 'Failed to send test message',
+                    variant: 'destructive',
+                  });
+                });
+              }}
+            >
+              <Activity className="h-4 w-4" />
+              <span>Test Registration (Success)</span>
+            </Button>
+            
+            <Button 
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1"
+              onClick={() => {
+                fetch('/api/websocket/message', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    type: 'registration:attempt',
+                    messageData: {
+                      email: 'blocked@example.com',
+                      ipAddress: '10.0.0.1',
+                      status: 'blocked',
+                      reason: 'Suspicious activity',
+                      userAgent: 'Mozilla/5.0 (Test WebSocket - Blocked)',
+                    }
+                  })
+                })
+                .then(res => res.json())
+                .then(data => {
+                  console.log('Blocked registration test sent:', data);
+                  toast({
+                    title: 'Test sent',
+                    description: 'Blocked registration test broadcast sent',
+                    variant: 'default',
+                  });
+                })
+                .catch(err => {
+                  console.error('Error sending test:', err);
+                  toast({
+                    title: 'Error',
+                    description: 'Failed to send test message',
+                    variant: 'destructive',
+                  });
+                });
+              }}
+            >
+              <AlertCircle className="h-4 w-4" />
+              <span>Test Registration (Blocked)</span>
+            </Button>
+            
+            <Button 
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1"
+              onClick={() => {
+                fetch('/api/websocket/message', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    type: 'system:status',
+                    messageData: {
+                      status: 'degraded',
+                      details: 'High database load detected',
+                    }
+                  })
+                })
+                .then(res => res.json())
+                .then(data => {
+                  console.log('System status test sent:', data);
+                  toast({
+                    title: 'Test sent',
+                    description: 'System status test broadcast sent',
+                    variant: 'default',
+                  });
+                })
+                .catch(err => {
+                  console.error('Error sending test:', err);
+                  toast({
+                    title: 'Error',
+                    description: 'Failed to send test message',
+                    variant: 'destructive',
+                  });
+                });
+              }}
+            >
+              <AlertTriangle className="h-4 w-4" />
+              <span>Test System Status</span>
+            </Button>
+          </div>
+        </div>
+      )}
+      
       <div className="flex gap-4 mb-6">
         <Select
           value={filterType}

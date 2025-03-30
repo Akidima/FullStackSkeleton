@@ -18,9 +18,10 @@ import { authenticateJWT } from "./auth";
 import {insertTaskSchema, updateTaskSchema} from "@shared/schema";
 import { format } from 'date-fns';
 import { rateLimit } from 'express-rate-limit';
+import { registerCalendarRoutes } from './routes/calendar-routes';
 import { SlackService } from "./services/slack";
-import { GoogleCalendarService } from "./services/google-calendar";
-import { OutlookCalendarService } from "./services/outlook-calendar";
+import * as googleCalendar from "./services/google-calendar";
+import * as outlookCalendar from "./services/outlook-calendar";
 import { AsanaService } from "./services/asana";
 import { JiraService } from "./services/jira";
 import { MicrosoftTeamsService } from "./services/microsoft-teams";
@@ -218,9 +219,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         try {
           if (calendarType === 'outlook') {
-            eventId = await OutlookCalendarService.createCalendarEvent(meeting, token);
+            eventId = await outlookCalendar.syncMeetingToOutlook(1, meeting);
           } else {
-            eventId = await GoogleCalendarService.createCalendarEvent(meeting, token);
+            eventId = await googleCalendar.syncMeetingToGoogle(1, meeting);
           }
 
           // Store the calendar event ID with the meeting
@@ -276,9 +277,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         try {
           if (calendarType === 'outlook') {
-            await OutlookCalendarService.updateCalendarEvent(updatedMeeting, meeting.calendarEventId, token);
+            await outlookCalendar.syncMeetingToOutlook(1, updatedMeeting);
           } else {
-            await GoogleCalendarService.updateCalendarEvent(updatedMeeting, meeting.calendarEventId, token);
+            await googleCalendar.syncMeetingToGoogle(1, updatedMeeting);
           }
 
           // Update sync status
@@ -321,9 +322,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         try {
           if (calendarType === 'outlook') {
-            await OutlookCalendarService.deleteCalendarEvent(meeting.calendarEventId, token);
+            await outlookCalendar.deleteMeetingFromOutlook(1, meeting.calendarEventId);
           } else {
-            await GoogleCalendarService.deleteCalendarEvent(meeting.calendarEventId, token);
+            await googleCalendar.deleteMeetingFromGoogle(1, meeting.calendarEventId);
           }
         } catch (error) {
           console.error('Failed to delete calendar event:', error);
@@ -1436,6 +1437,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   }));
+
+  // Register calendar-related routes
+  registerCalendarRoutes(app);
 
   // Set up WebSocket with improved logging
   console.log('Initializing WebSocket server on path: /ws');

@@ -60,6 +60,18 @@ export const users = pgTable("users", {
   theme: text("theme").default("system"), // light, dark, or system
   timeZone: text("time_zone"),
   language: text("language").default("en"),
+  // Calendar integration fields
+  calendarProvider: text("calendar_provider"), // 'google' or 'outlook'
+  // Google Calendar fields
+  googleAccessToken: text("google_access_token"),
+  googleRefreshToken: text("google_refresh_token"),
+  googleTokenExpiry: timestamp("google_token_expiry"),
+  googleCalendarConnected: boolean("google_calendar_connected").default(false),
+  // Outlook Calendar fields
+  outlookAccessToken: text("outlook_access_token"),
+  outlookRefreshToken: text("outlook_refresh_token"),
+  outlookTokenExpiry: timestamp("outlook_token_expiry"),
+  outlookCalendarConnected: boolean("outlook_calendar_connected").default(false),
 }, (table) => ({
   emailIdx: index("email_idx").on(table.email),
   googleIdIdx: index("google_id_idx").on(table.googleId),

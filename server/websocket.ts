@@ -356,3 +356,56 @@ export function broadcastVoiceCommand(userId: number, commandResponse: {
     timestamp: new Date().toISOString()
   });
 }
+
+// Broadcast calendar events updates to connected clients
+export function broadcastCalendarUpdate(
+  type: 'sync' | 'remove' | 'update' | 'fetch',
+  userId: number,
+  meetingId?: number,
+  provider?: string
+) {
+  if (!wss?.clients) {
+    console.log('MeetMate WebSocket server not initialized for calendar update broadcast');
+    return;
+  }
+
+  const message = JSON.stringify({
+    type: `calendar:${type}`,
+    userId,
+    meetingId,
+    provider,
+    timestamp: new Date().toISOString()
+  });
+
+  let successCount = 0;
+  let errorCount = 0;
+
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+        successCount++;
+      } catch (err: any) {
+        errorCount++;
+        console.error('Error broadcasting calendar update:', {
+          error: err?.message || 'Unknown error',
+          userId,
+          type,
+          meetingId,
+          provider,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+  });
+
+  console.log('Calendar update broadcast complete:', {
+    type,
+    userId,
+    meetingId,
+    provider,
+    successCount,
+    errorCount,
+    timestamp: new Date().toISOString()
+  });
+}

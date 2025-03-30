@@ -1192,19 +1192,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         {
           id: 1,
           meetingTitle: "Product Team Sync",
-          content: "Decision made to prioritize the new checkout flow for Q2. Team agreed that improving conversion rate is our top priority for the quarter.",
+          content: "Team reviewed Q2 priorities and discussed upcoming features.",
+          decisions: [
+            "Prioritize new checkout flow for Q2",
+            "Improving conversion rate set as top priority"
+          ],
           createdAt: yesterday.toISOString()
         },
         {
           id: 2,
           meetingTitle: "Engineering Stand-up",
-          content: "Frontend team will complete authentication flow by end of week. Backend team working on API optimization for better performance.",
+          content: "Sprint planning and timeline discussion for ongoing projects.",
+          decisions: [
+            "Frontend team to complete auth flow this week",
+            "Backend team to focus on API optimization"
+          ],
           createdAt: twoDaysAgo.toISOString()
         },
         {
           id: 3,
           meetingTitle: "Marketing Campaign Planning",
-          content: "Budget allocated for digital advertising increased by 20%. Focus on social media channels with best ROI from previous quarter.",
+          content: "Review of Q1 campaign performance and Q2 budget allocation.",
+          decisions: [
+            "Increase digital advertising budget by 20%",
+            "Focus on high-ROI social media channels"
+          ],
           createdAt: threeDaysAgo.toISOString()
         }
       ];

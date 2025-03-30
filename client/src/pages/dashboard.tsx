@@ -29,31 +29,32 @@ interface NoteType {
   meetingTitle: string;
   content: string;
   createdAt: string;
+  decisions?: string[];
 }
 
 export default function Dashboard() {
   const [activeSection, setActiveSection] = useState<string>("meetings");
   const [isVoiceAssistantEnabled, setIsVoiceAssistantEnabled] = useState(false);
   const { isConnected } = useMockWebSocket();
-  
+
   const { data: meetings = mockMeetings, isLoading: meetingsLoading } = useQuery({ 
     queryKey: ['meetings'],
     queryFn: () => fetch('/api/meetings').then(res => res.json())
   });
-  
+
   const { data: tasks = mockTasks, isLoading: tasksLoading } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => fetch('/api/tasks').then(res => res.json())
   });
-  
+
   const { data: recentNotes = mockNotes, isLoading: notesLoading } = useQuery({
     queryKey: ['notes'],
     queryFn: () => fetch('/api/notes').then(res => res.json())
   });
-  
+
   // Use the loading states from the queries directly
   const isLoading = meetingsLoading || tasksLoading || notesLoading;
-  
+
   // Log connection status
   useEffect(() => {
     if (isConnected) {
@@ -254,13 +255,13 @@ export default function Dashboard() {
                         {format(new Date(note.createdAt), "MMM d")}
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{note.content}</p>
+                    <p className="text-sm text-muted-foreground mb-2">{note.content}</p>
                     {note.decisions && note.decisions.length > 0 && (
-                      <div className="mt-2">
-                        <h4 className="text-sm font-medium mb-1">Key Decisions:</h4>
+                      <div className="mt-1">
+                        <h4 className="text-sm font-medium text-primary">Key Decisions:</h4>
                         <ul className="list-disc pl-4 text-sm text-muted-foreground">
-                          {note.decisions.slice(0, 2).map((decision, idx) => (
-                            <li key={idx} className="line-clamp-1">{decision}</li>
+                          {note.decisions.map((decision, idx) => (
+                            <li key={idx}>{decision}</li>
                           ))}
                         </ul>
                       </div>

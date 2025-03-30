@@ -78,88 +78,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
   app.get("/api/meetings", asyncHandler(async (req: Request, res: Response) => {
     try {
-      // Always return mock data for development
-      // Current date
-      const now = new Date();
-      
-      // Create a set of mock meetings for the next 7 days
-      const mockMeetings = [
-        {
-          id: 1,
-          title: "Product Team Sync",
-          description: "Weekly sync to discuss product roadmap and current sprint progress",
-          date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 10, 0, 0),
-          participants: ["Sarah Kim", "David Chen", "Alex Johnson"],
-          agenda: "1. Sprint review\n2. Blockers discussion\n3. Customer feedback",
-          notes: "",
-          isCompleted: false,
-          summary: null,
-          userId: 1,
-          roomId: 1
-        },
-        {
-          id: 2,
-          title: "Marketing Campaign Planning",
-          description: "Planning session for the Q2 marketing campaign launch",
-          date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2, 14, 30, 0),
-          participants: ["Maria Garcia", "Taylor Swift", "Chris Wong"],
-          agenda: "1. Campaign goals\n2. Budget allocation\n3. Timeline review",
-          notes: "",
-          isCompleted: false,
-          summary: null,
-          userId: 1,
-          roomId: 2
-        },
-        {
-          id: 3,
-          title: "Customer Success Review",
-          description: "Monthly review of customer success metrics and support tickets",
-          date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 11, 0, 0),
-          participants: ["James Smith", "Olivia Johnson", "Raj Patel"],
-          agenda: "1. KPI review\n2. Support ticket analysis\n3. Customer retention strategies",
-          notes: "",
-          isCompleted: false,
-          summary: null,
-          userId: 1,
-          roomId: 3
-        },
-        {
-          id: 4,
-          title: "Engineering Stand-up",
-          description: "Daily stand-up meeting for the engineering team",
-          date: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 30, 0),
-          participants: ["Liam Wilson", "Emma Davis", "Noah Martin", "Isabella Brown"],
-          agenda: "1. Yesterday's progress\n2. Today's goals\n3. Blockers",
-          notes: "Team discussed front-end performance issues. Noah will focus on optimizing image loading. Emma completed the authentication flow updates.",
-          isCompleted: true,
-          summary: "The team made good progress on the authentication flow, and plans to address performance optimization today. Noah will lead the image loading optimization effort.",
-          userId: 1,
-          roomId: 1
-        },
-        {
-          id: 5,
-          title: "Board Meeting",
-          description: "Quarterly board meeting to review company performance and strategy",
-          date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5, 13, 0, 0),
-          participants: ["Daniel Lee", "Sophia Clark", "William Jackson", "Ava White"],
-          agenda: "1. Financial review\n2. Strategic initiatives\n3. Market analysis\n4. Q&A",
-          notes: "",
-          isCompleted: false,
-          summary: null,
-          userId: 1,
-          roomId: 4
-        }
-      ];
+      // Get real meetings from the database storage
+      const meetings = await storage.getMeetings();
       
       // Set CORS headers to make sure the API is accessible
       res.set('Access-Control-Allow-Origin', '*');
       res.set('Access-Control-Allow-Methods', 'GET');
       res.set('Access-Control-Allow-Headers', 'Content-Type');
       
-      console.log("Returning mock meetings data for development");
+      console.log(`Returning ${meetings.length} meetings from database`);
+      
       // Add a small delay to simulate network latency
       setTimeout(() => {
-        res.json(mockMeetings);
+        res.json(meetings);
       }, 100);
     } catch (error) {
       console.error('Error fetching meetings:', error);
@@ -808,99 +739,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add task routes after meeting routes
   app.get("/api/tasks", asyncHandler(async (req: Request, res: Response) => {
     try {
-      // Always return mock data for development purposes
-      const now = new Date();
-      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 10, 0, 0);
-      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 10, 0, 0);
+      // Get filters from query parameters
+      const meetingId = req.query.meetingId ? Number(req.query.meetingId) : undefined;
+      const userId = req.query.userId ? Number(req.query.userId) : undefined;
       
-      const mockTasks = [
-        {
-          id: 1,
-          title: "Prepare product roadmap presentation",
-          description: "Create slides for Q2 roadmap review with stakeholders",
-          status: "in_progress",
-          priority: "high",
-          progress: 70,
-          completed: false,
-          dueDate: tomorrow,
-          meetingId: 1,
-          createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2),
-          updatedAt: now
-        },
-        {
-          id: 2,
-          title: "Update user onboarding flow",
-          description: "Implement new onboarding process based on UX research",
-          status: "pending", 
-          priority: "medium",
-          progress: 0,
-          completed: false,
-          dueDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3),
-          meetingId: 1,
-          createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1),
-          updatedAt: now
-        },
-        {
-          id: 3,
-          title: "Finalize Q2 marketing budget",
-          description: "Review and approve budget allocation for next quarter campaigns",
-          status: "completed",
-          priority: "high",
-          progress: 100,
-          completed: true,
-          dueDate: yesterday,
-          meetingId: 2,
-          createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 5),
-          updatedAt: yesterday
-        },
-        {
-          id: 4,
-          title: "Schedule customer feedback sessions",
-          description: "Coordinate with existing customers for feedback on new features",
-          status: "in_progress",
-          priority: "medium",
-          progress: 50,
-          completed: false,
-          dueDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2),
-          meetingId: 3,
-          createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3),
-          updatedAt: now
-        },
-        {
-          id: 5,
-          title: "Fix critical login bug",
-          description: "Address issue with authentication flow for enterprise customers",
-          status: "blocked",
-          priority: "high",
-          progress: 30,
-          completed: false,
-          dueDate: tomorrow,
-          meetingId: 4,
-          createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1),
-          updatedAt: now
-        }
-      ];
+      // Get tasks from database with filters
+      const filters: { meetingId?: number; userId?: number } = {};
+      if (meetingId) filters.meetingId = meetingId;
+      if (userId) filters.userId = userId;
+      
+      const tasks = await storage.getTasks(filters);
       
       // Set CORS headers to make sure the API is accessible
       res.set('Access-Control-Allow-Origin', '*');
       res.set('Access-Control-Allow-Methods', 'GET');
       res.set('Access-Control-Allow-Headers', 'Content-Type');
       
-      console.log("Returning mock tasks data for development");
-      
-      // Filter by meetingId or userId if specified
-      const meetingId = req.query.meetingId ? Number(req.query.meetingId) : undefined;
-      const userId = req.query.userId ? Number(req.query.userId) : undefined;
-      
-      let filteredTasks = [...mockTasks];
-      
-      if (meetingId) {
-        filteredTasks = filteredTasks.filter(task => task.meetingId === meetingId);
-      }
+      console.log(`Returning ${tasks.length} tasks from database`);
       
       // Add a small delay to simulate network latency
       setTimeout(() => {
-        res.json(filteredTasks);
+        res.json(tasks);
       }, 100);
     } catch (error) {
       console.error('Error fetching tasks:', error);

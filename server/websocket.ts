@@ -9,9 +9,10 @@ const INITIAL_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
 const RECONNECT_DECAY = 1.5;
 
-// Add isValidOrigin function (placeholder - needs actual implementation)
+// More permissive origin validation for development
 const ALLOWED_ORIGINS = [
   'https://meetmate.repl.co',
+  'https://meetmate.replit.app',
   'https://meetmate.dev'
 ];
 
@@ -19,8 +20,15 @@ const MAX_CONNECTIONS_PER_IP = 5;
 const ipConnections = new Map<string, number>();
 
 const isValidOrigin = (origin: string): boolean => {
+  // In development, accept all origins
+  if (process.env.NODE_ENV === 'development') return true;
+  
+  // For production, be more strict
   if (!origin) return false;
-  return ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.repl.co');
+  return ALLOWED_ORIGINS.includes(origin) || 
+         origin.endsWith('.repl.co') || 
+         origin.endsWith('.replit.app') ||
+         origin.includes('replit.dev');
 };
 
 const enforceConnectionLimit = (ip: string): boolean => {
@@ -42,7 +50,13 @@ export function setupWebSocket(server: Server) {
       clientTracking: true,
       maxPayload: 1024 * 1024 * 5,
       heartbeatInterval: 30000,
-      verifyClient: () => true
+      // Always allow clients in development, but verify origin in production
+      verifyClient: (info) => {
+        if (process.env.NODE_ENV === 'development') return true;
+        
+        const origin = info.origin;
+        return isValidOrigin(origin);
+      }
     };
 
     wss = new WebSocketServer(wsOptions);
@@ -53,11 +67,13 @@ export function setupWebSocket(server: Server) {
     });
 
     wss.on('connection', (ws: WebSocket & { isAlive?: boolean; reconnectAttempts?: number }, req) => {
-      // Validate origin
-      const origin = req.headers.origin;
-      if (!origin || !isValidOrigin(origin)) {
-        ws.close(1008, 'Invalid origin');
-        return;
+      // Validate origin (skip in development)
+      if (process.env.NODE_ENV !== 'development') {
+        const origin = req.headers.origin;
+        if (!origin || !isValidOrigin(origin)) {
+          ws.close(1008, 'Invalid origin');
+          return;
+        }
       }
 
       console.log('Client connected to MeetMate WebSocket');

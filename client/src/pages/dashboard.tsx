@@ -16,8 +16,12 @@ import { useWebSocket } from "@/hooks/websocket-provider";
 interface TaskType {
   id: number;
   title: string;
-  completed: boolean;
+  description?: string | null;
+  status: "pending" | "in_progress" | "completed" | "blocked";
   priority: "high" | "medium" | "low";
+  progress: number;
+  completed: boolean;
+  dueDate?: Date | null;
 }
 
 interface NoteType {

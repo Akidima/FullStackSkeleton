@@ -7,8 +7,6 @@ import { ZodError } from "zod";
 import { errorHandler, asyncHandler } from "./middleware/errorHandler";
 import { NotFoundError, ValidationError } from "./errors/AppError";
 import { AgendaService } from "./services/agenda";
-import { getAIInsights } from "./services/ai-insights";
-import { generateMeetingInsights, batchSummarize } from "./services/summarize";
 import { SchedulerService } from "./services/scheduler";
 import { authenticateJWT } from "./auth";
 import {insertTaskSchema, updateTaskSchema} from "@shared/schema";
@@ -20,7 +18,7 @@ import { OutlookCalendarService } from "./services/outlook-calendar";
 import { AsanaService } from "./services/asana";
 import { JiraService } from "./services/jira";
 import { MicrosoftTeamsService } from "./services/microsoft-teams";
-import {meetingOptimizer} from "./services/ai-optimizer"; 
+import { ClaudeAIService } from "./services/claude-ai"; 
 
 // Temporarily disable rate limiting for basic functionality
 const authenticatedLimiter = rateLimit({
@@ -78,8 +76,92 @@ interface PreferencesUpdateInput {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Meeting Management Routes
   app.get("/api/meetings", asyncHandler(async (req: Request, res: Response) => {
-    const meetings = await storage.getMeetings();
-    res.json(meetings);
+    try {
+      let meetings = await storage.getMeetings();
+      
+      // If no meetings found, return mock data for development
+      if (!meetings || meetings.length === 0) {
+        // Current date
+        const now = new Date();
+        
+        // Create a set of mock meetings for the next 7 days
+        const mockMeetings = [
+          {
+            id: 1,
+            title: "Product Team Sync",
+            description: "Weekly sync to discuss product roadmap and current sprint progress",
+            date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 10, 0, 0),
+            participants: ["Sarah Kim", "David Chen", "Alex Johnson"],
+            agenda: "1. Sprint review\n2. Blockers discussion\n3. Customer feedback",
+            notes: "",
+            isCompleted: false,
+            summary: null,
+            userId: 1,
+            roomId: 1
+          },
+          {
+            id: 2,
+            title: "Marketing Campaign Planning",
+            description: "Planning session for the Q2 marketing campaign launch",
+            date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2, 14, 30, 0),
+            participants: ["Maria Garcia", "Taylor Swift", "Chris Wong"],
+            agenda: "1. Campaign goals\n2. Budget allocation\n3. Timeline review",
+            notes: "",
+            isCompleted: false,
+            summary: null,
+            userId: 1,
+            roomId: 2
+          },
+          {
+            id: 3,
+            title: "Customer Success Review",
+            description: "Monthly review of customer success metrics and support tickets",
+            date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 11, 0, 0),
+            participants: ["James Smith", "Olivia Johnson", "Raj Patel"],
+            agenda: "1. KPI review\n2. Support ticket analysis\n3. Customer retention strategies",
+            notes: "",
+            isCompleted: false,
+            summary: null,
+            userId: 1,
+            roomId: 3
+          },
+          {
+            id: 4,
+            title: "Engineering Stand-up",
+            description: "Daily stand-up meeting for the engineering team",
+            date: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 30, 0),
+            participants: ["Liam Wilson", "Emma Davis", "Noah Martin", "Isabella Brown"],
+            agenda: "1. Yesterday's progress\n2. Today's goals\n3. Blockers",
+            notes: "Team discussed front-end performance issues. Noah will focus on optimizing image loading. Emma completed the authentication flow updates.",
+            isCompleted: true,
+            summary: "The team made good progress on the authentication flow, and plans to address performance optimization today. Noah will lead the image loading optimization effort.",
+            userId: 1,
+            roomId: 1
+          },
+          {
+            id: 5,
+            title: "Board Meeting",
+            description: "Quarterly board meeting to review company performance and strategy",
+            date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5, 13, 0, 0),
+            participants: ["Daniel Lee", "Sophia Clark", "William Jackson", "Ava White"],
+            agenda: "1. Financial review\n2. Strategic initiatives\n3. Market analysis\n4. Q&A",
+            notes: "",
+            isCompleted: false,
+            summary: null,
+            userId: 1,
+            roomId: 4
+          }
+        ];
+        
+        console.log("Returning mock meetings data for development");
+        return res.json(mockMeetings);
+      }
+      
+      res.json(meetings);
+    } catch (error) {
+      console.error('Error fetching meetings:', error);
+      throw error;
+    }
   }));
 
   // Add AI Insights Routes
@@ -94,28 +176,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // If no insights exist yet, generate them
     if (insights.length === 0) {
-      const aiService = await getAIInsights();
-      const previousOutcomes = await storage.getMeetingOutcomes(meeting.id);
-      const generatedInsights = await aiService.generateMeetingInsights(
-        meeting.title,
-        meeting.description || '',
-        previousOutcomes.map(o => o.outcome)
-      );
+      try {
+        const previousOutcomes = await storage.getMeetingOutcomes(meeting.id);
+        const generatedInsights = await ClaudeAIService.generateMeetingInsights(
+          meeting.title,
+          meeting.description || '',
+          previousOutcomes.map(o => o.outcome)
+        );
 
-      // Store and return the generated insights
-      const storedInsights = await Promise.all(
-        generatedInsights.map(insight =>
-          storage.createMeetingInsight({
-            meetingId: meeting.id,
-            insight: insight.insight,
-            category: insight.category,
-            relevanceScore: insight.relevanceScore,
-            source: 'ai-generated'
-          })
-        )
-      );
+        // Store and return the generated insights
+        const storedInsights = await Promise.all(
+          generatedInsights.map(insight =>
+            storage.createMeetingInsight({
+              meetingId: meeting.id,
+              insight: insight.insight,
+              category: insight.category,
+              relevanceScore: insight.relevanceScore,
+              source: 'claude-ai'
+            })
+          )
+        );
 
-      res.json(storedInsights);
+        res.json(storedInsights);
+      } catch (error) {
+        console.error("Error generating meeting insights with Claude:", error);
+        res.status(503).json({
+          status: 'error',
+          message: 'AI service temporarily unavailable. Please try again in a few moments.'
+        });
+      }
     } else {
       res.json(insights);
     }
@@ -286,33 +375,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new NotFoundError("Meeting");
       }
 
-      const summary = await generateMeetingInsights(meeting);
+      // Use Claude AI to generate the summary
+      const summary = await ClaudeAIService.generateMeetingSummary(meeting);
 
+      // Update meeting with summary
       const updatedMeeting = await storage.updateMeeting(meeting.id, {
-        summary: summary.summary
+        summary
       });
 
+      // Also perform notes analysis to extract structured data
+      const analysisResult = await ClaudeAIService.analyzeNotes(meeting.notes || '');
+
       // Send meeting summary to Slack
-      await SlackService.sendMeetingSummary(updatedMeeting, summary.summary);
+      if (updatedMeeting) {
+        await SlackService.sendMeetingSummary(updatedMeeting, summary);
+      }
 
       // Broadcast meeting notes update via WebSocket
       broadcastMeetingUpdate('notes', meeting.id);
 
       res.json({
         meeting: updatedMeeting,
-        summaryDetails: summary
+        summaryDetails: {
+          summary,
+          keyPoints: analysisResult.discussionPoints,
+          actionItems: analysisResult.actionItems,
+          decisions: analysisResult.decisions,
+          sentiment: {
+            overall: 'neutral', // Claude doesn't provide sentiment in basic analysis
+            score: 0.5
+          }
+        }
       });
     } catch (error) {
-      console.error("Error generating meeting summary:", error);
-      throw error;
+      console.error("Error generating meeting summary with Claude:", error);
+      res.status(503).json({
+        status: 'error',
+        message: 'AI service temporarily unavailable. Please try again in a few moments.'
+      });
     }
   }));
 
-  // Update the optimization suggestions endpoint
+  // Update the optimization suggestions endpoint to use Claude AI
   app.get("/api/meetings/optimization-suggestions", optimizationLimiter, asyncHandler(async (req: Request, res: Response) => {
     try {
       const meetings = await storage.getMeetings();
-      const suggestions = await meetingOptimizer.generateOptimizationSuggestions(meetings);
+      
+      // Use Claude AI to generate optimization suggestions
+      const suggestionsList = await ClaudeAIService.generateOptimizationSuggestions(meetings);
+      
+      // Convert to the expected format
+      const suggestions = suggestionsList.map(suggestion => ({
+        type: 'efficiency',
+        suggestion,
+        confidence: 0.8,
+        reasoning: 'Generated by Claude AI based on meeting patterns analysis'
+      }));
 
       // Add strong cache headers
       res.set('Cache-Control', 'public, max-age=900'); // Cache for 15 minutes
@@ -321,18 +439,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ suggestions });
     } catch (error) {
-      console.error('Error generating optimization suggestions:', error);
+      console.error('Error generating optimization suggestions with Claude:', error);
 
-      // Check if it's an AI model initialization error
-      if (error instanceof Error && error.message.includes('Failed to initialize AI')) {
-        res.status(503).json({
-          status: 'error',
-          message: 'AI service temporarily unavailable. Please try again in a few moments.'
-        });
-        return;
-      }
-
-      throw error;
+      // Return a friendly error message
+      res.status(503).json({
+        status: 'error',
+        message: 'AI service temporarily unavailable. Please try again in a few moments.'
+      });
     }
   }));
 
@@ -684,12 +797,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add task routes after meeting routes
   app.get("/api/tasks", asyncHandler(async (req: Request, res: Response) => {
-    const { meetingId, userId } = req.query;
-    const tasks = await storage.getTasks({
-      meetingId: meetingId ? Number(meetingId) : undefined,
-      userId: userId ? Number(userId) : undefined
-    });
-    res.json(tasks);
+    try {
+      const { meetingId, userId } = req.query;
+      let tasks = await storage.getTasks({
+        meetingId: meetingId ? Number(meetingId) : undefined,
+        userId: userId ? Number(userId) : undefined
+      });
+      
+      // If no tasks found, return mock data for development
+      if (!tasks || tasks.length === 0) {
+        // Current date
+        const now = new Date();
+        // Due dates for tasks
+        const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        const nextWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
+        
+        // Create a set of mock tasks
+        const mockTasks = [
+          {
+            id: 1,
+            title: "Prepare product roadmap presentation",
+            description: "Create slides for Q2 roadmap review with stakeholders",
+            status: "in_progress",
+            priority: "high",
+            progress: 70,
+            dueDate: tomorrow,
+            createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+            updatedAt: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000), // Yesterday
+            meetingId: 1,
+            assigneeId: 1,
+            creatorId: 1
+          },
+          {
+            id: 2,
+            title: "Update user onboarding flow",
+            description: "Implement new onboarding process based on UX research",
+            status: "pending",
+            priority: "medium",
+            progress: 0,
+            dueDate: nextWeek,
+            createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+            updatedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+            meetingId: 1,
+            assigneeId: 2,
+            creatorId: 1
+          },
+          {
+            id: 3,
+            title: "Finalize Q2 marketing budget",
+            description: "Review and approve budget allocation for next quarter campaigns",
+            status: "completed",
+            priority: "high",
+            progress: 100,
+            dueDate: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000), // Yesterday
+            createdAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+            updatedAt: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000), // Yesterday
+            meetingId: 2,
+            assigneeId: 1,
+            creatorId: 3
+          },
+          {
+            id: 4,
+            title: "Schedule customer feedback sessions",
+            description: "Coordinate with existing customers for feedback on new features",
+            status: "in_progress",
+            priority: "medium",
+            progress: 50,
+            dueDate: nextWeek,
+            createdAt: new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000), // 4 days ago
+            updatedAt: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000), // Yesterday
+            meetingId: 3,
+            assigneeId: 4,
+            creatorId: 1
+          },
+          {
+            id: 5,
+            title: "Fix critical login bug",
+            description: "Address issue with authentication flow for enterprise customers",
+            status: "blocked",
+            priority: "high",
+            progress: 30,
+            dueDate: tomorrow,
+            createdAt: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000), // Yesterday
+            updatedAt: new Date(now.getTime() - 12 * 60 * 60 * 1000), // 12 hours ago
+            meetingId: 4,
+            assigneeId: 2,
+            creatorId: 1
+          }
+        ];
+        
+        console.log("Returning mock tasks data for development");
+        return res.json(mockTasks);
+      }
+      
+      res.json(tasks);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      throw error;
+    }
   }));
 
   app.post("/api/tasks", asyncHandler(async (req: Request, res: Response) => {
@@ -958,6 +1163,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(milestones);
     } catch (error) {
       console.error('Error fetching productivity milestones:', error);
+      throw error;
+    }
+  }));
+  
+  // Add endpoint for meeting notes
+  app.get("/api/meetings/notes", asyncHandler(async (req: Request, res: Response) => {
+    try {
+      // In a real implementation, we would fetch notes from meetings
+      // and return them sorted by recency
+      
+      // For development, return mock data
+      const now = new Date();
+      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const twoDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2);
+      const threeDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3);
+      
+      const mockNotes = [
+        {
+          id: 1,
+          meetingTitle: "Product Team Sync",
+          content: "Decision made to prioritize the new checkout flow for Q2. Team agreed that improving conversion rate is our top priority for the quarter.",
+          createdAt: yesterday.toISOString()
+        },
+        {
+          id: 2,
+          meetingTitle: "Engineering Stand-up",
+          content: "Frontend team will complete authentication flow by end of week. Backend team working on API optimization for better performance.",
+          createdAt: twoDaysAgo.toISOString()
+        },
+        {
+          id: 3,
+          meetingTitle: "Marketing Campaign Planning",
+          content: "Budget allocated for digital advertising increased by 20%. Focus on social media channels with best ROI from previous quarter.",
+          createdAt: threeDaysAgo.toISOString()
+        }
+      ];
+      
+      console.log("Returning mock meeting notes for development");
+      res.json(mockNotes);
+    } catch (error) {
+      console.error('Error fetching meeting notes:', error);
       throw error;
     }
   }));

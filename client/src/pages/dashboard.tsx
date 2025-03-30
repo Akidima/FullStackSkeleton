@@ -245,14 +245,26 @@ export default function Dashboard() {
             ) : recentNotes.length > 0 ? (
               <div className="space-y-4">
                 {recentNotes.map(note => (
-                  <div key={note.id} className="space-y-2">
+                  <div key={note.id} className="space-y-2 border-b pb-4 last:border-0">
                     <div className="flex items-center justify-between">
-                      <span className="font-medium">{note.meetingTitle}</span>
+                      <Link href={`/meetings/${note.id}`}>
+                        <span className="font-medium hover:text-primary">{note.meetingTitle}</span>
+                      </Link>
                       <span className="text-sm text-muted-foreground">
                         {format(new Date(note.createdAt), "MMM d")}
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground line-clamp-2">{note.content}</p>
+                    {note.decisions && note.decisions.length > 0 && (
+                      <div className="mt-2">
+                        <h4 className="text-sm font-medium mb-1">Key Decisions:</h4>
+                        <ul className="list-disc pl-4 text-sm text-muted-foreground">
+                          {note.decisions.slice(0, 2).map((decision, idx) => (
+                            <li key={idx} className="line-clamp-1">{decision}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

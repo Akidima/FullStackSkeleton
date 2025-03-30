@@ -5,19 +5,23 @@ import { auth, loginWithGoogle as firebaseLoginWithGoogle, logout as firebaseLog
 import { User as FirebaseUser } from "firebase/auth";
 
 // Mock user for development without Firebase credentials
-interface MockUser {
+export interface MockUser {
   uid: string;
   email: string;
   displayName: string;
   photoURL: string;
+  id: string; // Added id property for compatibility with API
   getIdToken: () => Promise<string>;
 }
+
+export type User = FirebaseUser | MockUser;
 
 const MOCK_USER: MockUser = {
   uid: "dev-user-123",
   email: "dev@meetmate.app",
   displayName: "Development User",
   photoURL: "https://ui-avatars.com/api/?name=Dev+User",
+  id: "dev-user-123", // Same as uid for consistency
   getIdToken: async () => "mock-token-for-development"
 };
 
@@ -25,12 +29,13 @@ const MOCK_USER: MockUser = {
 const USE_MOCK_AUTH = true;
 
 type AuthContextType = {
-  user: FirebaseUser | MockUser | null;
+  user: User | null;
   isLoading: boolean;
   error: Error | null;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   getAuthToken: () => Promise<string | null>;
+  getUserId: () => string | null; // Helper to safely get user ID
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -128,6 +133,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null;
     }
   };
+  
+  // Helper method to safely get user ID
+  const getUserId = () => {
+    if (!user) return null;
+    
+    // For Firebase user, use uid
+    if ('uid' in user && !('id' in user)) {
+      return user.uid;
+    }
+    
+    // For MockUser or extended FirebaseUser, use id
+    if ('id' in user) {
+      return user.id;
+    }
+    
+    return null;
+  };
 
   return (
     <AuthContext.Provider
@@ -138,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginWithGoogle,
         logout,
         getAuthToken,
+        getUserId,
       }}
     >
       {children}

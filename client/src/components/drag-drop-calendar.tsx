@@ -11,12 +11,27 @@ import { useAuth } from '@/hooks/use-auth';
 import { showErrorToast, withRetry } from '@/lib/error-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// Utility function to debounce function calls
+function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  
+  return function(...args: Parameters<T>) {
+    const later = () => {
+      timeout = null;
+      func(...args);
+    };
+    
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
 interface DragDropCalendarProps {
   onEventCreate?: (meeting: Meeting) => void;
 }
 
 export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
-  const { user } = useAuth();
+  const { user, getUserId } = useAuth();
   const { toast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
   const [view, setView] = useState('timeGridWeek');
@@ -78,7 +93,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
           title: 'New Meeting',
           date: startTime.toISOString(),
           roomId: availableRooms[0].id,
-          userId: user?.id
+          userId: getUserId()
         }),
       });
 
@@ -101,7 +116,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
       console.error("Error creating meeting:", error);
       showErrorToast(error, () => createManualEvent(date));
     }
-  }, [user, onEventCreate, toast, checkRoomAvailability]);
+  }, [getUserId, onEventCreate, toast, checkRoomAvailability]);
 
   // Effect to handle direct calendar API access when needed
   useEffect(() => {
@@ -109,9 +124,28 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     
     console.log("Calendar API initialized");
     
+    // Track last click time to prevent rapid clicking
+    let lastClickTime = 0;
+    const MIN_CLICK_INTERVAL = 2000; // 2 seconds between clicks
+    
     // Function to handle a click on a time slot
     const handleTimeSlotClick = (e: MouseEvent) => {
       e.stopPropagation(); // Prevent other handlers from firing
+      
+      // Rate limit clicks to prevent "Too many requests" errors
+      const now = Date.now();
+      if (now - lastClickTime < MIN_CLICK_INTERVAL) {
+        console.log("Click rate limited - please wait");
+        toast({
+          title: "Please wait",
+          description: "Processing previous request...",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Update last click time
+      lastClickTime = now;
       
       // Get a reference to the calendar API
       const calendarApi = calendarRef.current?.getApi();
@@ -144,9 +178,20 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
       const clickDate = new Date(year, month - 1, dayNum, hours, minutes);
       console.log("Direct cell click detected:", clickDate);
       
-      // Create the event
-      createManualEvent(clickDate);
+      // Visual feedback that the click was registered
+      cell.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+      setTimeout(() => {
+        cell.style.backgroundColor = '';
+      }, 300);
+      
+      // Create the event - use debounced version to prevent multiple calls
+      debouncedCreateEvent(clickDate);
     };
+    
+    // Create a debounced version of the createManualEvent function
+    const debouncedCreateEvent = debounce((date: Date) => {
+      createManualEvent(date);
+    }, 500);
     
     // Apply handlers to all the time cells
     const calendarEl = calendarRef.current.elRef.current;
@@ -205,7 +250,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
   // Convert meetings to calendar events
   const events = useMemo(() => 
     meetings.map(meeting => {
-      const isOwner = meeting.userId === user?.id;
+      const isOwner = meeting.userId === getUserId();
       return {
         id: meeting.id.toString(),
         title: meeting.title || 'Untitled Meeting',
@@ -218,7 +263,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
         backgroundColor: isOwner ? '#3b82f6' : '#6b7280',
         borderColor: isOwner ? '#2563eb' : '#4b5563',
       };
-    }), [meetings, user]
+    }), [meetings, getUserId]
   );
 
   // The checkRoomAvailability function is already defined at the top of the component
@@ -240,7 +285,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     console.log("Meeting found:", meeting);
 
     // Only allow users to modify their own meetings
-    if (!meeting || meeting.userId !== user?.id) {
+    if (!meeting || meeting.userId !== getUserId()) {
       console.log("Permission denied - not your meeting");
       changeInfo.revert();
       showErrorToast({
@@ -322,7 +367,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
     } finally {
       setIsUpdating(false);
     }
-  }, [meetings, user, toast, isUpdating, checkRoomAvailability]);
+  }, [meetings, getUserId, toast, isUpdating, checkRoomAvailability]);
 
   // Handle new meeting creation through select
   const handleDateSelect = useCallback(async (selectInfo: any) => {
@@ -368,7 +413,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
             title: 'New Meeting',
             date: startTime.toISOString(),
             roomId: availableRooms[0].id,
-            userId: user?.id
+            userId: getUserId()
           }),
         });
 
@@ -392,7 +437,7 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
       console.error("Error creating meeting:", error);
       showErrorToast(error, () => handleDateSelect(selectInfo));
     }
-  }, [user, onEventCreate, toast, checkRoomAvailability]);
+  }, [getUserId, onEventCreate, toast, checkRoomAvailability]);
 
   // Handle view changes
   const handleViewChange = (newView: any) => {

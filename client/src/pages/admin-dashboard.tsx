@@ -213,153 +213,290 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
+      
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "registrations" | "voice")} className="mb-6">
+        <TabsList>
+          <TabsTrigger value="registrations">Registration Attempts</TabsTrigger>
+          <TabsTrigger value="voice">Voice Commands</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {isConnected && (
         <div className="mb-6 p-4 border rounded-lg bg-gray-50">
           <h3 className="text-lg font-medium mb-3">WebSocket Testing</h3>
           <div className="flex flex-wrap gap-3">
-            <Button 
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-1"
-              onClick={() => {
-                // Use the mock websocket directly
-                send({
-                  type: 'registration:test',
-                  data: {
-                    email: 'test@example.com',
-                    ipAddress: '192.168.1.1',
-                    status: 'success',
-                    userAgent: 'Mozilla/5.0 (Test WebSocket)',
-                  }
-                });
-                console.log('Registration attempt test sent via mock websocket');
-              }}
-            >
-              <Activity className="h-4 w-4" />
-              <span>Test Registration (Success)</span>
-            </Button>
+            {activeTab === "registrations" && (
+              <>
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  onClick={() => {
+                    // Use the mock websocket directly
+                    send({
+                      type: 'registration:test',
+                      data: {
+                        email: 'test@example.com',
+                        ipAddress: '192.168.1.1',
+                        status: 'success',
+                        userAgent: 'Mozilla/5.0 (Test WebSocket)',
+                      }
+                    });
+                    console.log('Registration attempt test sent via mock websocket');
+                  }}
+                >
+                  <Activity className="h-4 w-4" />
+                  <span>Test Registration (Success)</span>
+                </Button>
+                
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  onClick={() => {
+                    // Use the mock websocket directly for blocked registration
+                    send({
+                      type: 'registration:test',
+                      data: {
+                        email: 'blocked@example.com',
+                        ipAddress: '10.0.0.1',
+                        status: 'blocked',
+                        reason: 'Suspicious activity',
+                        userAgent: 'Mozilla/5.0 (Test WebSocket - Blocked)',
+                      }
+                    });
+                    console.log('Blocked registration attempt test sent via mock websocket');
+                  }}
+                >
+                  <AlertCircle className="h-4 w-4" />
+                  <span>Test Registration (Blocked)</span>
+                </Button>
+                
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  onClick={() => {
+                    // Use the mock websocket directly for system status
+                    send({
+                      type: 'system:test',
+                      data: {
+                        status: 'degraded',
+                        details: 'High database load detected',
+                      }
+                    });
+                    console.log('System status test sent via mock websocket');
+                  }}
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>Test System Status</span>
+                </Button>
+              </>
+            )}
             
-            <Button 
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-1"
-              onClick={() => {
-                // Use the mock websocket directly for blocked registration
-                send({
-                  type: 'registration:test',
-                  data: {
-                    email: 'blocked@example.com',
-                    ipAddress: '10.0.0.1',
-                    status: 'blocked',
-                    reason: 'Suspicious activity',
-                    userAgent: 'Mozilla/5.0 (Test WebSocket - Blocked)',
-                  }
-                });
-                console.log('Blocked registration attempt test sent via mock websocket');
-              }}
-            >
-              <AlertCircle className="h-4 w-4" />
-              <span>Test Registration (Blocked)</span>
-            </Button>
-            
-            <Button 
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-1"
-              onClick={() => {
-                // Use the mock websocket directly for system status
-                send({
-                  type: 'system:test',
-                  data: {
-                    status: 'degraded',
-                    details: 'High database load detected',
-                  }
-                });
-                console.log('System status test sent via mock websocket');
-              }}
-            >
-              <AlertTriangle className="h-4 w-4" />
-              <span>Test System Status</span>
-            </Button>
+            {activeTab === "voice" && (
+              <>
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  onClick={() => {
+                    // Test a successful voice command
+                    send({
+                      type: 'voice:command',
+                      userId: 1,
+                      timestamp: new Date().toISOString(),
+                      command: {
+                        understood: true,
+                        commandType: 'navigate',
+                        processedCommand: 'Show my dashboard',
+                        params: { destination: 'dashboard' },
+                        userFeedback: 'Navigating to your dashboard',
+                        confidence: 0.98,
+                        alternativeInterpretations: ['Show my meetings']
+                      }
+                    });
+                    console.log('Test voice command sent via mock websocket');
+                  }}
+                >
+                  <Mic className="h-4 w-4" />
+                  <span>Test Voice Command (Success)</span>
+                </Button>
+                
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  onClick={() => {
+                    // Test a failed voice command
+                    send({
+                      type: 'voice:command',
+                      userId: 1,
+                      timestamp: new Date().toISOString(),
+                      command: {
+                        understood: false,
+                        commandType: 'unknown',
+                        processedCommand: '',
+                        params: {},
+                        userFeedback: 'I couldn\'t understand that command. Could you please try again?',
+                        confidence: 0.45,
+                        alternativeInterpretations: []
+                      }
+                    });
+                    console.log('Test voice command (failed) sent via mock websocket');
+                  }}
+                >
+                  <Headphones className="h-4 w-4" />
+                  <span>Test Voice Command (Failed)</span>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}
+
+      {activeTab === "registrations" && (
+        <>
+          <div className="flex gap-4 mb-6">
+            <Select
+              value={filterType}
+              onValueChange={(value: "none" | "ip" | "email") => {
+                setFilterType(value);
+                setFilterValue("");
+              }}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Filter by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Filter</SelectItem>
+                <SelectItem value="ip">IP Address</SelectItem>
+                <SelectItem value="email">Email</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {filterType !== "none" && (
+              <Input
+                placeholder={`Enter ${filterType === "ip" ? "IP address" : "email"}`}
+                value={filterValue}
+                onChange={(e) => setFilterValue(e.target.value)}
+                className="w-[300px]"
+              />
+            )}
+          </div>
+
+          {isLoading ? (
+            <div>Loading...</div>
+          ) : (
+            <div className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>IP Address</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>User Agent</TableHead>
+                    <TableHead>Attempt Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {attempts?.map((attempt) => (
+                    <TableRow key={attempt.id}>
+                      <TableCell>{attempt.email}</TableCell>
+                      <TableCell>{attempt.ipAddress}</TableCell>
+                      <TableCell>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            attempt.status === "success"
+                              ? "bg-green-100 text-green-800"
+                              : attempt.status === "blocked"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-yellow-100 text-yellow-800"
+                          }`}
+                        >
+                          {attempt.status}
+                        </span>
+                      </TableCell>
+                      <TableCell>{attempt.reason || "-"}</TableCell>
+                      <TableCell className="max-w-xs truncate" title={attempt.userAgent || ""}>
+                        {attempt.userAgent || "-"}
+                      </TableCell>
+                      <TableCell>
+                        {format(new Date(attempt.attemptTime), "PPpp")}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!attempts || attempts.length === 0) && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-4">
+                        No registration attempts found
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </>
+      )}
       
-      <div className="flex gap-4 mb-6">
-        <Select
-          value={filterType}
-          onValueChange={(value: "none" | "ip" | "email") => {
-            setFilterType(value);
-            setFilterValue("");
-          }}
-        >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Filter by..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">No Filter</SelectItem>
-            <SelectItem value="ip">IP Address</SelectItem>
-            <SelectItem value="email">Email</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {filterType !== "none" && (
-          <Input
-            placeholder={`Enter ${filterType === "ip" ? "IP address" : "email"}`}
-            value={filterValue}
-            onChange={(e) => setFilterValue(e.target.value)}
-            className="w-[300px]"
-          />
-        )}
-      </div>
-
-      {isLoading ? (
-        <div>Loading...</div>
-      ) : (
+      {activeTab === "voice" && (
         <div className="border rounded-lg">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Email</TableHead>
-                <TableHead>IP Address</TableHead>
+                <TableHead>Timestamp</TableHead>
+                <TableHead>User ID</TableHead>
+                <TableHead>Command Type</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>User Agent</TableHead>
-                <TableHead>Attempt Time</TableHead>
+                <TableHead>Confidence</TableHead>
+                <TableHead>Processed Command</TableHead>
+                <TableHead>Feedback</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {attempts?.map((attempt) => (
-                <TableRow key={attempt.id}>
-                  <TableCell>{attempt.email}</TableCell>
-                  <TableCell>{attempt.ipAddress}</TableCell>
+              {voiceCommands.map((cmd) => (
+                <TableRow key={cmd.id}>
+                  <TableCell>{format(new Date(cmd.timestamp), "PPp")}</TableCell>
+                  <TableCell>{cmd.userId}</TableCell>
+                  <TableCell>{cmd.command.commandType}</TableCell>
                   <TableCell>
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        attempt.status === "success"
+                        cmd.command.understood
                           ? "bg-green-100 text-green-800"
-                          : attempt.status === "blocked"
-                          ? "bg-red-100 text-red-800"
-                          : "bg-yellow-100 text-yellow-800"
+                          : "bg-red-100 text-red-800"
                       }`}
                     >
-                      {attempt.status}
+                      {cmd.command.understood ? "Understood" : "Failed"}
                     </span>
                   </TableCell>
-                  <TableCell>{attempt.reason || "-"}</TableCell>
-                  <TableCell className="max-w-xs truncate" title={attempt.userAgent || ""}>
-                    {attempt.userAgent || "-"}
-                  </TableCell>
                   <TableCell>
-                    {format(new Date(attempt.attemptTime), "PPpp")}
+                    <span 
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        cmd.command.confidence >= 0.95
+                          ? "bg-green-100 text-green-800"
+                          : cmd.command.confidence >= 0.7
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {(cmd.command.confidence * 100).toFixed(0)}%
+                    </span>
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate" title={cmd.command.processedCommand}>
+                    {cmd.command.processedCommand || "-"}
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate" title={cmd.command.userFeedback}>
+                    {cmd.command.userFeedback}
                   </TableCell>
                 </TableRow>
               ))}
-              {(!attempts || attempts.length === 0) && (
+              {voiceCommands.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-4">
-                    No registration attempts found
+                  <TableCell colSpan={7} className="text-center py-4">
+                    No voice commands recorded yet
                   </TableCell>
                 </TableRow>
               )}

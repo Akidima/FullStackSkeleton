@@ -3,6 +3,22 @@ import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Define VoiceCommand interface for admin dashboard and websocket
+export interface VoiceCommand {
+  id: string;
+  userId: number;
+  timestamp: string;
+  command: {
+    understood: boolean;
+    commandType: string;
+    processedCommand: string;
+    params: Record<string, any>;
+    userFeedback: string;
+    confidence: number;
+    alternativeInterpretations?: string[];
+  }
+}
+
 // Users table with improved indexing and verification fields
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),

@@ -36,20 +36,15 @@ export function setupWebSocket(server: Server) {
   try {
     // Configure WebSocket server with permissive settings for development
     const wsOptions = { 
-      server, 
+      server,
       path: '/ws',
-      // Development-friendly options
       perMessageDeflate: false,
       clientTracking: true,
-      // Increase max payload size
-      maxPayload: 1024 * 1024 * 5, // 5MB
-      // Increase heartbeat interval
-      heartbeatInterval: 60000,
-      // Allow any origin for development purposes
-      verifyClient: (info: any) => {
-        console.log('WebSocket connection attempt from:', info.origin || 'unknown origin');
-        return true; // Accept all connections in development
-      }
+      maxPayload: 1024 * 1024 * 5,
+      heartbeatInterval: 30000,
+      verifyClient: () => true,
+      host: '0.0.0.0',
+      port: 5000
     };
 
     wss = new WebSocketServer(wsOptions);

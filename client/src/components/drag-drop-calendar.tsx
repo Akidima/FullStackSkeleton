@@ -73,15 +73,23 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
 
   // Handle event changes (drag & drop or resize)
   const handleEventChange = useCallback(async (changeInfo: any) => {
+    console.log("Event change detected:", changeInfo);
+    
+    // If we're already processing an update, revert this one
     if (isUpdating) {
+      console.log("Already updating, reverting change");
       changeInfo.revert();
       return;
     }
 
     const meetingId = parseInt(changeInfo.event.id);
     const meeting = meetings.find(m => m.id === meetingId);
+    
+    console.log("Meeting found:", meeting);
 
+    // Only allow users to modify their own meetings
     if (!meeting || meeting.userId !== user?.id) {
+      console.log("Permission denied - not your meeting");
       changeInfo.revert();
       showErrorToast({
         status: 403,
@@ -90,23 +98,50 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
       return;
     }
 
+    // Set updating flag to prevent multiple simultaneous updates
     setIsUpdating(true);
 
     try {
       await withRetry(async () => {
         const newStart = changeInfo.event.start;
-        const newEnd = new Date(newStart.getTime() + 60 * 60 * 1000);
+        
+        // For resize events, use the provided end time
+        let newEnd;
+        if (changeInfo.event.end) {
+          newEnd = changeInfo.event.end;
+        } else {
+          // Default to 1 hour duration
+          newEnd = new Date(newStart.getTime() + 60 * 60 * 1000);
+        }
+        
+        console.log("Checking room availability:", { newStart, newEnd });
+        
+        // Check if rooms are available for this new time
         const isRoomAvailable = await checkRoomAvailability(newStart, newEnd);
 
         if (!isRoomAvailable) {
-          throw new Error('No rooms available');
+          console.error("No rooms available for this time");
+          throw new Error('No rooms available for this time slot');
         }
 
+        // Get the list of available rooms
         const availableRoomsResponse = await fetch(
           `/api/rooms/available?startTime=${newStart.toISOString()}&endTime=${newEnd.toISOString()}`
         );
+        
+        if (!availableRoomsResponse.ok) {
+          throw new Error('Failed to check room availability');
+        }
+        
         const availableRooms = await availableRoomsResponse.json();
+        
+        if (!availableRooms.length) {
+          throw new Error('No rooms available for this time slot');
+        }
 
+        console.log("Available rooms:", availableRooms);
+
+        // Update the meeting with the new time and room
         const response = await fetch(`/api/meetings/${meetingId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -117,29 +152,42 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to update meeting');
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Failed to update meeting');
         }
 
+        console.log("Meeting updated successfully");
+        
         toast({
           title: "Success",
           description: "Meeting rescheduled successfully",
         });
       });
     } catch (error: any) {
+      console.error("Error updating meeting:", error);
       showErrorToast(error, () => handleEventChange(changeInfo));
       changeInfo.revert();
     } finally {
       setIsUpdating(false);
     }
-  }, [meetings, user, toast, isUpdating]);
+  }, [meetings, user, toast, isUpdating, checkRoomAvailability]);
 
   // Handle new meeting creation through select
   const handleDateSelect = useCallback(async (selectInfo: any) => {
+    console.log("Date selection detected:", selectInfo);
+    
+    // Calculate the actual end time from the selection
     const startTime = selectInfo.start;
-    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+    // If the selection has an end time, use it; otherwise default to 1 hour later
+    const providedEndTime = selectInfo.end;
+    const endTime = providedEndTime || new Date(startTime.getTime() + 60 * 60 * 1000);
+    
+    // Clear the selection to prevent visual artifacts
+    selectInfo.view.calendar.unselect();
 
     try {
       await withRetry(async () => {
+        // First check if rooms are available
         const isRoomAvailable = await checkRoomAvailability(startTime, endTime);
 
         if (!isRoomAvailable) {
@@ -149,8 +197,18 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
         const availableRoomsResponse = await fetch(
           `/api/rooms/available?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}`
         );
+        
+        if (!availableRoomsResponse.ok) {
+          throw new Error('Failed to check room availability');
+        }
+        
         const availableRooms = await availableRoomsResponse.json();
+        
+        if (!availableRooms.length) {
+          throw new Error('No rooms available for this time slot');
+        }
 
+        // Create the meeting with the first available room
         const response = await fetch('/api/meetings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -163,10 +221,14 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to create meeting');
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Failed to create meeting');
         }
 
         const newMeeting = await response.json();
+        console.log("Meeting created successfully:", newMeeting);
+        
+        // Notify parent component
         onEventCreate?.(newMeeting);
 
         toast({
@@ -175,9 +237,10 @@ export function DragDropCalendar({ onEventCreate }: DragDropCalendarProps) {
         });
       });
     } catch (error: any) {
+      console.error("Error creating meeting:", error);
       showErrorToast(error, () => handleDateSelect(selectInfo));
     }
-  }, [user, onEventCreate, toast]);
+  }, [user, onEventCreate, toast, checkRoomAvailability]);
 
   // Handle view changes
   const handleViewChange = (newView: any) => {

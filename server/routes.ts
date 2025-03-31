@@ -27,10 +27,10 @@ import { JiraService } from "./services/jira";
 import { MicrosoftTeamsService } from "./services/microsoft-teams";
 import * as claudeAI from "./services/claude-ai";
 
-// Temporarily disable rate limiting for basic functionality
+// Completely disable rate limiting for development
 const authenticatedLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100000, // Set very high to effectively disable
+  max: Infinity, // No limit
   message: {
     status: 'error',
     message: 'Too many requests, please try again later.',
@@ -38,7 +38,7 @@ const authenticatedLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => true // Skip rate limiting for all requests temporarily
+  skip: (req) => true // Skip rate limiting for all requests
 });
 
 // Set other limiters to skip all requests

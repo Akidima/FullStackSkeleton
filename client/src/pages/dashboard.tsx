@@ -62,13 +62,18 @@ export default function Dashboard() {
     }
   }, [isConnected]);
 
-  const upcomingMeetings = meetings
-    .filter(m => new Date(m.date) > new Date())
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(0, 5);
+  // Ensure meetings is an array before filtering
+  const upcomingMeetings = Array.isArray(meetings) 
+    ? meetings
+        .filter(m => new Date(m.date) > new Date())
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(0, 5)
+    : [];
 
-  const completedTasks = tasks.filter(t => t.completed).length;
-  const completionRate = tasks.length ? (completedTasks / tasks.length) * 100 : 0;
+  // Ensure tasks is an array before filtering
+  const tasksArray = Array.isArray(tasks) ? tasks : [];
+  const completedTasks = tasksArray.filter(t => t.completed).length;
+  const completionRate = tasksArray.length ? (completedTasks / tasksArray.length) * 100 : 0;
 
   const priorityColors: Record<string, string> = {
     high: "bg-red-500",
@@ -211,12 +216,12 @@ export default function Dashboard() {
             ) : (
               <>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-2xl font-bold">{completedTasks}/{tasks.length}</span>
+                  <span className="text-2xl font-bold">{completedTasks}/{tasksArray.length}</span>
                   <span className="text-muted-foreground">completed</span>
                 </div>
                 <Progress value={completionRate} className="mb-4" />
                 <div className="space-y-2">
-                  {tasks.slice(0, 3).map(task => (
+                  {tasksArray.slice(0, 3).map(task => (
                     <div key={task.id} className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full ${priorityColors[task.priority]}`} />
                       <span className={task.completed ? "line-through text-muted-foreground" : ""}>
@@ -245,7 +250,7 @@ export default function Dashboard() {
                   <div key={i} className="h-20 bg-muted animate-pulse rounded" />
                 ))}
               </div>
-            ) : recentNotes.length > 0 ? (
+            ) : Array.isArray(recentNotes) && recentNotes.length > 0 ? (
               <div className="space-y-4">
                 {recentNotes.map(note => (
                   <div key={note.id} className="space-y-2 border-b pb-4 last:border-0">
@@ -290,7 +295,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="space-y-4">
               {Object.entries(
-                tasks.reduce<Record<string, number>>((acc, task) => {
+                tasksArray.reduce<Record<string, number>>((acc, task) => {
                   acc[task.priority] = (acc[task.priority] || 0) + 1;
                   return acc;
                 }, {})

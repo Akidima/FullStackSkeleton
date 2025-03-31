@@ -1279,6 +1279,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     }));
+    
+    // Simple GET endpoint for testing calendar WebSocket (no body parameters required)
+    app.get("/api/test/calendar-sync", asyncHandler(async (req: Request, res: Response) => {
+      try {
+        // Broadcast a test calendar sync event with default values
+        broadcastCalendarUpdate('sync', 1, 123, 'google');
+        
+        // Return success response
+        res.json({
+          status: 'success',
+          message: 'Calendar sync test event broadcast sent',
+          details: {
+            type: 'sync',
+            userId: 1,
+            meetingId: 123,
+            provider: 'google'
+          }
+        });
+      } catch (error) {
+        console.error('Error sending calendar sync test:', error);
+        res.status(500).json({
+          status: 'error',
+          message: 'Failed to broadcast calendar sync test event',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }));
   }
   
   // Voice Command Shortcuts API

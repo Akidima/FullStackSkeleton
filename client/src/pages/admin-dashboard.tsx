@@ -415,7 +415,41 @@ export default function AdminDashboard() {
                   }}
                 >
                   <Activity className="h-4 w-4" />
-                  <span>Test Calendar Sync</span>
+                  <span>Test Calendar Sync (WebSocket)</span>
+                </Button>
+                
+                <Button 
+                  variant="default"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  onClick={async () => {
+                    try {
+                      // Use the direct API endpoint
+                      const response = await fetch('/api/test/calendar-sync');
+                      const data = await response.json();
+                      
+                      console.log('API response for calendar sync test:', data);
+                      
+                      // Show success toast
+                      toast({
+                        title: "Calendar Sync Test Sent",
+                        description: `API call successful: ${data.message}`,
+                        variant: "default"
+                      });
+                    } catch (error) {
+                      console.error('Error sending calendar sync test via API:', error);
+                      
+                      // Show error toast
+                      toast({
+                        title: "Calendar Sync Test Failed",
+                        description: error instanceof Error ? error.message : "Unknown error occurred",
+                        variant: "destructive"
+                      });
+                    }
+                  }}
+                >
+                  <Activity className="h-4 w-4" />
+                  <span>Test Calendar Sync (API Call)</span>
                 </Button>
                 
                 <Button 
@@ -595,75 +629,100 @@ export default function AdminDashboard() {
       )}
       
       {activeTab === "calendar" && (
-        <div className="border rounded-lg">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Timestamp</TableHead>
-                <TableHead>User ID</TableHead>
-                <TableHead>Meeting ID</TableHead>
-                <TableHead>Provider</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Details</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {calendarEvents.map((event) => (
-                <TableRow key={event.id}>
-                  <TableCell>{format(new Date(event.timestamp), "PPp")}</TableCell>
-                  <TableCell>{event.userId}</TableCell>
-                  <TableCell>{event.meetingId}</TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        event.provider === "google"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-indigo-100 text-indigo-800"
-                      }`}
-                    >
-                      {event.provider.charAt(0).toUpperCase() + event.provider.slice(1)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        event.action === "sync"
-                          ? "bg-green-100 text-green-800"
-                          : event.action === "update"
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-red-100 text-red-800"
-                      }`}
-                    >
-                      {event.action.charAt(0).toUpperCase() + event.action.slice(1)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        event.status === "success"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-red-100 text-red-800"
-                      }`}
-                    >
-                      {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="max-w-xs truncate" title={event.details}>
-                    {event.details || "-"}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {calendarEvents.length === 0 && (
+        <>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium">Calendar Event Log</h3>
+            {calendarEvents.length > 0 && (
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={() => setCalendarEvents([])}
+              >
+                Clear Events
+              </Button>
+            )}
+          </div>
+          
+          <div className="p-4 border rounded-lg bg-yellow-50 mb-4">
+            <p className="text-sm text-amber-800 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              <span>
+                Click either the "<strong>Test Calendar Sync (WebSocket)</strong>" or "<strong>Test Calendar Sync (API Call)</strong>" 
+                button above to test the WebSocket functionality. New events will appear in the table below.
+              </span>
+            </p>
+          </div>
+          
+          <div className="border rounded-lg">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-4">
-                    No calendar events recorded yet
-                  </TableCell>
+                  <TableHead>Timestamp</TableHead>
+                  <TableHead>User ID</TableHead>
+                  <TableHead>Meeting ID</TableHead>
+                  <TableHead>Provider</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Details</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {calendarEvents.map((event) => (
+                  <TableRow key={event.id}>
+                    <TableCell>{format(new Date(event.timestamp), "PPp")}</TableCell>
+                    <TableCell>{event.userId}</TableCell>
+                    <TableCell>{event.meetingId}</TableCell>
+                    <TableCell>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          event.provider === "google"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-indigo-100 text-indigo-800"
+                        }`}
+                      >
+                        {event.provider.charAt(0).toUpperCase() + event.provider.slice(1)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          event.action === "sync"
+                            ? "bg-green-100 text-green-800"
+                            : event.action === "update"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {event.action.charAt(0).toUpperCase() + event.action.slice(1)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          event.status === "success"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate" title={event.details}>
+                      {event.details || "-"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {calendarEvents.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-4">
+                      No calendar events recorded yet
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
     </div>
   );

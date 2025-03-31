@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Calendar, CheckCircle, Clock, AlertCircle, Wifi, WifiOff } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { VoiceAssistant } from "@/components/voice-assistant";
@@ -36,6 +36,7 @@ export default function Dashboard() {
   const [activeSection, setActiveSection] = useState<string>("meetings");
   const [isVoiceAssistantEnabled, setIsVoiceAssistantEnabled] = useState(false);
   const { isConnected } = useMockWebSocket();
+  const { toast } = useToast();
 
   const { data: meetings = mockMeetings, isLoading: meetingsLoading } = useQuery({ 
     queryKey: ['meetings'],
@@ -106,6 +107,32 @@ export default function Dashboard() {
     }
   };
 
+  const testCalendarSync = async () => {
+    try {
+      // Use the direct API endpoint
+      const response = await fetch('/api/test/calendar-sync');
+      const data = await response.json();
+      
+      console.log('API response for calendar sync test:', data);
+      
+      // Show success toast
+      toast({
+        title: "Calendar Sync Test Sent",
+        description: `API call successful: ${data.message}`,
+        variant: "default"
+      });
+    } catch (error) {
+      console.error('Error sending calendar sync test via API:', error);
+      
+      // Show error toast
+      toast({
+        title: "Calendar Sync Test Failed",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -128,6 +155,16 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex gap-4 items-center">
+          <Button 
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            onClick={testCalendarSync}
+          >
+            <Calendar className="h-3 w-3 mr-1" />
+            Test Calendar Sync
+          </Button>
+          
           <ErrorBoundary>
             {!isVoiceAssistantEnabled ? (
               <Button
@@ -267,7 +304,7 @@ export default function Dashboard() {
                       <div className="mt-1">
                         <h4 className="text-sm font-medium text-primary">Key Decisions:</h4>
                         <ul className="list-disc pl-4 text-sm text-muted-foreground">
-                          {note.decisions.map((decision, idx) => (
+                          {note.decisions.map((decision: string, idx: number) => (
                             <li key={idx}>{decision}</li>
                           ))}
                         </ul>

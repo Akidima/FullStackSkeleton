@@ -29,7 +29,7 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const [filterType, setFilterType] = useState<"none" | "ip" | "email">("none");
   const [filterValue, setFilterValue] = useState("");
-  const [activeTab, setActiveTab] = useState<"registrations" | "voice">("registrations");
+  const [activeTab, setActiveTab] = useState<"registrations" | "voice" | "calendar">("registrations");
   const [voiceCommands, setVoiceCommands] = useState<Array<{
     id: string;
     userId: number;
@@ -43,6 +43,16 @@ export default function AdminDashboard() {
       confidence: number;
       alternativeInterpretations?: string[];
     }
+  }>>([]);
+  const [calendarEvents, setCalendarEvents] = useState<Array<{
+    id: string;
+    userId: number;
+    meetingId: number;
+    provider: string;
+    action: string;
+    timestamp: string;
+    status: string;
+    details?: string;
   }>>([]);
   const { isConnected, connectionState, send } = useMockWebSocket();
   const queryClient = useQueryClient();
@@ -151,6 +161,39 @@ export default function AdminDashboard() {
             });
           }
         }
+        
+        // Handle calendar events
+        if (data.type === 'calendar:sync' || data.type === 'calendar:update' || data.type === 'calendar:delete') {
+          console.log('Calendar event received via WebSocket:', data);
+          
+          // Add to calendar events list
+          setCalendarEvents(prev => {
+            // Generate a unique ID if not provided
+            const eventId = data.id || `calendar-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+            
+            // Add new event at the beginning of the array
+            return [{
+              id: eventId,
+              userId: data.userId || 0,
+              meetingId: data.meetingId || 0,
+              provider: data.provider || 'unknown',
+              action: data.type.split(':')[1] || 'sync',
+              timestamp: data.timestamp || new Date().toISOString(),
+              status: data.status || 'success',
+              details: data.details || ''
+            }, ...prev.slice(0, 99)]; // Keep only the latest 100 events
+          });
+          
+          // Show notification if on calendar tab
+          if (activeTab === 'calendar') {
+            toast({
+              title: `Calendar Event ${data.type.split(':')[1].charAt(0).toUpperCase() + data.type.split(':')[1].slice(1)}`,
+              description: `Meeting #${data.meetingId} via ${data.provider} calendar`,
+              variant: "default",
+              duration: 3000
+            });
+          }
+        }
       } catch (error) {
         console.error('Error handling WebSocket message:', error);
       }
@@ -214,10 +257,11 @@ export default function AdminDashboard() {
         </div>
       </div>
       
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "registrations" | "voice")} className="mb-6">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "registrations" | "voice" | "calendar")} className="mb-6">
         <TabsList>
           <TabsTrigger value="registrations">Registration Attempts</TabsTrigger>
           <TabsTrigger value="voice">Voice Commands</TabsTrigger>
+          <TabsTrigger value="calendar">Calendar Events</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -348,6 +392,51 @@ export default function AdminDashboard() {
                 >
                   <Headphones className="h-4 w-4" />
                   <span>Test Voice Command (Failed)</span>
+                </Button>
+              </>
+            )}
+            {activeTab === "calendar" && (
+              <>
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  onClick={() => {
+                    // Test a calendar sync event
+                    send({
+                      type: 'calendar:sync',
+                      userId: 1,
+                      meetingId: 123,
+                      provider: 'google',
+                      timestamp: new Date().toISOString(),
+                      status: 'success'
+                    });
+                    console.log('Test calendar sync event sent via mock websocket');
+                  }}
+                >
+                  <Activity className="h-4 w-4" />
+                  <span>Test Calendar Sync</span>
+                </Button>
+                
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  onClick={() => {
+                    // Test a calendar update event
+                    send({
+                      type: 'calendar:update',
+                      userId: 1,
+                      meetingId: 456,
+                      provider: 'outlook',
+                      timestamp: new Date().toISOString(),
+                      status: 'success'
+                    });
+                    console.log('Test calendar update event sent via mock websocket');
+                  }}
+                >
+                  <Activity className="h-4 w-4" />
+                  <span>Test Calendar Update</span>
                 </Button>
               </>
             )}
@@ -497,6 +586,78 @@ export default function AdminDashboard() {
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-4">
                     No voice commands recorded yet
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      
+      {activeTab === "calendar" && (
+        <div className="border rounded-lg">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Timestamp</TableHead>
+                <TableHead>User ID</TableHead>
+                <TableHead>Meeting ID</TableHead>
+                <TableHead>Provider</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Details</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {calendarEvents.map((event) => (
+                <TableRow key={event.id}>
+                  <TableCell>{format(new Date(event.timestamp), "PPp")}</TableCell>
+                  <TableCell>{event.userId}</TableCell>
+                  <TableCell>{event.meetingId}</TableCell>
+                  <TableCell>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        event.provider === "google"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-indigo-100 text-indigo-800"
+                      }`}
+                    >
+                      {event.provider.charAt(0).toUpperCase() + event.provider.slice(1)}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        event.action === "sync"
+                          ? "bg-green-100 text-green-800"
+                          : event.action === "update"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {event.action.charAt(0).toUpperCase() + event.action.slice(1)}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        event.status === "success"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate" title={event.details}>
+                    {event.details || "-"}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {calendarEvents.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-4">
+                    No calendar events recorded yet
                   </TableCell>
                 </TableRow>
               )}

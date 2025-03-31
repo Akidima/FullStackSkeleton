@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupWebSocket, broadcastMeetingUpdate, broadcastRegistrationAttempt, broadcastSystemStatus, wss } from './websocket';
+import { setupWebSocket, broadcastMeetingUpdate, broadcastRegistrationAttempt, broadcastSystemStatus, broadcastCalendarUpdate, wss } from './websocket';
 import { WebSocketServer, WebSocket } from 'ws';
 import { 
   insertMeetingSchema, 
@@ -1234,6 +1234,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   }));
+  
+  // Testing endpoint for calendar WebSocket broadcasts (development only)
+  if (process.env.NODE_ENV !== 'production') {
+    app.post("/api/test/websocket/calendar", asyncHandler(async (req: Request, res: Response) => {
+      try {
+        const { type, userId, meetingId, provider } = req.body;
+        
+        if (!type || !userId) {
+          return res.status(400).json({ 
+            status: 'error',
+            message: 'Missing required parameters (type, userId)'
+          });
+        }
+        
+        // Only allow specific calendar event types
+        const allowedTypes = ['sync', 'remove', 'update', 'fetch'];
+        if (!allowedTypes.includes(type)) {
+          return res.status(400).json({ 
+            status: 'error',
+            message: `Invalid calendar event type. Must be one of: ${allowedTypes.join(', ')}`
+          });
+        }
+        
+        // Broadcast the calendar update
+        broadcastCalendarUpdate(
+          type as 'sync' | 'remove' | 'update' | 'fetch',
+          parseInt(userId, 10),
+          meetingId ? parseInt(meetingId, 10) : undefined,
+          provider
+        );
+        
+        res.json({ 
+          status: 'success',
+          message: 'Calendar event broadcast sent',
+          details: { type, userId, meetingId, provider }
+        });
+      } catch (error) {
+        console.error('Error in test calendar WebSocket endpoint:', error);
+        res.status(500).json({
+          status: 'error',
+          message: 'Failed to broadcast calendar event',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }));
+  }
   
   // Voice Command Shortcuts API
   app.get("/api/voice-command-shortcuts", authenticateJWT, asyncHandler(async (req: Request, res: Response) => {

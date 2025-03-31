@@ -13,6 +13,18 @@ ws.on('open', function open() {
     message: 'Hello from WebSocket test client',
     timestamp: new Date().toISOString()
   }));
+  
+  // Send a calendar sync test message
+  setTimeout(() => {
+    ws.send(JSON.stringify({
+      type: 'calendar:test',
+      action: 'sync',
+      userId: 1,
+      meetingId: 123,
+      provider: 'google',
+      timestamp: new Date().toISOString()
+    }));
+  }, 1000);
 });
 
 // Listen for messages

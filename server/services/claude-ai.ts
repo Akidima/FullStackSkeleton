@@ -624,19 +624,91 @@ export async function processVoiceCommand(transcript: string, context: any = {})
     ]
   };
   
-  // Create command dictionary based on language
-  const languageCommands = {
-    en: { help: "help", stop: "stop", pause: "pause", create: "create", search: "search", show: "show" },
-    es: { help: "ayuda", stop: "parar", pause: "pausa", create: "crear", search: "buscar", show: "mostrar" },
-    fr: { help: "aide", stop: "arrêter", pause: "pause", create: "créer", search: "rechercher", show: "afficher" },
-    de: { help: "hilfe", stop: "stopp", pause: "pause", create: "erstellen", search: "suchen", show: "zeigen" },
-    it: { help: "aiuto", stop: "ferma", pause: "pausa", create: "creare", search: "cercare", show: "mostrare" },
-    pt: { help: "ajuda", stop: "parar", pause: "pausa", create: "criar", search: "procurar", show: "mostrar" },
-    zh: { help: "帮助", stop: "停止", pause: "暂停", create: "创建", search: "搜索", show: "显示" },
-    ja: { help: "ヘルプ", stop: "停止", pause: "一時停止", create: "作成", search: "検索", show: "表示" },
-    ko: { help: "도움말", stop: "중지", pause: "일시 중지", create: "생성", search: "검색", show: "표시" },
-    ru: { help: "помощь", stop: "стоп", pause: "пауза", create: "создать", search: "поиск", show: "показать" }
-  };
+  // Import language commands from shared dictionary if in same environment
+  // Otherwise, use a smaller built-in dictionary for processing
+  type LanguageCommandDict = Record<string, Record<string, string>>;
+  
+  let languageCommands: LanguageCommandDict;
+  try {
+    // Try to import from the shared dictionary - this is more comprehensive
+    // Note: Using require here as it's more forgiving about importing from different paths
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const voiceCommandDictionary = require('../../shared/voice-command-dictionary');
+    
+    // Map language code to dictionary structure
+    const languageMap: Record<string, string> = {
+      'en': 'en-US',
+      'es': 'es-ES',
+      'fr': 'fr-FR',
+      'de': 'de-DE',
+      'it': 'it-IT',
+      'pt': 'pt-BR',
+      'zh': 'zh-CN',
+      'ja': 'ja-JP',
+      'ko': 'ko-KR',
+      'ru': 'ru-RU'
+    };
+    
+    // Create unified command dictionary from all command categories
+    languageCommands = {};
+    
+    // Helper type for the command dictionary structure
+    type CommandTranslations = Record<string, Record<string, string[]>>;
+    
+    // Process navigation commands
+    const safeNavigationCommands = voiceCommandDictionary.navigationCommands as CommandTranslations;
+    Object.entries(safeNavigationCommands).forEach(([command, translations]) => {
+      Object.entries(translations).forEach(([lang, phrases]) => {
+        if (Array.isArray(phrases) && phrases.length > 0) {
+          const baseCode = lang.split('-')[0]; // Convert 'en-US' to 'en'
+          languageCommands[baseCode] = languageCommands[baseCode] || {};
+          languageCommands[baseCode][command] = phrases[0]; // Use first phrase as primary command
+        }
+      });
+    });
+    
+    // Process meeting commands
+    const safeMeetingCommands = voiceCommandDictionary.meetingCommands as CommandTranslations;
+    Object.entries(safeMeetingCommands).forEach(([command, translations]) => {
+      Object.entries(translations).forEach(([lang, phrases]) => {
+        if (Array.isArray(phrases) && phrases.length > 0) {
+          const baseCode = lang.split('-')[0]; // Convert 'en-US' to 'en'
+          languageCommands[baseCode] = languageCommands[baseCode] || {};
+          languageCommands[baseCode][command] = phrases[0]; // Use first phrase as primary command
+        }
+      });
+    });
+    
+    // Process control commands
+    const safeControlCommands = voiceCommandDictionary.controlCommands as CommandTranslations;
+    Object.entries(safeControlCommands).forEach(([command, translations]) => {
+      Object.entries(translations).forEach(([lang, phrases]) => {
+        if (Array.isArray(phrases) && phrases.length > 0) {
+          const baseCode = lang.split('-')[0]; // Convert 'en-US' to 'en'
+          languageCommands[baseCode] = languageCommands[baseCode] || {};
+          languageCommands[baseCode][command] = phrases[0]; // Use first phrase as primary command
+        }
+      });
+    });
+    
+    console.log(`Enhanced voice command dictionary loaded with ${Object.keys(languageCommands).length} languages`);
+  } catch (error) {
+    // Fallback to built-in dictionary if import fails
+    console.warn('Using built-in language command dictionary:', error);
+    
+    languageCommands = {
+      en: { help: "help", stop: "stop", pause: "pause", create: "create", search: "search", show: "show" },
+      es: { help: "ayuda", stop: "parar", pause: "pausa", create: "crear", search: "buscar", show: "mostrar" },
+      fr: { help: "aide", stop: "arrêter", pause: "pause", create: "créer", search: "rechercher", show: "afficher" },
+      de: { help: "hilfe", stop: "stopp", pause: "pause", create: "erstellen", search: "suchen", show: "zeigen" },
+      it: { help: "aiuto", stop: "ferma", pause: "pausa", create: "creare", search: "cercare", show: "mostrare" },
+      pt: { help: "ajuda", stop: "parar", pause: "pausa", create: "criar", search: "procurar", show: "mostrar" },
+      zh: { help: "帮助", stop: "停止", pause: "暂停", create: "创建", search: "搜索", show: "显示" },
+      ja: { help: "ヘルプ", stop: "停止", pause: "一時停止", create: "作成", search: "検索", show: "表示" },
+      ko: { help: "도움말", stop: "중지", pause: "일시 중지", create: "생성", search: "검索", show: "표시" },
+      ru: { help: "помощь", stop: "стоп", pause: "пауза", create: "создать", search: "поиск", show: "показать" }
+    };
+  }
   
   // Prepare additional context about the current application state
   const appState = {
@@ -655,7 +727,7 @@ export async function processVoiceCommand(transcript: string, context: any = {})
     messages: [
       {
         role: 'user',
-        content: `As an expert voice command interpreter with 95% accuracy, analyze and process this voice command:
+        content: `As an expert multilingual voice command interpreter for MeetMate with 95% accuracy requirement, analyze and process this voice command:
           
           TRANSCRIPT: "${normalizedTranscript}"
           
@@ -674,12 +746,15 @@ export async function processVoiceCommand(transcript: string, context: any = {})
           
           ANALYSIS INSTRUCTIONS:
           1. Precisely identify the intent of the voice command
-          2. Maintain 95% accuracy by only acting on commands you clearly understand
+          2. Maintain 95%+ accuracy by only acting on commands you clearly understand
           3. Extract any parameters with high confidence
           4. Be robust to speech recognition errors by considering similar sounding words
           5. Take into account the current application state for context-aware responses
           6. Support multilingual commands using the language context provided
           7. For accessibility commands, prioritize them highly
+          8. If the transcript contains commands in languages other than the user's selected language, 
+             still interpret them correctly based on our language dictionary
+          9. Consider the cultural and linguistic nuances specific to ${languageBase.toUpperCase()} language speakers
           
           VALID COMMAND TYPES:
           - navigate (to specific pages)

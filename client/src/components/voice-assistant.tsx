@@ -4,10 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mic, MicOff, Loader2, Globe, Wifi, WifiOff } from "lucide-react";
+import { Mic, MicOff, Loader2, Globe, Wifi, WifiOff, Languages } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useWebSocketSimple } from "@/hooks/use-websocket-simple";
 import axios from "axios";
+import { 
+  SUPPORTED_LANGUAGES, 
+  getCommandsForLanguage,
+  languageCodeMap
+} from "@/lib/voice-command-dictionary";
 
 // Define SpeechRecognition types since TypeScript doesn't include them by default
 interface SpeechRecognitionErrorEvent extends Event {
@@ -64,20 +69,6 @@ const RATE_LIMIT_DELAY = 5000; // 5 seconds between retries
 const MAX_RETRIES = 3;
 const MAX_BACKOFF = 30000; // Maximum backoff of 30 seconds
 
-// Supported languages configuration
-const SUPPORTED_LANGUAGES = {
-  'en-US': 'English (US)',
-  'es-ES': 'Spanish',
-  'fr-FR': 'French',
-  'de-DE': 'German',
-  'it-IT': 'Italian',
-  'pt-BR': 'Portuguese (Brazil)',
-  'zh-CN': 'Chinese (Simplified)',
-  'ja-JP': 'Japanese',
-  'ko-KR': 'Korean',
-  'ru-RU': 'Russian'
-} as const;
-
 export function VoiceAssistant({ onCommand, onTranscript, isActive = false, userId, currentPage }: VoiceAssistantProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -86,12 +77,18 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false, user
   const [initError, setInitError] = useState<string | null>(null);
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState<keyof typeof SUPPORTED_LANGUAGES>('en-US');
+  const [availableCommands, setAvailableCommands] = useState<Record<string, string[]>>({});
   const { isConnected } = useWebSocketSimple();
 
   const retryCount = useRef(0);
   const lastInitAttempt = useRef(0);
   const initTimeoutRef = useRef<NodeJS.Timeout>();
   const languageChangeTimeoutRef = useRef<NodeJS.Timeout>();
+  
+  // Update available commands when language changes
+  useEffect(() => {
+    setAvailableCommands(getCommandsForLanguage(selectedLanguage));
+  }, [selectedLanguage]);
 
   // Calculate exponential backoff delay
   const getBackoffDelay = useCallback((retryAttempt: number) => {
@@ -391,6 +388,48 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false, user
     }, 300);
   };
 
+  // Get language flag emoji based on the language code
+  const getLanguageFlag = (langCode: string) => {
+    const countryCode = langCode.split('-')[1]?.toLowerCase();
+    if (!countryCode) return '';
+    
+    // Convert country code to regional indicator symbols (flag emoji)
+    const base = 127397; // Regional Indicator Symbol Letter A unicode value - 'A'.charCodeAt(0)
+    if (countryCode === 'us') return '🇺🇸';
+    if (countryCode === 'es') return '🇪🇸';
+    if (countryCode === 'fr') return '🇫🇷';
+    if (countryCode === 'de') return '🇩🇪';
+    if (countryCode === 'it') return '🇮🇹';
+    if (countryCode === 'br') return '🇧🇷';
+    if (countryCode === 'cn') return '🇨🇳';
+    if (countryCode === 'jp') return '🇯🇵';
+    if (countryCode === 'kr') return '🇰🇷';
+    if (countryCode === 'ru') return '🇷🇺';
+    
+    return '';
+  };
+
+  // Get the base language name
+  const getBaseLanguageName = (langCode: string) => {
+    const baseCode = languageCodeMap[langCode] || 'en';
+    
+    // Map from base code to full name
+    const baseLanguageNames: Record<string, string> = {
+      en: 'English',
+      es: 'Spanish',
+      fr: 'French',
+      de: 'German',
+      it: 'Italian',
+      pt: 'Portuguese',
+      zh: 'Chinese',
+      ja: 'Japanese',
+      ko: 'Korean',
+      ru: 'Russian'
+    };
+    
+    return baseLanguageNames[baseCode] || 'Unknown';
+  };
+
   return (
     <Card role="region" aria-label="MeetMate Voice Assistant Controls">
       <CardHeader>
@@ -407,6 +446,13 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false, user
               {loadingStatus || "Initializing"}
             </Badge>
           )}
+          <Badge 
+            variant="outline" 
+            className="ml-2 capitalize bg-primary/10" 
+            title={`Active language: ${SUPPORTED_LANGUAGES[selectedLanguage]}`}
+          >
+            {getLanguageFlag(selectedLanguage)} {getBaseLanguageName(selectedLanguage)}
+          </Badge>
           <div className="ml-auto flex items-center">
             {isConnected ? (
               <span className="text-xs flex items-center text-green-500" title="Real-time connection active">
@@ -431,13 +477,13 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false, user
               disabled={isRecording}
             >
               <SelectTrigger className="w-[200px]">
-                <Globe className="h-4 w-4 mr-2" />
+                <Languages className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Select language" />
               </SelectTrigger>
               <SelectContent>
                 {Object.entries(SUPPORTED_LANGUAGES).map(([code, name]) => (
                   <SelectItem key={code} value={code}>
-                    {name}
+                    {getLanguageFlag(code)} {name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -486,24 +532,37 @@ export function VoiceAssistant({ onCommand, onTranscript, isActive = false, user
 
           {transcript.length > 0 && (
             <ScrollArea 
-              className="h-[200px] w-full rounded-md border p-4"
-              role="log"
+              className="h-[200px] w-full rounded-md border p-4" 
               aria-label="Voice command history"
-              aria-live="polite"
             >
               <div className="space-y-2">
-                {transcript.map((text, index) => (
-                  <p 
-                    key={index} 
-                    className="text-sm"
-                    role="listitem"
-                  >
-                    {text}
-                  </p>
-                ))}
+                <h3 className="text-sm font-medium">Command History</h3>
+                <ul className="space-y-2">
+                  {transcript.slice().reverse().map((text, index) => (
+                    <li 
+                      key={index} 
+                      className="text-sm p-2 rounded-md bg-muted"
+                    >
+                      {text}
+                    </li>
+                  ))}
+                </ul>
               </div>
             </ScrollArea>
           )}
+
+          {/* Command examples for the current language */}
+          <div className="text-sm text-muted-foreground mt-4 space-y-2">
+            <h3 className="font-medium">Example Commands ({getBaseLanguageName(selectedLanguage)}):</h3>
+            <ul className="space-y-1 text-xs">
+              {Object.entries(availableCommands).slice(0, 6).map(([key, commands]) => (
+                <li key={key} className="flex items-start">
+                  <span className="font-medium mr-1">{key}:</span>
+                  <span>{commands[0]}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </CardContent>
     </Card>
